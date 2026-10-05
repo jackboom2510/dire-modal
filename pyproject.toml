@@ -1,0 +1,13 @@
+[project]
+name = "dire-modal"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "modal>=0.64",
+    "pyyaml>=6.0",
+    "boto3>=1.34",
+    "tqdm>=4.66",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
