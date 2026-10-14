@@ -14,6 +14,9 @@ cpu_image = (
         "tqdm==4.66.5",
         "webdataset==0.2.100",
         "pillow==10.4.0",
+        # cho mirror công khai (archive.py): HF Hub + Kaggle Datasets
+        "huggingface_hub>=0.34",
+        "kaggle>=1.6.17",
     )
     .run_commands(
         # BaiduPCS-Go cho Baidu Netdisk
@@ -29,12 +32,19 @@ cpu_image = (
 # Image cho GPU jobs (compute_dire, train, eval)
 gpu_image = (
     cpu_image
+    .apt_install("git")
     .pip_install(
         "torch==2.4.0",
         "torchvision==0.19.0",
         "numpy==1.26.4",
         "scikit-learn==1.5.1",
         "timm==1.0.9",
+    )
+    .run_commands(
+        # guided-diffusion của repo DIRE gốc (cần cho DDIM inversion ở compute_dire.py).
+        # Repo gốc đã archive 2025-07-08 nhưng vẫn clone được.
+        "git clone --depth 1 https://github.com/ZhendongWang6/DIRE.git /opt/dire",
+        "ls /opt/dire/guided-diffusion | head",
     )
 )
 

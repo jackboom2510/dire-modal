@@ -1,8 +1,22 @@
 __pycache__/
 *.pyc
 .venv/
+
+# Bí mật — KHÔNG BAO GIỜ commit
 .env
+.env.local
+!.env.example
+kaggle.json
+
+# Manifest size thật (sinh tự động, thay đổi liên tục) — không commit
 manifests/*.tsv
-!manifests/.gitkeep
+# NHƯNG: manifest sha256 là NGUỒN SỰ THẬT để verify mirror → phải commit (xem ADR-0001)
+!manifests/*_sha256.tsv
+
+# Artifact lớn / tạm
 *.log
+*.pth
+*.pt
+platforms/hf-spaces/gallery/*.png
+!platforms/hf-spaces/gallery/.gitkeep
 .DS_Store
