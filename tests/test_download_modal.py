@@ -141,9 +141,16 @@ case "$cmd" in
     saveto=""; remote=""
     while [ $# -gt 0 ]; do case "$1" in --saveto) saveto="$2"; shift 2 ;; *) remote="$1"; shift ;; esac; done
     base=$(basename "$remote"); mkdir -p "$saveto"
+    if [ -n "${COUNTER:-}" ]; then echo "x" >> "$COUNTER"; fi
     if [ "${MODE:-ok}" = "zero" ]; then
       # Tái hiện đúng lỗi thật: BaiduPCS-Go exit 0 nhưng chỉ tạo file 0 byte
       : > "$saveto/$base"
+    elif [ "${MODE:-ok}" = "rar" ]; then
+      # Tái hiện ca THẬT 2026-10-21: đúng số byte nhưng KHÔNG phải gzip.
+      printf 'Rar!\x1a\x07\x00' > "$saveto/$base"
+      head -c 2000 /dev/zero >> "$saveto/$base"
+    elif [ "${MODE:-ok}" = "html" ]; then
+      printf '<!DOCTYPE html><html><body>BDUSS expired</body></html>' > "$saveto/$base"
     else
       t=$(mktemp -d); mkdir -p "$t/0_real" "$t/1_fake"
       echo "$remote/r" > "$t/0_real/a.jpg"; echo "$remote/f" > "$t/1_fake/b.jpg"
@@ -326,6 +333,185 @@ def test_fetch_one_keeps_safety_kwargs():
 
 
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# 4. Chẩn đoán định dạng: "gzip FAIL" không đủ để biết phải làm gì
+#    (ra đời từ lần chạy thật 2026-10-21: tải đủ 27 863 040 B nhưng gzip fail)
+# ---------------------------------------------------------------------------
+def _write(tmp_path: Path, name: str, data: bytes) -> Path:
+    f = tmp_path / name
+    f.write_bytes(data)
+    return f
+
+
+def test_diagnose_recognizes_formats(tmp_path=None):
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    cases = {
+        "gzip": b"\x1f\x8b\x08\x00" + b"\x00" * 40,
+        "zip": b"PK\x03\x04" + b"\x00" * 40,
+        "rar": b"Rar!\x1a\x07\x00" + b"\x00" * 40,
+        "7z": b"7z\xbc\xaf\x27\x1c" + b"\x00" * 40,
+        "bzip2": b"BZh9" + b"\x00" * 40,
+        "xz": b"\xfd7zXZ\x00" + b"\x00" * 40,
+        "zstd": b"\x28\xb5\x2f\xfd" + b"\x00" * 40,
+    }
+    got = {}
+    for name, magic in cases.items():
+        got[name] = dl._diagnose(_write(d, f"x_{name}.bin", magic))
+    for name, magic in cases.items():
+        assert got[name] == name, f"{name}: nhận thành {got[name]!r}"
+
+    # tar: 'ustar' ở offset 257
+    tar_bytes = bytearray(b"\x00" * 512)
+    tar_bytes[257:262] = b"ustar"
+    assert dl._diagnose(_write(d, "x.tar", bytes(tar_bytes))) == "tar (không nén)"
+
+    # HTML / JSON: Baidu trả trang lỗi
+    assert "HTML" in dl._diagnose(_write(d, "h.bin", b"<!DOCTYPE html><html>x</html>"))
+    assert "JSON" in dl._diagnose(_write(d, "j.bin", b'{"error_code":2}'))
+
+    # rỗng + rác
+    assert dl._diagnose(_write(d, "e.bin", b"")) == "rỗng"
+    assert "không rõ" in dl._diagnose(_write(d, "r.bin", bytes(range(256)) * 4))
+
+
+def test_validate_flags_non_gzip_as_deterministic():
+    """File .tar.gz nhưng nội dung là rar ⇒ lỗi TẤT ĐỊNH, không được retry."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "real.tar.gz", b"Rar!\x1a\x07\x00" + b"\x00" * 4000)
+    v = dl._validate_ex(f, expected=0)
+    assert not v.ok
+    assert v.retryable is False, "archive sai tên là lỗi tất định"
+    assert v.fmt == "rar", v.fmt
+    assert "rar" in v.reason
+
+
+def test_validate_html_is_deterministic():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "x.tar.gz", b"<!DOCTYPE html><html>BDUSS expired</html>")
+    v = dl._validate_ex(f, expected=0)
+    assert not v.ok and v.retryable is False
+    assert "HTML" in v.reason
+
+
+def test_validate_size_mismatch_is_retryable():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "x.tar.gz", b"\x1f\x8b" + b"a" * 100)
+    v = dl._validate_ex(f, expected=10_000)
+    assert not v.ok and v.retryable is True, "lệch size là lỗi mạng ⇒ đáng retry"
+
+
+def test_validate_expect_archive_false_skips_gzip():
+    """probe_pair cần so sha256 — đòi gzip sẽ chặn đúng câu trả lời cần."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "real.tar.gz", b"Rar!\x1a\x07\x00" + b"\x00" * 100)
+    assert dl._validate_ex(f, 0, expect_archive=False).ok, \
+        "expect_archive=False phải chấp nhận file không phải gzip"
+
+
+# ---------------------------------------------------------------------------
+# 5. Không đốt thời gian vào lỗi tất định (3 attempt × 6 phút = 19 phút vô ích)
+# ---------------------------------------------------------------------------
+def test_deterministic_error_stops_after_one_attempt():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "rar"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    counter = Path(_tf.mkdtemp()) / "n.txt"
+    os.environ["COUNTER"] = str(counter)
+    dl.RAW = Path(_tf.mkdtemp())
+    try:
+        r = dl._fetch_one_impl(
+            {"remote": "z/a.tar.gz", "local": "z/a.tar.gz", "expected_size": 0}
+        )
+    finally:
+        os.environ["MODE"] = "ok"
+        os.environ.pop("COUNTER", None)
+    assert r["status"] == "error"
+    assert r.get("deterministic") is True, r
+    assert r["attempts"] == 1, f"phải dừng sau 1 attempt, đã chạy {r['attempts']}"
+    assert counter.exists() and len(counter.read_text().splitlines()) == 1, \
+        "chỉ được gọi BaiduPCS-Go MỘT lần"
+
+
+def test_identical_bytes_stop_retries():
+    """Byte giống hệt qua 2 lần tải ⇒ tải lại cũng thế, dừng."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "ok"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    # giả lập nội dung không đổi + validate luôn fail
+    orig = dl._validate_ex
+    dl._validate_ex = lambda p, e=0, expect_archive=True: dl.Verdict(
+        False, "hỏng giả lập", retryable=True
+    )
+    counter = Path(_tf.mkdtemp()) / "n.txt"
+    os.environ["COUNTER"] = str(counter)
+    try:
+        r = dl._fetch_one_impl(
+            {"remote": "z/a.tar.gz", "local": "z/a.tar.gz", "expected_size": 0}
+        )
+    finally:
+        dl._validate_ex = orig
+        os.environ.pop("COUNTER", None)
+    assert r["status"] == "error"
+    assert r.get("deterministic") is True, r
+    assert r["attempts"] == 2, f"dừng ở attempt 2, đã chạy {r['attempts']}"
+
+
+# ---------------------------------------------------------------------------
+# 6. probe_pair phải trả lời được cả khi file không giải nén được
+# ---------------------------------------------------------------------------
+def test_probe_pair_answers_even_when_not_gzip():
+    """Regression của lần chạy thật: gzip fail không được chặn sha256."""
+    import contextlib
+    import io
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "rar"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    # Cô lập đúng biến cần test: bỏ qua size remote (fake `ls` báo 269MB trong
+    # khi fake download ghi vài KB ⇒ size mismatch sẽ lấn át kết quả).
+    orig_ls = dl._ls_sizes
+    dl._ls_sizes = lambda *a, **k: {}
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            dl.probe_pair.local()
+    finally:
+        dl._ls_sizes = orig_ls
+        os.environ["MODE"] = "ok"
+    out = buf.getvalue()
+    assert "sha256" in out, "phải in sha256 dù file không phải gzip"
+    assert "KẾT LUẬN" in out, "phải đi tới kết luận, không bỏ cuộc giữa đường"
+    assert "rar" in out.lower(), "phải báo định dạng thật"
+    assert "KHÔNG đếm được" in out, "phải nói rõ không đếm được ảnh thay vì crash"
+
+
 if __name__ == "__main__":
     import traceback
 

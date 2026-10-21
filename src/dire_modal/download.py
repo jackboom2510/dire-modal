@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 import modal
 
@@ -196,20 +197,136 @@ def _size_map(files: list[File]) -> dict[str, int | None]:
     return sizes
 
 
-def _validate(path: Path, expected: int = 0) -> tuple[bool, str]:
-    """Kiểm tra file đã tải. Đây là chốt chặn lỗi #2: BaiduPCS-Go exit 0 dù 0 byte."""
+# Định dạng nhận ra qua magic bytes. Dùng khi file KHÔNG phải gzip để nói rõ
+# nó thực sự là gì, thay vì chỉ báo "gzip -t FAIL".
+# (offset, bytes, tên)
+_MAGIC: list[tuple[int, bytes, str]] = [
+    (0, b"\x1f\x8b", "gzip"),
+    (0, b"PK\x03\x04", "zip"),
+    (0, b"PK\x05\x06", "zip (rỗng)"),
+    (0, b"Rar!\x1a\x07", "rar"),
+    (0, b"7z\xbc\xaf\x27\x1c", "7z"),
+    (0, b"BZh", "bzip2"),
+    (0, b"\xfd7zXZ\x00", "xz"),
+    (0, b"\x28\xb5\x2f\xfd", "zstd"),
+    (0, b"\x04\x22\x4d\x18", "lz4"),
+    (257, b"ustar", "tar (không nén)"),
+]
+
+
+def _diagnose(path: Path) -> str:
+    """Đoán ĐỊNH DẠNG THẬT của file từ magic bytes. Không bao giờ raise.
+
+    Ra đời từ một lần chạy thật: tải đủ đúng **27 863 040 byte** (khớp 100% con
+    số Baidu báo) nhưng ``gzip -t`` fail. Nếu file đúng số byte mà vẫn không
+    giải nén được thì không phải lỗi mạng — phải xem **nội dung** là gì. Thông
+    báo "gzip -t FAIL — file cụt/hỏng" che mất sự thật đó.
+    """
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(512)
+    except OSError as exc:
+        return f"không đọc được ({exc})"
+
+    for off, sig, name in _MAGIC:
+        if head[off : off + len(sig)] == sig:
+            return name
+
+    low = head[:200].lstrip().lower()
+    if low.startswith((b"<!doctype", b"<html", b"<?xml")) or b"<html" in low:
+        return "HTML (trang lỗi/đăng nhập của Baidu, KHÔNG phải dữ liệu)"
+    if low.startswith(b"{") or low.startswith(b"["):
+        return "JSON (phản hồi lỗi API, KHÔNG phải dữ liệu)"
+    if not head:
+        return "rỗng"
+    printable = sum(1 for b in head if 32 <= b < 127 or b in (9, 10, 13))
+    if printable > len(head) * 0.95:
+        return f"text ({head[:40]!r})"
+    return "không rõ (byte đầu: " + head[:8].hex(" ") + ")"
+
+
+# Định dạng "hợp lệ nhưng sai tên": nếu gặp, việc tải lại CHẮC CHẮN vô ích vì
+# nội dung đã đúng số byte và có cấu trúc của một archive thật.
+_KNOWN_ARCHIVES = {"zip", "zip (rỗng)", "rar", "7z", "bzip2", "xz", "zstd", "lz4", "tar (không nén)"}
+
+
+class Verdict(NamedTuple):
+    """Kết quả kiểm tra + có nên thử lại hay không.
+
+    ``retryable=False`` nghĩa là lỗi TẤT ĐỊNH: tải lại sẽ ra đúng những byte đó,
+    chỉ tốn thêm hàng chục phút. Log thật cho thấy 3 attempt × 6 phút cho cùng
+    một file hỏng nguồn = 19 phút vô ích.
+    """
+
+    ok: bool
+    reason: str
+    retryable: bool = True
+    fmt: str = ""
+
+
+def _validate_ex(
+    path: Path, expected: int = 0, expect_archive: bool = True
+) -> Verdict:
+    """Kiểm tra file đã tải, trả về cả chẩn đoán và khả năng thử lại.
+
+    Args:
+        expect_archive: ``False`` ⇒ chỉ kiểm tra tồn tại/size, KHÔNG đòi phải là
+            gzip/tar. Dùng cho ``probe_pair``: mục đích chính của nó là so
+            **sha256** giữa hai file, việc đó đúng trên mọi chuỗi byte. Chặn nó
+            lại chỉ vì file không giải nén được là bỏ mất câu trả lời đang cần.
+    """
     if not path.exists():
-        return False, "file không tồn tại"
+        return Verdict(False, "file không tồn tại")
     size = path.stat().st_size
     if size == 0:
-        return False, "0 byte — BaiduPCS-Go exit 0 nhưng không tải gì (throttle/BDUSS hết hạn)"
+        return Verdict(
+            False,
+            "0 byte — BaiduPCS-Go exit 0 nhưng không tải gì (throttle/BDUSS hết hạn)",
+        )
     if expected and size != expected:
-        return False, f"size {size} ≠ remote {expected} → tải dở dang"
-    if path.name.endswith(".tar.gz"):
-        chk = subprocess.run(["gzip", "-t", str(path)], capture_output=True)
-        if chk.returncode != 0:
-            return False, "gzip -t FAIL — file cụt/hỏng"
-    return True, "ok"
+        # Lệch size là lỗi mạng/throttle ⇒ thử lại có ý nghĩa.
+        return Verdict(
+            False, f"size {size} ≠ remote {expected} → tải dở dang", retryable=True
+        )
+    if not expect_archive or not path.name.endswith((".tar.gz", ".tgz")):
+        return Verdict(True, "ok (không kiểm tra định dạng)")
+
+    chk = subprocess.run(["gzip", "-t", str(path)], capture_output=True)
+    if chk.returncode == 0:
+        return Verdict(True, "ok", fmt="gzip")
+
+    # --- gzip fail: chẩn đoán thay vì chỉ nói "hỏng" -----------------------
+    fmt = _diagnose(path)
+    detail = (chk.stderr or b"").decode("utf-8", "replace").strip()[:160]
+    if fmt in _KNOWN_ARCHIVES:
+        return Verdict(
+            False,
+            f"KHÔNG phải gzip mà là **{fmt}** (size đúng {size} B, khớp remote) "
+            f"⇒ file nguồn sai định dạng hoặc đặt sai tên. Tải lại vô ích.",
+            retryable=False,
+            fmt=fmt,
+        )
+    if fmt.startswith("HTML") or fmt.startswith("JSON"):
+        return Verdict(
+            False,
+            f"nội dung là {fmt} ⇒ Baidu trả trang lỗi thay vì dữ liệu "
+            "(BDUSS hết hạn hoặc link bị chặn). Tải lại vô ích.",
+            retryable=False,
+            fmt=fmt,
+        )
+    return Verdict(
+        False,
+        f"gzip -t FAIL — {fmt}; gzip nói: {detail or 'không rõ'}"
+        " ⇒ nội dung không ổn định, thử lại có thể hữu ích.",
+        retryable=True,
+        fmt=fmt,
+    )
+
+
+def _validate(path: Path, expected: int = 0) -> tuple[bool, str]:
+    """Kiểm tra file đã tải. Đây là chốt chặn lỗi #2: BaiduPCS-Go exit 0 dù 0 byte."""
+    v = _validate_ex(path, expected)
+    return v.ok, v.reason
 
 
 def _tmpdir_for(remote_rel: str) -> Path:
@@ -541,12 +658,30 @@ def probe_pair(
     Việc TẢI 10 file ``dire/test/lsun_bedroom/imagenet/`` không phụ thuộc kết
     quả này; việc GHI SỐ vào bảng eval thì có. Chạy trước khi báo cáo.
     """
+    # Hỏi size thật trước: có nó thì mới nói được câu quyết định "đủ đúng số
+    # byte mà vẫn không giải nén được ⇒ lỗi nguồn". Không có thì chỉ biết "hỏng".
+    want = {p: _ls_sizes(str(Path(p).parent)).get(Path(p).name, 0) for p in (a, b)}
+    for p, sz in want.items():
+        print(f"[probe] remote {p} = {_human(sz) if sz else '? (ls không thấy)'}")
+
     res: dict[str, dict] = {}
     for p in (a, b):
         # Gọi thân thật, KHÔNG gọi `fetch_one` — nó là modal.Function, gọi trực
         # tiếp từ trong container sẽ ra "TypeError: 'Function' object is not
         # callable" (chính lỗi làm lệnh này chết ngay lần chạy đầu tiên).
-        r = _fetch_one_impl({"remote": p, "local": p, "expected_size": 0})
+        #
+        # expect_archive=False: mục đích chính của probe là so **sha256**, việc
+        # đó đúng trên mọi chuỗi byte. Đòi file phải giải nén được sẽ chặn đúng
+        # câu trả lời đang cần (đã xảy ra thật: file tải đủ 27 863 040 B nhưng
+        # gzip -t fail ⇒ 3 attempt × 6 phút rồi bỏ cuộc, không so được gì).
+        r = _fetch_one_impl(
+            {
+                "remote": p,
+                "local": p,
+                "expected_size": want[p],
+                "expect_archive": False,
+            }
+        )
         res[p] = r
         if r["status"] == "error":
             print(f"[probe] không tải được {p}: {r['error']} → không kết luận gì")
@@ -557,14 +692,22 @@ def probe_pair(
     print(f"\n{'='*78}\nPROBE: ngữ nghĩa dire/test/<A>/<B>/\n{'='*78}")
     for p in (a, b):
         path = RAW / p
-        prof[p] = _tar_profile(path)
+        try:
+            prof[p] = _tar_profile(path)
+        except Exception as exc:  # không phải tar/gzip ⇒ vẫn so được sha256
+            prof[p] = {"files": -1, "classes": {}, "truncated": False,
+                       "error": f"{type(exc).__name__}: {exc}"}
         dig[p] = res[p].get("sha256") or _sha256(path)
         print(f"\n  {p}")
         print(f"    size   : {_human(path.stat().st_size)}")
         print(f"    sha256 : {dig[p]}")
-        cls = prof[p]["classes"]
-        print(f"    ảnh    : {prof[p]['files']}  {cls or '(không thấy 0_real/1_fake)'}")
-        if prof[p]["truncated"]:
+        print(f"    định dạng: {_diagnose(path)}")
+        if "error" in prof[p]:
+            print(f"    ảnh    : KHÔNG đếm được — {prof[p]['error']}")
+        else:
+            cls = prof[p]["classes"]
+            print(f"    ảnh    : {prof[p]['files']}  {cls or '(không thấy 0_real/1_fake)'}")
+        if prof[p].get("truncated"):
             print("    ⚠ dừng đếm sớm (tar lớn hơn cap)")
 
     na, nb = prof[a]["files"], prof[b]["files"]
@@ -661,6 +804,8 @@ def _fetch_one_impl(f: dict) -> dict:
     tmpdir = _tmpdir_for(remote_rel)  # riêng + ổn định ⇒ resume được
     tmpdir.mkdir(parents=True, exist_ok=True)
     last = "chưa thử"
+    prev_sha = ""  # sha256 của lần tải trước, để phát hiện lỗi TẤT ĐỊNH
+    expect_archive = bool(f.get("expect_archive", True))
 
     try:
         for attempt in range(1, POLICY.fetch_attempts + 1):
@@ -701,8 +846,9 @@ def _fetch_one_impl(f: dict) -> dict:
                         local.unlink()
                     shutil.move(str(got), str(local))
 
-                    ok, why = _validate(local, expected)
-                    if ok:
+                    # Tính verdict MỘT lần: gzip -t trên file 26 MB không rẻ.
+                    v = _validate_ex(local, expected, expect_archive=expect_archive)
+                    if v.ok:
                         size = local.stat().st_size
                         digest = _sha256(local)
                         vol_raw.commit()  # bắt buộc để file sống qua container khác
@@ -711,9 +857,41 @@ def _fetch_one_impl(f: dict) -> dict:
                             "remote": remote_rel, "local": str(local), "status": "ok",
                             "size": size, "sha256": digest, "attempts": attempt,
                         }
+
+                    # --- thất bại: chia làm hai loại, vì cách chữa khác hẳn ---
+                    digest = _sha256(local)
+                    size_now = local.stat().st_size
                     # file hỏng đã move sang Volume → dọn để lần sau không skip nhầm
                     local.unlink(missing_ok=True)
-                    last = why
+                    last = v.reason
+
+                    if not v.retryable:
+                        # Lỗi TẤT ĐỊNH (file nguồn sai định dạng, hoặc Baidu trả
+                        # trang lỗi). Log thật: 3 attempt × 6 phút cho cùng một
+                        # file = 19 phút vô ích. Dừng ngay.
+                        print(f"[STOP] {remote_rel}: {v.reason}")
+                        return {
+                            "remote": remote_rel, "local": str(local),
+                            "status": "error", "error": v.reason,
+                            "size": 0, "attempts": attempt,
+                            "deterministic": True, "format": v.fmt,
+                        }
+
+                    # Cùng một chuỗi byte qua hai lần tải ⇒ tải lại cũng thế.
+                    # Đây là bằng chứng mạnh nhất mà không cần hỏi thêm Baidu.
+                    if digest == prev_sha:
+                        msg = (
+                            f"hai lần tải cho ra byte GIỐNG HỆT (sha256={digest[:12]}…, "
+                            f"{_human(size_now)}) ⇒ lỗi tất định, dừng thử lại. {v.reason}"
+                        )
+                        print(f"[STOP] {remote_rel}: {msg}")
+                        return {
+                            "remote": remote_rel, "local": str(local),
+                            "status": "error", "error": msg,
+                            "size": 0, "attempts": attempt,
+                            "deterministic": True, "format": v.fmt,
+                        }
+                    prev_sha = digest
             except subprocess.TimeoutExpired:
                 last = f"BaiduPCS-Go treo quá {POLICY.subprocess_timeout}s (0B/s)"
             except subprocess.CalledProcessError as exc:
@@ -815,22 +993,44 @@ def verify() -> None:
     — bản nháp đầu có gọi và sẽ chết KeyError vì thiếu ``secrets=[baidu_secret]``.
     In đủ báo cáo rồi mới ``SystemExit(1)``, để một lần chạy thấy hết file hỏng.
     """
-    bad: list[str] = []
+    bad: list[tuple[str, str, bool]] = []
     n = 0
     for p in sorted(RAW.rglob("*.tar.gz")):
         n += 1
-        chk = subprocess.run(["gzip", "-t", str(p)], capture_output=True)
-        tag = "OK  " if chk.returncode == 0 else "FAIL"
+        v = _validate_ex(p)
+        tag = "OK  " if v.ok else "FAIL"
         print(f"[{tag}] {_human(p.stat().st_size):>10}  {p.relative_to(RAW)}")
-        if chk.returncode != 0:
-            bad.append(str(p.relative_to(RAW)))
+        if v.ok:
+            continue
+        # Chẩn đoán định dạng: "gzip FAIL" không nói được gì; "là rar/HTML"
+        # mới cho biết phải làm gì.
+        print(f"        ↳ {v.reason}")
+        bad.append((str(p.relative_to(RAW)), v.reason, v.retryable))
 
     print(f"\nđã kiểm {n} file · hỏng {len(bad)}")
     if bad:
-        for b in bad:
+        det = [b for b in bad if not b[2]]
+        ret = [b for b in bad if b[2]]
+        for b, _why, _r in bad:
             print(f"  ⚠ {b}")
-        print("\nTải lại: modal run -m dire_modal.download::main --mode fetch")
-        print("  (fetch_one sẽ skip file hợp lệ, chỉ tải lại file hỏng)")
+        if ret:
+            print(
+                f"\n{len(ret)} file lỗi TẠM THỜI (lệch size / nội dung không ổn định)"
+                " → tải lại có ý nghĩa:"
+                "\n  modal run -m dire_modal.download::main --mode fetch"
+                "\n  (fetch_one skip file hợp lệ, chỉ tải lại file hỏng)"
+            )
+        if det:
+            print(
+                f"\n{len(det)} file lỗi TẤT ĐỊNH (nguồn sai định dạng / Baidu trả"
+                " trang lỗi) → TẢI LẠI VÔ ÍCH, đừng mất thêm thời gian:"
+            )
+            for b in det:
+                print(f"  ✗ {b}")
+            print(
+                "  Cách xử lý: đối chiếu tên/định dạng với bản gốc của tác giả,"
+                "\n  hoặc để tier tương ứng ra khỏi phạm vi."
+            )
         raise SystemExit(1)
     print("All OK.")
 

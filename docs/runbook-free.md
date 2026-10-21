@@ -102,6 +102,32 @@ Vượt trần ⇒ `main` từ chối tải và in rõ tổng ước lượng. �
 file nào `ls -l` không đọc được size thì bị tính bằng size của file lớn nhất đã
 biết, để guard không vô hiệu đúng lúc cần nó nhất.
 
+### Khi tải xong mà vẫn `gzip -t` fail
+
+Đã xảy ra thật (2026-10-21): `real.tar.gz` tải **đủ đúng 27 863 040 byte** — khớp
+100% con số Baidu báo — mà `gzip -t` vẫn FAIL. Vì size khớp, đây **không phải**
+lỗi mạng; byte đến đủ nhưng *nội dung* không phải gzip. Trước đây thông báo chỉ
+nói "file cụt/hỏng" rồi thử lại 3 lần × ~6 phút = **19 phút vô ích**.
+
+Giờ `_fetch_one_impl` đọc magic bytes và chia lỗi làm hai loại:
+
+| Thông báo | Nghĩa | Nên làm |
+|---|---|---|
+| `size 1234 ≠ remote 5678 → tải dở dang` | lỗi mạng/throttle | chạy lại, `fetch_one` resume |
+| `KHÔNG phải gzip mà là **rar**` | nguồn sai định dạng/tên | **đừng tải lại** — xem lại tên file gốc |
+| `nội dung là HTML/JSON …` | Baidu trả trang lỗi | **đừng tải lại** — kiểm tra BDUSS/link |
+| `hai lần tải cho ra byte GIỐNG HỆT` | byte ổn định ⇒ tất định | **đừng tải lại** |
+| `gzip -t FAIL — không rõ …` | chưa phân loại được | thử lại 1 lần, rồi đọc chẩn đoán |
+
+Lỗi tất định in `[STOP]` và **dừng ngay sau lần thử đầu**, không đốt thêm attempt.
+`download::verify` cũng in chẩn đoán định dạng cho từng file hỏng, và tách danh
+sách "tải lại được" khỏi "tải lại vô ích" trước khi `SystemExit(1)`.
+
+`probe_pair` thì **không** đòi file phải là gzip (`expect_archive=False`), vì mục
+đích của nó là so **sha256** — phép so đó đúng trên mọi chuỗi byte. Gặp archive
+lạ, nó vẫn in sha256 + định dạng thật và ghi `ảnh: KHÔNG đếm được — …` thay vì
+chết giữa đường.
+
 ### Chọn tier theo mục tiêu
 
 | Mục tiêu | Lệnh | File | Size |
