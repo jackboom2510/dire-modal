@@ -37,6 +37,17 @@
 #
 #  alias cũ: ckpt→ckpts · A→e2,train · B→e3 · C→rawx · D→(bị NEVER chặn, rỗng)
 #
+# ---- Guard chi phí GPU (compute_dire.py) — copy từ src/dire_modal/tiers.yaml --
+#
+#  dire_max_containers    4        clamp cứng [1, 16]
+#  dire_timeout_s         1800     clamp cứng [60, 3600]  (bản cũ: 24 h)
+#  dire_max_usd           5.0      preflight từ chối nếu vượt
+#  dire_max_images        500      chặn trước cả khi tính tiền
+#  dire_usd_per_gpu_hour  2.5      A100
+#  dire_sec_per_image     5.0      bảo thủ — đo thật bằng scripts/06_measure_dire.sh
+#
+#  Trần xấu nhất: 4 × 0.5 h × $2.50 = $5  (bản cũ: 40 × 24 h ≈ $2 400)
+
 # ---- NEVER (chặn cứng, không tier nào với tới) ------------------------------
 #
 #  recons/           44 tar ảnh reconstruction — detector đọc dire/ có sẵn

@@ -183,21 +183,26 @@ E3: list[Entry] = [
     _f("checkpoints/celebahq_sdv2.pth", "detector cho domain CelebA-HQ"),
     # Audit 2026-10-21 xác nhận 10 tên thật (trước đó là DirSpec `gap` vì
     # manifest cũ bỏ sót cả thư mục). Dùng CHUNG checkpoint lsun_adm.pth của
-    # e2 ⇒ có thêm kết quả cross-domain mà KHÔNG phải train gì. Chỉ 1.1 GB.
+    # e2 ⇒ có thêm kết quả mà KHÔNG phải train gì. Chỉ 1.1 GB.
     #
-    # ⚠ NGỮ NGHĨA của dire/test/<A>/<B>/ CHƯA được xác nhận. Bằng chứng đang
-    #   mâu thuẫn: real.tar.gz ở .../lsun_bedroom/lsun_bedroom/ và
-    #   .../lsun_bedroom/imagenet/ có size BẰNG NHAU y hệt (26.6 MB), trong khi
-    #   hai nhánh dưới dire/test/imagenet/ lại lệch (53.3 vs 177.4 MB). Nếu tầng
-    #   hai là "test domain" thì ảnh real phải khác nhau.
-    #   vendor/utils/datasets.py KHÔNG được vendor nên không xác nhận từ code.
-    #   → Chạy download::probe_pair (so sha256 2 file real, ~53 MB) TRƯỚC KHI
-    #     diễn giải kết quả. Việc TẢI không phụ thuộc ngữ nghĩa; việc GHI SỐ
-    #     vào bảng eval thì có.
+    # ✅ NGỮ NGHĨA ĐÃ XÁC NHẬN bằng probe_pair (2026-10-21, chạy thật):
+    #   real.tar.gz ở .../lsun_bedroom/lsun_bedroom/ và .../lsun_bedroom/imagenet/
+    #   là CÙNG 1000 ảnh (trùng tên + trùng byte từng file); sha256 container
+    #   khác chỉ vì tar chứa mtime/owner khác nhau.
+    #   ⇒ Tầng 1 = nguồn ảnh REAL (và do đó là domain của detector).
+    #     Tầng 2 = nguồn của nhánh ảnh GIẢ.
+    #   ⇒ Nhánh này là CROSS-GENERATOR, KHÔNG phải cross-domain: detector LSUN,
+    #     ảnh real LSUN, chỉ đổi model sinh ảnh giả.
+    #
+    # ⚠ Hệ quả khi báo cáo số:
+    #   - KHÔNG được cộng nhánh này vào bảng eval như một "test domain" riêng:
+    #     làm vậy là đếm CÙNG 1000 ảnh real hai lần và kéo mean AP về phía LSUN.
+    #   - Báo cáo riêng, nhãn "cross-generator" (real LSUN dùng chung với e2).
     *_tars(
         "dire/test/lsun_bedroom/imagenet",
         _LSUN_IMAGENET_TEST_GENS,
-        "cross-domain (ngữ nghĩa <A>/<B> chờ probe_pair xác nhận)",
+        "cross-generator (real DÙNG CHUNG với lsun_bedroom/lsun_bedroom/, "
+        "probe_pair 2026-10-21)",
     ),
     *_tars("dire/test/imagenet/imagenet", ["adm", "real", "sdv1"], "ImageNet→ImageNet"),
     *_tars(
@@ -373,6 +378,15 @@ class Policy:
     max_containers: int = 2
     fetch_attempts: int = 3
     subprocess_timeout: int = 5400
+    # --- guard chi phí GPU (compute_dire.py) -------------------------------
+    # Đây là phần TIÊU TIỀN THẬT. Bản trước để cứng 40 container × timeout
+    # 24 h trên A100 ≈ $2 400 trần xấu nhất cho một lần chạy hỏng.
+    dire_max_containers: int = 4
+    dire_timeout_s: int = 1800
+    dire_max_usd: float = 5.0
+    dire_max_images: int = 500
+    dire_usd_per_gpu_hour: float = 2.5
+    dire_sec_per_image: float = 5.0
     notes: dict[str, str] | None = None
 
 
@@ -397,6 +411,24 @@ def load_policy() -> Policy:
             ),
             subprocess_timeout=int(
                 raw.get("subprocess_timeout", _POLICY_FALLBACK.subprocess_timeout)
+            ),
+            dire_max_containers=int(
+                raw.get("dire_max_containers", _POLICY_FALLBACK.dire_max_containers)
+            ),
+            dire_timeout_s=int(
+                raw.get("dire_timeout_s", _POLICY_FALLBACK.dire_timeout_s)
+            ),
+            dire_max_usd=float(
+                raw.get("dire_max_usd", _POLICY_FALLBACK.dire_max_usd)
+            ),
+            dire_max_images=int(
+                raw.get("dire_max_images", _POLICY_FALLBACK.dire_max_images)
+            ),
+            dire_usd_per_gpu_hour=float(
+                raw.get("dire_usd_per_gpu_hour", _POLICY_FALLBACK.dire_usd_per_gpu_hour)
+            ),
+            dire_sec_per_image=float(
+                raw.get("dire_sec_per_image", _POLICY_FALLBACK.dire_sec_per_image)
             ),
             notes={k: str(v) for k, v in (raw.get("tiers") or {}).items()},
         )

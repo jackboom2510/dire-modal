@@ -162,7 +162,13 @@ case "$cmd" in
     else
       t=$(mktemp -d); mkdir -p "$t/0_real" "$t/1_fake"
       echo "$remote/r" > "$t/0_real/a.jpg"; echo "$remote/f" > "$t/1_fake/b.jpg"
-      tar -czf "$saveto/$base" -C "$t" 0_real 1_fake; rm -rf "$t"
+      # Byte PHẢI tất định: `tar -czf` ghi mtime hiện tại vào gzip header, nên
+      # hai attempt khác giây cho sha256 khác → test "hai lần tải giống hệt"
+      # fail NGẪU NHIÊN (đã xảy ra). --mtime cố định + `gzip -n` (bỏ tên/mtime).
+      tar --mtime='@0' --owner=0 --group=0 --numeric-owner \
+          -cf "$t/x.tar" -C "$t" 0_real 1_fake
+      gzip -n -f "$t/x.tar"
+      mv "$t/x.tar.gz" "$saveto/$base"; rm -rf "$t"
     fi
     echo "[1] 0B/269.45MB 0B/s in 10m3s, left -"
     echo "\u4e0b\u8f7d\u7ed3\u675f, \u65f6\u95f4: 0s, \u6570\u636e\u603b\u91cf: 0B"; exit 0 ;;

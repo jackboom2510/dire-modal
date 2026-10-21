@@ -184,20 +184,32 @@ Kiểm tra đã tải thừa gì: `modal run -m dire_modal.download::prune --tie
 
 ### Trước khi ghi số vào bảng eval
 
-`dire/test/<A>/<B>/` có hai tầng, nhưng `train/` và `val/` thì phẳng — ngữ nghĩa
-tầng `<B>` **chưa xác nhận được**. Bằng chứng đang mâu thuẫn: `real.tar.gz` ở
-`.../lsun_bedroom/lsun_bedroom/` và `.../lsun_bedroom/imagenet/` có size **bằng
-nhau y hệt** (26.6 MB), trong khi hai nhánh dưới `dire/test/imagenet/` lại lệch
-(53.3 vs 177.4 MB). `vendor/utils/datasets.py` không được vendor nên không đọc
-code để khẳng định.
+`dire/test/<A>/<B>/` có hai tầng, nhưng `train/` và `val/` thì phẳng. Dấu hiệu
+đáng ngờ ban đầu: `real.tar.gz` ở `.../lsun_bedroom/lsun_bedroom/` và
+`.../lsun_bedroom/imagenet/` có size **bằng nhau y hệt** (26.6 MB).
 
 ```bash
-modal run -m dire_modal.download::probe_pair    # ~53 MB, so sha256 + đếm ảnh
+modal run -m dire_modal.download::probe_pair    # ~53 MB, so TỪNG ẢNH trong tar
 ```
 
-Việc **tải** 10 file `dire/test/lsun_bedroom/imagenet/` không phụ thuộc kết quả
-này (chúng có thật, 1.1 GB, dùng chung checkpoint `lsun_adm.pth` của `e2`).
-Việc **diễn giải** chúng là cross-domain thì có — chạy `probe_pair` trước.
+### Kết quả (đã chạy `probe_pair` trên dữ liệu thật, 2026-10-21)
+
+```
+  sha256 container : KHÁC
+  nội dung ảnh     : CÙNG HOÀN TOÀN (1000/1000 ảnh trùng tên + trùng byte)
+```
+
+`real.tar.gz` của hai nhánh là **cùng 1000 ảnh**; sha256 container khác chỉ vì
+tar chứa `mtime`/owner khác. Nghĩa là:
+
+- Tầng 1 = nguồn ảnh **real** (và do đó là domain của detector).
+- Tầng 2 = nguồn của nhánh ảnh **giả**.
+- ⇒ `dire/test/lsun_bedroom/imagenet/` là **cross-generator**, KHÔNG phải
+  cross-domain.
+
+**Hệ quả khi báo cáo số:** KHÔNG cộng nhánh này vào bảng eval như một "test
+domain" riêng — làm vậy là đếm cùng 1000 ảnh real hai lần và kéo mean AP về
+phía LSUN. Báo cáo riêng với nhãn "cross-generator".
 
 
 ---
@@ -334,6 +346,59 @@ huggingface-cli upload <user>/dire-detector ./last.pt dire_resnet50.pth
 ```
 
 ✅ **CỔNG 9**: Space public mở được, upload 1 ảnh → ra P(real)/P(fake); tab viz hiện ảnh với chú thích.
+
+---
+
+## 9b. Guard chi phí GPU — đọc trước khi chạy bất cứ thứ gì trên A100
+
+`compute_dire.py` là chỗ duy nhất trong pipeline **tiêu tiền thật** theo giờ.
+Bản trước để cứng `max_containers=40` + `timeout=24*3600`:
+
+```
+40 container × 24 h × ~$2.50/h ≈ $2 400   ← trần xấu nhất của MỘT lần chạy hỏng
+```
+
+Điểm chết người là **timeout**, không phải số container: một ảnh 256² × 20 step
+mất vài giây, nên timeout 24 h chỉ có tác dụng khi container đã treo — đúng lúc
+nó tốn tiền nhất.
+
+Giờ mọi thứ lấy từ `src/dire_modal/tiers.yaml`, và **clamp cứng trong code** để
+một dòng config sai không thể bật lại 40 container:
+
+| Khoá | Mặc định | Clamp cứng trong code |
+|---|---|---|
+| `dire_max_containers` | 4 | `[1, 16]` |
+| `dire_timeout_s` | 1800 (30 phút) | `[60, 3600]` |
+| `dire_max_usd` | 5.0 | — (so với ước tính) |
+| `dire_max_images` | 500 | — |
+| `dire_sec_per_image` | 5.0 (bảo thủ) | — |
+
+Trần xấu nhất với mặc định: `4 × 0.5 h × $2.50 = $5`.
+
+```bash
+# Xem tiền TRƯỚC, không bật container nào:
+modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run
+
+# Chạy thật — preflight chặn trước khi .map() được gọi:
+modal run -m dire_modal.compute_dire::dire_batch --n 200
+```
+
+### Preflight từ chối ba trường hợp
+
+`preflight_cost()` là việc **đầu tiên** trong entrypoint, trước cả bước liệt kê
+file. Vượt trần ⇒ `SystemExit`, chưa GPU nào được cấp phát:
+
+1. `n` ảnh > `dire_max_images` — chặn trước cả khi tính tiền.
+2. Chi phí kỳ vọng > `dire_max_usd`.
+3. **Trần xấu nhất** > `dire_max_usd` (mọi container treo tới timeout). Điều
+   kiện này chặn cả trường hợp `n` rất nhỏ nhưng timeout/containers quá lớn —
+   đúng loại cấu hình đã tạo ra hoá đơn $2 400.
+
+`--force` bỏ qua cả ba nhưng vẫn in đủ số tiền và nhắc theo dõi bằng
+`modal app list` / `modal billing report --resolution h`.
+
+Ngoài code, vẫn nên đặt **spend limit $30** ở `modal.com/settings/usage` — guard
+trong code không cứu được nếu ai đó chạy `modal run` từ thư mục khác.
 
 ---
 
