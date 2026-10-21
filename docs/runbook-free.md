@@ -49,9 +49,13 @@ modal secret list                     # ✅ CỔNG 1: thấy baidu-cred, r2-cred
 
 ## 2. Tải dữ liệu về Volume (Modal CPU, ~$1–2)
 
-Mặc định chỉ tải **21/154 file** trong cây Baidu (tier `e2` + `e4`). Detector
-DIRE chỉ đọc nhánh `dire/` (ImageFolder `0_real`/`1_fake`), nên `recons/` (44
-tar) và phần lớn `images/` (49 tar) là thừa và bị chặn cứng.
+Mặc định tải **22 file = 3.39 GB** (tier `e2` + `e4`), so với **61.40 GB / 104
+file** của toàn cây đã audit. Detector DIRE chỉ đọc nhánh `dire/` (ImageFolder
+`0_real`/`1_fake`), nên `recons/` và phần lớn `images/` là thừa và bị `NEVER`
+chặn cứng.
+
+Mọi con số GB trong mục này là **số đo thật** từ `download::audit` ngày
+2026-10-21 (15 thư mục), không phải ước lượng.
 
 ```bash
 # (a) Policy hiện hành — chạy LOCAL, không tốn credit
@@ -76,10 +80,18 @@ modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
 ./scripts/02_verify.sh                 # ✅ CỔNG 2: "All OK."
 ```
 
-**Phải chạy (c) và (d) trước khi tải.** Hai bước đó gần như miễn phí và là thứ
-duy nhất cho biết dung lượng thật — con số "40–70 GB" ghi ở các tài liệu cũ là
-ước lượng chưa kiểm chứng. Log BaiduPCS-Go ngày 2026-10-21 cho thấy mỗi tar test
-chỉ ~64–270 MB, tức tier `e2+e4` nhiều khả năng chỉ **~3–6 GB**.
+**Phải chạy (c) và (d) trước khi tải.** Hai bước đó gần như miễn phí, và đã
+chứng minh giá trị: audit 2026-10-21 bắt được tier `e4` trỏ vào đường dẫn hai
+tầng `images/test/lsun_bedroom/lsun_bedroom/` **không tồn tại** (cây thật chỉ có
+một tầng), kèm hai tên file sai — `midjouney` thay vì `midjourney`, và `sdv1`
+trong khi chỉ có `sdv1_new` / `sdv1_new2`. Nếu chạy `--mode fetch` trước thì cả
+4 file đã fail và tốn một vòng chờ Baidu.
+
+Con số "Tier A ≈ 40–70 GB" từng ghi trong docs là **sai 5.4–9.4 lần**: đó là số
+của cả cây gán nhầm cho Tier A. Tier A cũ (20 file) thực tế **7.42 GB**; mặc
+định mới `e2,e4` là **3.39 GB**. Toàn cây đã audit **61.40 GB**, trong đó
+**47 GB (77%) là dữ liệu train** — bỏ được gần hết vì ràng buộc là *chỉ cải
+thiện, không train lại*.
 
 Chi phí thực tế chủ yếu là **thời gian chờ Baidu** (server chậm); CPU 0.25 core
 ≈ $0.012/giờ → rẻ. `fetch_one` là resumable và idempotent: chạy lại sẽ skip file
@@ -92,19 +104,41 @@ biết, để guard không vô hiệu đúng lúc cần nó nhất.
 
 ### Chọn tier theo mục tiêu
 
-| Mục tiêu | Lệnh | File |
-|---|---|---|
-| Chỉ code/docs | — | 0 |
-| Demo AEROBLADE zero-shot | — (VAE kéo từ HF Hub trong Space) | 0 |
-| **Eval headline DIRE trên LSUN** | `--tiers e2` | 17 |
-| **Eval AEROBLADE trên ảnh gốc** | `--tiers e4` | 4 |
-| Cả hai (mặc định) | `--tiers e2,e4` | 21 |
-| + cross-domain ImageNet/CelebA-HQ | `--tiers e2,e3,e4` | 35 |
-| + ensemble & hiệu chỉnh ngưỡng | `--tiers e2,e3,e4,e5` | 43 |
-| Train lại detector từ đầu | `--tiers train` | 4 |
+| Mục tiêu | Lệnh | File | Size |
+|---|---|---|---|
+| Chỉ code/docs | — | 0 | — |
+| Demo AEROBLADE zero-shot | — (VAE kéo từ HF Hub trong Space) | 0 | — |
+| **Eval headline DIRE trên LSUN** | `--tiers e2` | 17 | 1.94 GB |
+| **Eval AEROBLADE trên ảnh gốc** | `--tiers e4` | 5 | 1.45 GB |
+| Cả hai (**mặc định**) | `--tiers e2,e4` | **22** | **3.39 GB** |
+| + cross-domain ImageNet/CelebA-HQ | `--tiers e2,e3,e4` | 46 | 8.24 GB |
+| + ensemble & hiệu chỉnh ngưỡng | `--tiers e2,e3,e4,e5` | 57 | 10.35 GB |
+| + AEROBLADE mọi generator | `--tiers e2,e3,e4,e4x,e5` | 69 | 12.37 GB |
+| Train lại detector từ đầu | `--tiers train` | 4 | 5.74 GB |
+| Train cả ensemble (3 detector nữa) | `--tiers train,trainens` | 7 | 20.34 GB |
+
+`e4 ⊂ e4x` và `expand()` khử trùng lặp theo đường dẫn remote, nên
+`--tiers e4,e4x` cho 17 file / 3.47 GB chứ không nhân đôi thành 22.
 
 Kiểm tra đã tải thừa gì: `modal run -m dire_modal.download::prune --tiers e2,e4`
 (chỉ in; thêm `--mode apply` mới xoá).
+
+### Trước khi ghi số vào bảng eval
+
+`dire/test/<A>/<B>/` có hai tầng, nhưng `train/` và `val/` thì phẳng — ngữ nghĩa
+tầng `<B>` **chưa xác nhận được**. Bằng chứng đang mâu thuẫn: `real.tar.gz` ở
+`.../lsun_bedroom/lsun_bedroom/` và `.../lsun_bedroom/imagenet/` có size **bằng
+nhau y hệt** (26.6 MB), trong khi hai nhánh dưới `dire/test/imagenet/` lại lệch
+(53.3 vs 177.4 MB). `vendor/utils/datasets.py` không được vendor nên không đọc
+code để khẳng định.
+
+```bash
+modal run -m dire_modal.download::probe_pair    # ~53 MB, so sha256 + đếm ảnh
+```
+
+Việc **tải** 10 file `dire/test/lsun_bedroom/imagenet/` không phụ thuộc kết quả
+này (chúng có thật, 1.1 GB, dùng chung checkpoint `lsun_adm.pth` của `e2`).
+Việc **diễn giải** chúng là cross-domain thì có — chạy `probe_pair` trước.
 
 
 ---
