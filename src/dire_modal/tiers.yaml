@@ -1,0 +1,59 @@
+# ============================================================================
+# CHÍNH SÁCH TẢI DỮ LIỆU — nguồn sự thật cho tier mặc định / trần dung lượng /
+# số container song song.
+#
+# File này nằm TRONG package (src/dire_modal/) chứ không phải configs/ ở repo
+# root, vì Modal chỉ đóng gói thư mục của module được chạy — function chạy
+# trong container sẽ thấy /root/dire_modal/tiers.yaml nhưng KHÔNG thấy
+# /root/configs/. manifest.py::load_policy() đọc file này và có fallback cứng
+# nếu thiếu, nên pipeline không bao giờ chết vì config.
+#
+# Danh sách FILE cụ thể nằm ở manifest.py (inventory); file này chỉ chứa
+# POLICY. Tách đôi như vậy để đổi chính sách không phải đụng inventory.
+# ============================================================================
+version: 1
+
+# Tier tải mặc định khi không truyền --tiers.
+#   e2 = eval headline DIRE trên LSUN-Bedroom (1 checkpoint + 16 tar test)
+#   e4 = eval AEROBLADE trên ảnh gốc        (4 tar images/)
+# Tổng 21/154 file trong cây Baidu → bỏ ~86% dung lượng không cần thiết.
+default_tiers: "e2,e4"
+
+# Trần dung lượng cho MỘT lần `main --mode fetch`. Vượt → từ chối, không tải,
+# in rõ cần bỏ tier nào. Đặt theo hạn mức Volume free của Modal (1 TiB) và
+# ngân sách $30 credit — nhưng chủ yếu để chặn tai nạn kiểu tải cả recons/ (44 tar).
+# Số đo thật từ log BaiduPCS-Go (2026-10-21) cho thấy mỗi tar test ~64–270 MB,
+# nên e2+e4 ước tính ~3–6 GB; 25 GB là trần rộng rãi có chỗ cho e3/e5.
+max_gb: 25.0
+
+# Số container tải song song TỐI ĐA.
+# Báu hiểm ở chỗ này: tài khoản Baidu free bị throttle theo số phiên đồng thời.
+# Code cũ KHÔNG đặt max_containers và tham số --concurrency bị bỏ qua hoàn toàn,
+# nên .map() bung ~26 container một lúc → server cắt băng thông → hàng loạt task
+# đứng ở "0B/s in 10m". 2 là giá trị an toàn đã suy ra từ log đó.
+max_containers: 2
+
+# Số lần thử lại cho MỖI file. Retry nằm BÊN TRONG fetch_one (vòng lặp thủ công)
+# chứ không dựa vào modal.Retries, vì exception lọt ra ngoài .map() sẽ huỷ toàn bộ
+# đợt tải và làm mất mọi file đang tải dở ở /tmp.
+fetch_attempts: 3
+
+# Timeout cho MỘT lệnh BaiduPCS-Go (giây). Code cũ không đặt timeout ⇒ một phiên
+# treo ở 0B/s có thể ngồi đó tới timeout của function (6 giờ) mà không bị giết.
+# 2700s = 45 phút: đủ cho tar lớn nhất (~270 MB) ở ~67 KB/s là ~67 phút... nên
+# thực tế file lớn nhất có thể cần 2 attempt. Muốn chắc, tăng lên 5400.
+subprocess_timeout: 5400
+
+# Ghi chú mục đích từng tier — chỉ để in ra cho người đọc, không ảnh hưởng logic.
+tiers:
+  e0:    "code/tooling/docs — không tải gì từ Baidu"
+  e1:    "demo AEROBLADE zero-shot — chỉ cần VAE (~1 GB) từ HF Hub, không cần Baidu"
+  e2:    "eval headline DIRE trên LSUN-Bedroom, 16 generator (mặc định)"
+  e3:    "eval mở rộng cross-domain: ImageNet + CelebA-HQ"
+  e4:    "eval AEROBLADE trên ẢNH GỐC — nhánh images/, không phải dire/ (mặc định)"
+  e5:    "ensemble nhiều detector + hiệu chỉnh ngưỡng trên val"
+  train: "train lại detector headline từ đầu (mặc định KHÔNG làm)"
+  trainx: "train lại detector cross-domain (ImageNet/CelebA-HQ)"
+  rawx:  "ảnh gốc train/val để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB)"
+  ckpts: "toàn bộ 6 checkpoint detector DIRE"
+  gap:   "thư mục manifest cũ bỏ sót — liệt kê động từ cây remote, không đoán tên file"
