@@ -510,7 +510,10 @@ def audit(dirs: str = "") -> None:
     image=cpu_image,
     secrets=[baidu_secret],
     volumes={"/raw": vol_raw},
-    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    # Tải HAI file TUẦN TỰ ⇒ timeout phải gấp đôi của một file. Bản đầu dùng
+    # timeout của MỘT file nên có thể bị Modal kill giữa file thứ hai và báo
+    # lỗi khó hiểu hơn chính nguyên nhân.
+    timeout=2 * POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
     cpu=1.0,
 )
 def probe_pair(
@@ -540,7 +543,10 @@ def probe_pair(
     """
     res: dict[str, dict] = {}
     for p in (a, b):
-        r = fetch_one({"remote": p, "local": p, "expected_size": 0})
+        # Gọi thân thật, KHÔNG gọi `fetch_one` — nó là modal.Function, gọi trực
+        # tiếp từ trong container sẽ ra "TypeError: 'Function' object is not
+        # callable" (chính lỗi làm lệnh này chết ngay lần chạy đầu tiên).
+        r = _fetch_one_impl({"remote": p, "local": p, "expected_size": 0})
         res[p] = r
         if r["status"] == "error":
             print(f"[probe] không tải được {p}: {r['error']} → không kết luận gì")
@@ -619,20 +625,21 @@ def main(
     _execute(tiers, max_gb, do_fetch=mode.strip().lower() in {"fetch", "commit", "yes"})
 
 
-@app.function(
-    image=cpu_image,
-    secrets=[baidu_secret],
-    volumes={"/raw": vol_raw},
-    # max_containers là fix của lỗi #3: bản cũ không đặt nên .map() bung ~26
-    # container, tự làm Baidu throttle xuống 0B/s. retries=0 vì retry nằm trong
-    # vòng lặp thủ công — exception lọt ra .map() sẽ huỷ cả đợt (lỗi #5).
-    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
-    cpu=0.25,
-    max_containers=POLICY.max_containers,
-    retries=modal.Retries(max_retries=0),
-)
-def fetch_one(f: dict) -> dict:
-    """Tải MỘT file. Resumable, tự retry, và **không bao giờ raise**."""
+def _fetch_one_impl(f: dict) -> dict:
+    """Thân thật của ``fetch_one`` — hàm Python THƯỜNG, gọi được trong container.
+
+    Tách khỏi decorator vì ở phạm vi module, ``fetch_one`` sau ``@app.function``
+    là một ``modal.Function``, **không gọi được như hàm thường**:
+
+        TypeError: 'Function' object is not callable
+
+    ``.map()`` cần đối tượng Function để chạy song song; code chạy TRONG một
+    container (``probe_pair``) cần gọi thẳng. Cả hai dùng chung thân này để chỉ
+    có MỘT bản logic — trước đây ``probe_pair`` gọi ``fetch_one(...)`` nên chưa
+    từng chạy được lần nào.
+
+    Tải MỘT file. Resumable, tự retry, và **không bao giờ raise**.
+    """
     remote_rel = f["remote"]
     remote = _abs(remote_rel)
     local = RAW / f["local"]
@@ -724,6 +731,28 @@ def fetch_one(f: dict) -> dict:
     # ("Runner terminated" ×15 trong log) và vứt hết file đang tải dở.
     return {"remote": remote_rel, "local": str(local), "status": "error",
             "error": last, "size": 0}
+
+
+@app.function(
+    image=cpu_image,
+    secrets=[baidu_secret],
+    volumes={"/raw": vol_raw},
+    # max_containers là fix của lỗi #3: bản cũ không đặt nên .map() bung ~26
+    # container, tự làm Baidu throttle xuống 0B/s. retries=0 vì retry nằm trong
+    # vòng lặp thủ công — exception lọt ra .map() sẽ huỷ cả đợt (lỗi #5).
+    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    cpu=0.25,
+    max_containers=POLICY.max_containers,
+    retries=modal.Retries(max_retries=0),
+)
+def fetch_one(f: dict) -> dict:
+    """Một file trong MỘT container. Dùng qua ``.map()`` để chạy song song.
+
+    KHÔNG gọi trực tiếp hàm này từ code khác: nó là ``modal.Function``, không
+    phải hàm Python (``TypeError: 'Function' object is not callable``). Cần chạy
+    inline trong container hiện tại thì gọi :func:`_fetch_one_impl`.
+    """
+    return _fetch_one_impl(f)
 
 
 @app.function(
