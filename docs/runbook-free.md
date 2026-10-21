@@ -49,20 +49,63 @@ modal secret list                     # ✅ CỔNG 1: thấy baidu-cred, r2-cred
 
 ## 2. Tải dữ liệu về Volume (Modal CPU, ~$1–2)
 
+Mặc định chỉ tải **21/154 file** trong cây Baidu (tier `e2` + `e4`). Detector
+DIRE chỉ đọc nhánh `dire/` (ImageFolder `0_real`/`1_fake`), nên `recons/` (44
+tar) và phần lớn `images/` (49 tar) là thừa và bị chặn cứng.
+
 ```bash
-# (a) Dò cây remote 1 lần để biết đường dẫn thật
-modal run -m dire_modal.download::ls_remote --path /
+# (a) Policy hiện hành — chạy LOCAL, không tốn credit
+modal run -m dire_modal.download::local_status
+
+# (b) Dò cây remote 1 lần để biết đường dẫn thật
+modal run -m dire_modal.download::ls_remote --path /apps
 # → chép kết quả vào src/dire_modal/manifest.py::BAIDU_ROOT
 
-# (b) Tải Tier A + checkpoints
-./scripts/01_fetch_baidu.sh
+# (c) Đối chiếu cây remote ↔ manifest — KHÔNG tải gì
+modal run -m dire_modal.download::audit
 
-# (c) Verify toàn bộ
+# (d) Kế hoạch + SIZE THẬT từ Baidu — KHÔNG tải gì
+modal run -m dire_modal.download::plan --tiers e2,e4
+
+# (e) Tải thật (mặc định của `main` là dry-run, phải nói rõ --mode fetch)
+./scripts/01_fetch_baidu.sh            # gộp (a)→(d), hỏi xác nhận, rồi tải
+# hoặc:
+modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
+
+# (f) Verify toàn bộ
 ./scripts/02_verify.sh                 # ✅ CỔNG 2: "All OK."
 ```
 
-Chi phí thực tế chủ yếu là **thời gian chờ Baidu** (server chậm); CPU 0.25 core ≈ $0.012/giờ → rẻ.
-`fetch_one` là resumable: chạy lại sẽ skip file đã có và `gzip -t` pass.
+**Phải chạy (c) và (d) trước khi tải.** Hai bước đó gần như miễn phí và là thứ
+duy nhất cho biết dung lượng thật — con số "40–70 GB" ghi ở các tài liệu cũ là
+ước lượng chưa kiểm chứng. Log BaiduPCS-Go ngày 2026-10-21 cho thấy mỗi tar test
+chỉ ~64–270 MB, tức tier `e2+e4` nhiều khả năng chỉ **~3–6 GB**.
+
+Chi phí thực tế chủ yếu là **thời gian chờ Baidu** (server chậm); CPU 0.25 core
+≈ $0.012/giờ → rẻ. `fetch_one` là resumable và idempotent: chạy lại sẽ skip file
+đã có và `gzip -t` pass.
+
+Trần dung lượng (`max_gb`, mặc định 25) nằm trong `src/dire_modal/tiers.yaml`.
+Vượt trần ⇒ `main` từ chối tải và in rõ tổng ước lượng. Ước lượng này **bảo thủ**:
+file nào `ls -l` không đọc được size thì bị tính bằng size của file lớn nhất đã
+biết, để guard không vô hiệu đúng lúc cần nó nhất.
+
+### Chọn tier theo mục tiêu
+
+| Mục tiêu | Lệnh | File |
+|---|---|---|
+| Chỉ code/docs | — | 0 |
+| Demo AEROBLADE zero-shot | — (VAE kéo từ HF Hub trong Space) | 0 |
+| **Eval headline DIRE trên LSUN** | `--tiers e2` | 17 |
+| **Eval AEROBLADE trên ảnh gốc** | `--tiers e4` | 4 |
+| Cả hai (mặc định) | `--tiers e2,e4` | 21 |
+| + cross-domain ImageNet/CelebA-HQ | `--tiers e2,e3,e4` | 35 |
+| + ensemble & hiệu chỉnh ngưỡng | `--tiers e2,e3,e4,e5` | 43 |
+| Train lại detector từ đầu | `--tiers train` | 4 |
+
+Kiểm tra đã tải thừa gì: `modal run -m dire_modal.download::prune --tiers e2,e4`
+(chỉ in; thêm `--mode apply` mới xoá).
+
 
 ---
 

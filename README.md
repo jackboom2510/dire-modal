@@ -56,7 +56,12 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 
 | Lệnh | Việc |
 |---|---|
-| `./scripts/01_fetch_baidu.sh` | Tải Tier A + checkpoints từ Baidu về Volume |
+| `modal run -m dire_modal.download::local_status` | In tier + policy — chạy **local**, 0 credit |
+| `modal run -m dire_modal.download::audit` | Đối chiếu cây Baidu thật ↔ manifest (không tải) |
+| `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
+| `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 21/154 file → verify |
+| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run) |
+| `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | `gzip -t` toàn bộ + (tuỳ chọn) đẩy R2 |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |
 | `./scripts/04_eval_pretrained.sh` | Eval checkpoint tác giả (cổng: ACC ≈ 99% trên ADM-LSUN) |
@@ -67,13 +72,47 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.archive::verify_hf --repo-id <user>/<repo>` | Đối chiếu sha256 mirror |
 | `modal run -m dire_modal.compute_dire::make_gallery --n 12` | Sinh gallery |x−recon| cho demo |
 
+## Chọn dữ liệu theo mục tiêu
+
+Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2`)
+đọc dữ liệu qua `torchvision.ImageFolder` trên nhánh `dire/` với hai lớp
+`0_real`/`1_fake`. Nghĩa là `recons/` (44 tar) và phần lớn `images/` (49 tar)
+**không nằm trên đường train/eval**. Cây Baidu có 154 file; mặc định chỉ tải **21**.
+
+| tier | file | mục đích |
+|---|---|---|
+| `e0` | 0 | code / tooling / docs |
+| `e1` | 0 | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
+| **`e2`** | **17** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
+| `e3` | 14 | eval mở rộng cross-domain: ImageNet + CelebA-HQ |
+| **`e4`** | **4** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
+| `e5` | 8 | ensemble nhiều detector + hiệu chỉnh ngưỡng trên val |
+| `train` | 4 | train lại detector headline từ đầu |
+| `trainx` | 7 | train lại detector cross-domain |
+| `rawx` | 4 | ảnh gốc train/val để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB) |
+| `ckpts` | 6 | toàn bộ 6 checkpoint detector DIRE |
+| `gap` | động | `dire/test/lsun_bedroom/imagenet/` — liệt kê từ remote, không đoán tên file |
+
+Alias cũ vẫn chạy được: `ckpt`→`ckpts` · `A`→`e2,train` · `B`→`e3` · `C`→`rawx` ·
+`D`→ rỗng (toàn bộ nội dung cũ nằm trong `NEVER`).
+
+`NEVER` chặn cứng, không tier nào với tới: `recons/` · `*ddim*` (10 tar ablation
+số bước DDIM, không có bản `dire/` tương ứng) · `lsun_bedroom.pt` (weight ADM
+2.5 GB không có trong cây Baidu).
+
+Policy (tier mặc định, trần dung lượng, số container song song) nằm ở
+[`src/dire_modal/tiers.yaml`](src/dire_modal/tiers.yaml) — cố ý đặt **trong
+package** chứ không phải `configs/`, vì Modal chỉ đóng gói thư mục của module
+được chạy nên function không thấy `configs/` ở repo root.
+
 ## Cấu trúc
 
 ```
 src/dire_modal/
   common.py         # Modal app, images, volumes, secrets
-  manifest.py       # định nghĩa tier dữ liệu (A/B/C/D + ckpt)
-  download.py       # tải Baidu → /raw (resumable, verify gzip)
+  manifest.py       # INVENTORY dữ liệu theo MỤC TIÊU (e0–e5, train, never)
+  tiers.yaml        # POLICY: tier mặc định, trần GB, số container song song
+  download.py       # tải Baidu → /raw (dry-run, guard dung lượng, resumable)
   pack.py           # /raw → WebDataset shards
   bench.py          # benchmark storage (Volume/R2) + throughput DIRE
   archive.py        # đẩy/kéo: R2, HF Hub, Kaggle + verify sha256

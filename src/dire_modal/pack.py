@@ -86,8 +86,19 @@ def pack_one(src_rel: str, split: str) -> dict:
     volumes={"/raw": vol_raw, "/shards": vol_shards},
     timeout=12 * 3600,
 )
-def main(tiers: str = "A") -> None:
-    """modal run -m dire_modal.pack::main --tiers A"""
+def main(tiers: str = "train") -> None:
+    """Pack /raw → WebDataset shards.
+
+    ``modal run -m dire_modal.pack::main --tiers train``
+
+    Mặc định đổi từ ``A`` sang ``train`` vì pack chỉ phục vụ huấn luyện: tier
+    ``train`` = 2 tar train + 2 tar val của LSUN. Tier cũ ``A`` vẫn chạy được
+    (alias → ``e2,train``) nhưng sẽ pack thêm 16 tar test — chỉ cần khi muốn
+    eval trên shards thay vì đọc tar gốc.
+
+    ``resolve()`` bỏ qua DirSpec (thư mục liệt kê động) kèm cảnh báo; pack chỉ
+    làm việc với file đã tải sẵn trong /raw nên điều đó vô hại.
+    """
     from .manifest import resolve
 
     jobs = []
