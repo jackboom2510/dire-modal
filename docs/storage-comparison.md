@@ -1,7 +1,25 @@
 # Lưu trữ dataset / pretrained model: Modal Volume vs R2 vs Local (và Kaggle/HF)
 
-> **Ngày:** 2026-10-14 · **Ngữ cảnh:** `dire-modal`, Tier A ≈ 40–70 GB (raw `.tar.gz`), tổng raw+shards ≈ 100–150 GB.
+> **Ngày:** 2026-10-14, **cập nhật số đo 2026-10-21** · **Ngữ cảnh:** `dire-modal`.
 > **Kết luận đã thay đổi so với bản nháp đầu tiên** — xem §5 "Kiến trúc chốt".
+>
+> ### ⚠ SỐ ĐO THẬT (audit 2026-10-21) thay cho ước lượng cũ
+>
+> Bản đầu ghi "Tier A ≈ 40–70 GB, tổng raw+shards ≈ 100–150 GB". **Sai.**
+> `download::audit` đo được:
+>
+> | | file | size |
+> |---|---|---|
+> | Mặc định mới `e2,e4` | 22 | **3.39 GB** |
+> | Eval đầy đủ không train (`e2,e3,e4,e5`) | 57 | **10.35 GB** |
+> | Tier A cũ (20 file) | 20 | **7.42 GB** |
+> | Toàn bộ cây đã audit (15 thư mục) | 104 | **61.40 GB** |
+> | ↳ dữ liệu **train** trong đó | — | **47.00 GB (77%)** |
+>
+> Con số "40–70 GB" hoá ra là của **cả cây** gán nhầm cho Tier A — sai 5.4–9.4 lần.
+> 61.40 GB là **cận dưới** cho cả cây: `AUDIT_DIRS` mới quét 15 thư mục, các nhánh
+> `recons/train`, `recons/val`, `images/test/imagenet`, `images/test/celebahq` chưa quét.
+> Chi phí bên dưới đã tính lại bằng `tools/storage_cost.py` với số đo mới.
 
 ---
 
@@ -12,9 +30,19 @@
    khoảng cách tăng nhanh — ở 3 TB thì R2 rẻ hơn ~4× ($45.9 vs $184.3/tháng).
 2. **R2 không còn là "cold archive của dataset"** — vai trò của nó co lại thành **kho nhỏ chứa checkpoint + manifest sha256**
    (10 GB free, egress $0). Lý do: dataset **không tái tạo được miễn phí** (tải lại từ Baidu), còn checkpoint thì nhỏ và quý.
-3. **Kaggle Datasets + HF Hub là mặt phẳng chia sẻ miễn phí tốt hơn R2**: 200 GB/dataset (Kaggle) và ~300 GB/repo (HF Hub),
-   public, mount trực tiếp trong notebook Kaggle. R2 10 GB free không đủ chứa dataset.
-4. **Local** (máy mỏng của bạn): chỉ control plane. Không giữ dataset, không giữ ảnh gốc — upload 60 GB từ nhà mất 1.3–4.5 h.
+   **Cập nhật 2026-10-21:** 10 GB free đó nay **đủ chứa luôn tập eval mặc định**
+   (`e2,e4` = 3.39 GB), điều bất khả thi khi tưởng Tier A là 60 GB. Nên R2 có thể
+   làm *vault cho tập eval* chứ không chỉ checkpoint — nhưng chỉ khi chấp nhận
+   trả tiền (rất nhỏ) cho tập eval đầy đủ 10.35 GB.
+3. **Kaggle Datasets + HF Hub vẫn là mặt phẳng chia sẻ tốt hơn R2**: 200 GB/dataset
+   (Kaggle) và ~300 GB/repo (HF Hub), public, mount trực tiếp trong notebook Kaggle.
+   Lý do *không* phải "R2 10 GB không đủ" (sai với tập eval 3.39 GB) mà là **R2
+   không tạo ra URL công khai miễn phí** như HF/Kaggle, và `r2.dev` bị rate-limit.
+   Với dữ liệu cần người khác tái lập được, HF Hub thắng; với bản sao riêng tư thì
+   R2 thắng.
+4. **Local** (máy mỏng của bạn): chỉ control plane. Không giữ dataset, không giữ ảnh gốc.
+   **Đo lại:** tập eval mặc định chỉ **3.39 GB** (không phải 60 GB), nên nếu cần giữ
+   một bản thì upload từ nhà chỉ ~5–10 phút, không phải 1.3–4.5 h.
 5. **Sai lầm đắt nhất không phải tiền storage mà là GPU chờ I/O**: một run 20 h trên A100 mà để mất 15% thời gian vì I/O
    ≈ **$7.5** — lớn hơn tiền lưu trữ cả tháng.
 
@@ -34,18 +62,29 @@
 | Rủi ro | Không versioning/snapshot; **bị tính phí tới 4 ngày sau khi xoá**; v2 beta "data loss may be possible" | object store, có versioning/lifecycle | mất ổ = mất hết | quota/ToS; dataset phải public nếu vượt 200 GB private | public mặc định; private cần PRO $9/th |
 | Tuyên bố chính thức | [Modal khuyến nghị **lưu model weights trong Volume**](https://modal.com/docs/guide/model-weights) | — | — | — | — |
 
-### Bảng chi phí theo dung lượng (raw + shards)
+### Bảng chi phí theo dung lượng — dùng SỐ ĐO THẬT (2026-10-21)
 
 | Kịch bản | Modal Volume | R2 Standard | R2 IA | Kaggle + HF |
 |---|---|---|---|---|
-| **S — 60 GB** (Tier A raw) | **$0** | $0.75/th | $0.60/th | **$0** |
-| **M — 150 GB** (raw + shards) | **$0** | $2.10/th | $1.50/th | **$0** |
-| L — 1.2 TB (Tier A+B+C+D) | $15.84/th | $17.85/th | $11.90/th | cần nhiều repo/dataset |
-| XL — 3 TB | $184.32/th | **$45.89/th** | $30.60/th | cần nhiều repo/dataset |
+| **`e2,e4` (mặc định) — 3.39 GB** | **$0** | **$0** (trong 10 GB free) | $0.03/th | **$0** |
+| **eval đầy đủ `e2..e5` — 10.35 GB** | **$0** | $0.005/th | $0.10/th | **$0** |
+| **toàn cây đã audit — 61.40 GB** | **$0** | $0.77/th | $0.61/th | **$0** |
+| giả định 1.2 TB (cả cây + shards + mở rộng) | $15.84/th | $17.85/th | $11.90/th | cần nhiều repo/dataset |
+| giả định 3 TB | $184.32/th | **$45.89/th** | $30.60/th | cần nhiều repo/dataset |
 
-→ **Điểm hoà vốn Volume vs R2 Standard = 1.227 GB ≈ 1.20 TiB** (dưới mốc đó Volume rẻ hơn — thực tế là miễn phí tới 1 TiB).
-Đến ~1.2 TB hai bên gần như bằng nhau; vượt xa thì R2 thắng rõ rệt.
-Sinh số bằng: `python3 tools/storage_cost.py --size-gb 150` (hoặc `--size-gb 3000`).
+Mọi mốc thực tế (3.39 → 61.40 GB) đều **nằm gọn dưới 1 TiB free của Volume** → chi
+phí lưu trữ $0. Chỉ hai dòng "giả định" mới vượt free tier, và chúng chỉ xảy ra
+nếu mirror cả cây **kèm shards** rồi còn mở rộng — kịch bản không có trong phạm
+vi "không train lại".
+
+→ **Điểm hoà vốn Volume vs R2 Standard vẫn là 1.227 GB ≈ 1.20 TiB** (dưới mốc đó
+Volume rẻ hơn — thực tế miễn phí tới 1 TiB). Ở quy mô thật của repo này
+(3.39–61.40 GB) thì **cả hai đều gần $0**, nên quyết định phải dựa trên tiêu chí
+khác — quan trọng nhất là *ai đọc được dữ liệu này từ bên ngoài* (Volume không có
+URL công khai, R2 và HF thì có).
+
+Sinh lại số bằng: `python3 tools/storage_cost.py --size-gb 3.39`
+(hoặc `10.35`, `61.4`, `1200`, `3000`).
 
 ---
 
@@ -96,6 +135,11 @@ Kết quả đổ vào `manifests/bench_storage_<ngày>.json`. **Chưa có số 
 
 ## 4. Quy tắc ngưỡng (đề xuất, ghi vào ADR-0001)
 
+> **Không ngưỡng nào đang bị chạm.** Dung lượng thật hiện tại là **3.39 GB**
+> (tập eval mặc định) — dưới ngưỡng 900 GiB khoảng **270 lần**, và ngay cả toàn
+> cây 61.40 GB cũng chỉ bằng ~7% ngưỡng. Bảng dưới là để dùng **sau này**, nếu
+> quyết định train lại và mirror cả cây kèm shards.
+
 | Tình huống | Hành động |
 |---|---|
 | Tổng Volume < 900 GiB | Giữ nguyên, tất cả trên Volume — **$0** |
@@ -120,9 +164,13 @@ Local = git + modal CLI + mẫu nhỏ. Không giữ dataset.
 
 **Thay đổi so với nháp đầu:** R2 từ "cold archive toàn bộ dataset" → "vault nhỏ cho checkpoint/manifest";
 Kaggle/HF từ "không có trong bảng" → "mặt phẳng chia sẻ chính". Lý do:
-- Dataset ở R2 tốn tiền khi >10 GB, trong khi Kaggle/HF cho **miễn phí và có sẵn URL công khai**.
+- Kaggle/HF cho **miễn phí và có URL công khai**; R2 không có URL công khai miễn phí.
+  (Lý do cũ "R2 10 GB không đủ chứa dataset" **không còn đúng** với tập eval 3.39 GB —
+  xem cập nhật ở TL;DR điểm 2.)
 - Checkpoint là dữ liệu **nhỏ + không tái tạo được** → đúng chỗ để trả tiền (và 10 GB free là đủ).
 - Volume là chỗ **nhanh nhất trong lúc chạy job Modal** → giữ làm cache.
+- Ở quy mô thật (3.39–61.40 GB), **cả Volume và R2 đều gần $0** ⇒ tiêu chí quyết định
+  là khả năng chia sẻ, không phải giá.
 
 ---
 

@@ -6,9 +6,10 @@ set -euo pipefail
 # Bước 0–2 KHÔNG tải gì và gần như không tốn tiền — chạy chúng trước để thấy
 # size thật. Chỉ bước 3 mới tải.
 #
-# Mặc định tải tier e2+e4 = 21/154 file trong cây Baidu (~86% số file là thừa
-# với mục tiêu eval + demo). Đổi bằng --tiers hoặc sửa default_tiers trong
-# src/dire_modal/tiers.yaml.
+# Mặc định tải tier e2+e4 = 22 file / 3.39 GB, so với 104 file / 61.40 GB của
+# toàn cây đã audit 2026-10-21 (77% dung lượng cây là dữ liệu TRAIN — bỏ được
+# vì ràng buộc dự án là "chỉ cải thiện, không train lại").
+# Đổi bằng TIERS=... hoặc sửa default_tiers trong src/dire_modal/tiers.yaml.
 #
 # Chạy không có TTY (CI, nohup): đặt ASSUME_YES=1 để bỏ qua lời nhắc ở bước 3.
 # ============================================================================

@@ -7,8 +7,24 @@
 
 ## Bối cảnh
 
-Repo cần giữ: dữ liệu gốc tải từ Baidu (`.tar.gz`, Tier A ≈ 40–70 GB), WebDataset shards dùng cho
+Repo cần giữ: dữ liệu gốc tải từ Baidu (`.tar.gz`), WebDataset shards dùng cho
 train (hot path), checkpoint + log, và bản mirror cho người khác tái lập.
+
+**Dung lượng thật, đo bằng `download::audit` ngày 2026-10-21** (thay cho ước
+lượng "Tier A ≈ 40–70 GB" trong bản đầu — ước lượng đó là của *cả cây*, sai
+5.4–9.4 lần so với Tier A):
+
+| | file | size |
+|---|---|---|
+| Tập eval mặc định `e2,e4` | 22 | **3.39 GB** |
+| Eval đầy đủ không train `e2..e5` | 57 | **10.35 GB** |
+| Toàn bộ cây đã audit | 104 | **61.40 GB** (cận dưới) |
+| ↳ dữ liệu train | — | **47.00 GB (77%)** |
+
+Vì 77% cây là dữ liệu train mà ràng buộc dự án là *chỉ cải thiện, không train
+lại*, nhu cầu thật chỉ **3–10 GB** — dưới cả free tier của Volume (1 TiB) lẫn
+R2 (10 GB). Hệ quả: quyết định lưu trữ **không còn là bài toán giá** mà là bài
+toán *chia sẻ được hay không*.
 Các phương án khả dụng: Modal Volume (1 TiB free), Cloudflare R2 (10 GB free, egress $0),
 Kaggle Datasets (200 GB/dataset), HF Hub (~300 GB/repo), ổ local (máy mỏng).
 
@@ -23,9 +39,9 @@ Nháp đầu tiên (trước khi khảo sát) giả định: *Volume = nhà, R2 
 | **Modal Volume `/raw`** | bản gốc `.tar.gz` + manifest | staging nhanh, 1 TiB free, POSIX thật, pipeline đang chạy sẵn |
 | **Modal Volume `/shards`** | WebDataset shards | hot path train — cần POSIX + throughput, `$0` |
 | **Modal Volume `/ckpt`** | checkpoint mới nhất, log | cùng Volume = latency thấp khi train |
-| **HF Hub (public)** | mirror đầy đủ Tier A + manifest | free, có URL công khai, tải được từ mọi nền tảng, chống link rot |
+| **HF Hub (public)** | mirror tập eval + manifest | free, có URL công khai, tải được từ mọi nền tảng, chống link rot. 3.39 GB dư sức trong ~300 GB/repo |
 | **Kaggle Datasets (public)** | mirror phụ theo từng thư mục con | 200 GB/dataset, mount trực tiếp trong notebook Kaggle |
-| **Cloudflare R2** | **chỉ** checkpoint đã chốt + manifest sha256 | nhỏ, không tái tạo được, egress $0 — đúng chỗ để trả tiền (10 GB free là đủ) |
+| **Cloudflare R2** | **chỉ** checkpoint đã chốt + manifest sha256 | nhỏ, không tái tạo được, egress $0 — đúng chỗ để trả tiền (10 GB free là đủ). Sau số đo: 10 GB free cũng đủ chứa *tập eval mặc định* 3.39 GB, nhưng R2 không cho URL công khai free ⇒ vẫn xếp sau HF cho mục đích mirror |
 | **Local** | không giữ dataset | máy mỏng; upload 60 GB từ nhà tốn 1.3–4.5 h |
 
 **Quy tắc ngưỡng (bắt buộc theo):**

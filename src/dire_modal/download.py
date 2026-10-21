@@ -63,8 +63,12 @@ _UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 _SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b", re.I)
 _KNOWN_SUFFIX = (".tar.gz", ".pth", ".pt")
 
-# Thư mục đáng quan tâm khi audit — gồm cả những chỗ manifest cũ bỏ sót
-# (dire/test/lsun_bedroom/imagenet) và nhánh images/ mà AEROBLADE cần.
+# Thư mục đáng quan tâm khi audit. Đã đối chiếu với audit thật 2026-10-21:
+# bỏ "images/test/lsun_bedroom/lsun_bedroom" (KHÔNG tồn tại — nhánh images/ chỉ
+# có một tầng), thêm các nhánh recons/ và images/test/ chưa quét để con số
+# "NEVER chặn được X GB" hết là cận dưới.
+# Thư mục không tồn tại chỉ in "⚠ không liệt kê được" — vô hại, và chính nó là
+# cách dò cây: thêm tên phỏng đoán vào đây rồi đọc output.
 AUDIT_DIRS = [
     "checkpoints",
     "dire/test/lsun_bedroom/lsun_bedroom",
@@ -74,14 +78,23 @@ AUDIT_DIRS = [
     "dire/test/celebahq",
     "dire/val/lsun_bedroom",
     "dire/val/imagenet",
+    "dire/val/celebahq",
     "dire/train/lsun_bedroom",
     "dire/train/imagenet",
     "dire/train/celebahq",
     "images/test/lsun_bedroom",
-    "images/test/lsun_bedroom/lsun_bedroom",
+    "images/test/imagenet/imagenet",
+    "images/test/imagenet/lsun_bedroom",
+    "images/test/celebahq",
     "images/train/lsun_bedroom",
     "images/val/lsun_bedroom",
     "recons/test/lsun_bedroom/lsun_bedroom",
+    "recons/test/lsun_bedroom/imagenet",
+    "recons/test/imagenet/imagenet",
+    "recons/test/imagenet/lsun_bedroom",
+    "recons/test/celebahq",
+    "recons/val/lsun_bedroom",
+    "recons/train/lsun_bedroom",
 ]
 
 
@@ -217,6 +230,31 @@ def _find_downloaded(tmpdir: Path, want: str) -> Path | None:
     # BaiduPCS-Go có thể đổi tên khi trùng (adm(1).tar.gz) → lấy file duy nhất
     cands = [p for p in tmpdir.rglob("*") if p.is_file() and p.stat().st_size > 0]
     return cands[0] if len(cands) == 1 else None
+
+
+def _tar_profile(path: Path, cap: int = 200_000) -> dict:
+    """Đếm thành viên tar.gz mà KHÔNG giải nén — rẻ, không tốn đĩa.
+
+    Trả về số file và số ảnh theo lớp ``0_real``/``1_fake`` (cấu trúc
+    ImageFolder mà DIRE dùng). ``cap`` để một tar khổng lồ không làm treo hàm.
+    """
+    import tarfile
+
+    n = 0
+    classes: dict[str, int] = {}
+    truncated = False
+    with tarfile.open(path, "r:gz") as t:
+        for mem in t:
+            if not mem.isfile():
+                continue
+            n += 1
+            if n > cap:
+                truncated = True
+                break
+            for part in mem.name.split("/"):
+                if part in ("0_real", "1_fake"):
+                    classes[part] = classes.get(part, 0) + 1
+    return {"files": n, "classes": classes, "truncated": truncated}
 
 
 def _all_expected() -> dict[str, list[str]]:
@@ -393,25 +431,36 @@ def ls_remote(path: str = "/") -> list[str]:
 @app.function(
     image=cpu_image,
     secrets=[baidu_secret],
-    timeout=1800,
+    timeout=3600,
 )
-def audit() -> None:
+def audit(dirs: str = "") -> None:
     """Đối chiếu cây remote thật ↔ manifest. **Không tải gì.**
 
     Việc này phải chạy TRƯỚC khi tin bất kỳ con số GB nào, vì nó là thứ phát
     hiện ra ba lớp sai: (a) manifest kê file không tồn tại trên Baidu, (b) file
     có thật nhưng không tier nào kê — ví dụ ``dire/test/lsun_bedroom/imagenet/``
     mà ``TIER_A`` cũ bỏ sót, (c) file rơi vào NEVER và dung lượng tiết kiệm được.
+
+    Args:
+        dirs: thư mục cần quét, cách nhau dấu phẩy. Rỗng ⇒ dùng ``AUDIT_DIRS``.
+            Ví dụ ``--dirs recons/train/lsun_bedroom,images/test/celebahq``.
+
+    Đã chứng minh giá trị: audit 2026-10-21 bắt được tier ``e4`` trỏ vào đường
+    dẫn 2 tầng KHÔNG tồn tại. Nếu chạy ``--mode fetch`` trước thì cả 4 file đã
+    fail và tốn một vòng chờ Baidu.
     """
     _baidu_login()
     expected = _all_expected()
+    targets = [d.strip() for d in dirs.split(",") if d.strip()] or AUDIT_DIRS
+    if dirs:
+        print(f"[audit] quét {len(targets)} thư mục từ --dirs (bỏ qua AUDIT_DIRS)")
 
     tot_never = 0
     tot_unknown: list[str] = []
     tot_missing: list[str] = []
     seen_remote: set[str] = set()
 
-    for d in AUDIT_DIRS:
+    for d in targets:
         listing = _ls_sizes(d)
         if not listing:
             print(f"\n[{d}]  ⚠ không liệt kê được (thư mục không tồn tại?)")
@@ -429,22 +478,105 @@ def audit() -> None:
                 tot_unknown.append(rel)
                 print(f"    ❓ {_human(size):>10}  {name}   KHÔNG có trong manifest")
 
+    # Chỉ kết luận "kê nhưng không có" cho những thư mục THẬT SỰ đã quét.
+    # Khi người dùng thu hẹp bằng --dirs, mọi entry ngoài phạm vi đó sẽ vắng
+    # mặt trong seen_remote — nếu vẫn báo "đường dẫn sai" thì sẽ xui người ta
+    # đi sửa những path vốn đúng (bug này do chính tham số --dirs sinh ra).
+    scanned = set(targets)
     for rel in expected:
-        if rel not in seen_remote:
-            tot_missing.append(rel)
+        if rel in seen_remote:
+            continue
+        if dirs and str(Path(rel).parent) not in scanned:
+            continue
+        tot_missing.append(rel)
 
     print(f"\n{'='*78}\nTÓM TẮT AUDIT\n{'='*78}")
-    print(f"  dung lượng NEVER chặn được : {_human(tot_never)}")
+    print(f"  dung lượng NEVER chặn được : {_human(tot_never)}"
+          + ("  (chỉ trong phạm vi --dirs)" if dirs else ""))
     print(f"  file remote không ai kê    : {len(tot_unknown)}")
     for r in tot_unknown:
         print(f"      {r}")
-    print(f"  manifest kê nhưng KHÔNG có : {len(tot_missing)}")
+    print(f"  manifest kê nhưng KHÔNG có : {len(tot_missing)}"
+          + (f"  (chỉ xét {len(scanned)} thư mục đã quét)" if dirs else ""))
     for r in tot_missing:
         print(f"      ⚠ {r}  ← đường dẫn sai, sửa trong manifest.py")
 
     if tot_missing:
         print("\n→ Có entry kê sai. `fetch_one` sẽ báo lỗi cho từng file đó;")
         print("  đối chiếu tên thật ở bảng trên rồi sửa manifest.py.")
+
+
+@app.function(
+    image=cpu_image,
+    secrets=[baidu_secret],
+    volumes={"/raw": vol_raw},
+    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    cpu=1.0,
+)
+def probe_pair(
+    a: str = "dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz",
+    b: str = "dire/test/lsun_bedroom/imagenet/real.tar.gz",
+) -> None:
+    """Chốt ngữ nghĩa ``dire/test/<A>/<B>/`` BẰNG BẰNG CHỨNG, không đoán.
+
+    Vấn đề: hai file ``real.tar.gz`` này có size **bằng nhau y hệt** (26.6 MB)
+    dù nằm dưới hai nhánh ``<B>`` khác nhau, trong khi hai nhánh dưới
+    ``dire/test/imagenet/`` lại lệch nhau (53.3 vs 177.4 MB). Nếu ``<B>`` là
+    "test domain" thì ảnh real phải khác nhau giữa LSUN và ImageNet. Không giả
+    thuyết nào khớp cả bốn số liệu, và ``vendor/utils/datasets.py`` KHÔNG được
+    vendor nên không xác nhận từ code được.
+
+    Tải cả hai (~53 MB) rồi so sha256 + đếm ảnh:
+
+    * sha256 **trùng** → cùng một tập ảnh ⇒ ``<B>`` KHÔNG phải test domain theo
+      nghĩa tập ảnh khác nhau ⇒ chưa được diễn giải nhánh imagenet là
+      cross-domain.
+    * sha256 **khác**, số ảnh bằng nhau → đọc ``<B>`` là test domain: hợp lý.
+    * số ảnh **lệch** → cỡ mẫu không đồng đều; mean AP gộp chung các nhánh sẽ
+      lệch, phải báo cáo riêng từng nhánh.
+
+    Việc TẢI 10 file ``dire/test/lsun_bedroom/imagenet/`` không phụ thuộc kết
+    quả này; việc GHI SỐ vào bảng eval thì có. Chạy trước khi báo cáo.
+    """
+    res: dict[str, dict] = {}
+    for p in (a, b):
+        r = fetch_one({"remote": p, "local": p, "expected_size": 0})
+        res[p] = r
+        if r["status"] == "error":
+            print(f"[probe] không tải được {p}: {r['error']} → không kết luận gì")
+            return
+
+    prof: dict[str, dict] = {}
+    dig: dict[str, str] = {}
+    print(f"\n{'='*78}\nPROBE: ngữ nghĩa dire/test/<A>/<B>/\n{'='*78}")
+    for p in (a, b):
+        path = RAW / p
+        prof[p] = _tar_profile(path)
+        dig[p] = res[p].get("sha256") or _sha256(path)
+        print(f"\n  {p}")
+        print(f"    size   : {_human(path.stat().st_size)}")
+        print(f"    sha256 : {dig[p]}")
+        cls = prof[p]["classes"]
+        print(f"    ảnh    : {prof[p]['files']}  {cls or '(không thấy 0_real/1_fake)'}")
+        if prof[p]["truncated"]:
+            print("    ⚠ dừng đếm sớm (tar lớn hơn cap)")
+
+    na, nb = prof[a]["files"], prof[b]["files"]
+    print(f"\n{'-'*78}")
+    if dig[a] == dig[b]:
+        print("  KẾT LUẬN: sha256 TRÙNG ⇒ hai đường dẫn chứa CÙNG một tập ảnh.")
+        print("  ⇒ <B> KHÔNG phải 'test domain' theo nghĩa tập ảnh khác nhau.")
+        print("  ⇒ CHƯA được diễn giải dire/test/lsun_bedroom/imagenet/ là cross-domain.")
+        print("    Cần đọc bảng cross-dataset trong paper DIRE hoặc datasets.py gốc.")
+    else:
+        print("  KẾT LUẬN: sha256 KHÁC ⇒ hai tập ảnh thật sự khác nhau.")
+        if na == nb:
+            print(f"  Số ảnh bằng nhau ({na}) ⇒ đọc <B> là test domain: HỢP LÝ.")
+            print("  ⇒ dire/test/lsun_bedroom/imagenet/ đo detector LSUN trên ảnh ImageNet,")
+            print("    dùng chung checkpoint lsun_adm.pth của e2 → cross-domain không cần train.")
+        else:
+            print(f"  ⚠ Số ảnh LỆCH: {na} vs {nb} ⇒ cỡ mẫu không đồng đều.")
+            print("    mean AP gộp chung các nhánh sẽ bị lệch — báo cáo riêng từng nhánh.")
 
 
 @app.function(
@@ -690,8 +822,13 @@ def local_status() -> None:
     print("-" * 78)
     for tier in TIERS:
         ents = TIERS[tier]
+        # Đếm File thật và DirSpec riêng: tier `e4x` chỉ có 1 entry nhưng nó
+        # đại diện 17 file, in "1" sẽ gây hiểu nhầm là tier chỉ có 1 file.
+        n_file = sum(1 for e in ents if isinstance(e, File))
+        n_dir = sum(1 for e in ents if isinstance(e, DirSpec))
+        cell = f"{n_file}" + (f"+{n_dir}?" if n_dir else "")
         note = (POLICY.notes or {}).get(tier, "")
-        print(f"{tier:<8} {len(ents):>5}  {note}")
+        print(f"{tier:<8} {cell:>5}  {note}")
     print("-" * 78)
     for t in POLICY.default_tiers.split(","):
         t = t.strip()

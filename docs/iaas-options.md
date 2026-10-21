@@ -1,8 +1,11 @@
 # IaaS cho DIRE (diffusion-generated image detection) — so sánh & chọn nền tảng
 
 > **Ngày lập / ngày truy cập nguồn:** 2026-10-14
-> **Ngữ cảnh:** repo `dire-modal` — tải DiffusionForensics (~Tier A ≈ 40–70 GB), pack WebDataset,
+> **Ngữ cảnh:** repo `dire-modal` — tải DiffusionForensics, pack WebDataset,
 > fine-tune ResNet-50 detector (DIRE trên LSUN-Bedroom ADM), eval 16 generator, demo public.
+> **Dung lượng thật (audit 2026-10-21):** tập eval mặc định `e2,e4` = **3.39 GB** / 22 file;
+> eval đầy đủ `e2..e5` = **10.35 GB**; toàn cây = **61.40 GB** (77% là dữ liệu train).
+> Con số "Tier A ≈ 40–70 GB" trong bản đầu là của *cả cây*, sai 5.4–9.4 lần.
 > **Ngân sách mục tiêu của chủ repo: 0 ₫ (chỉ free tier).** Ưu tiên: có kết quả nhanh. Có thẻ quốc tế. Cần demo public.
 
 ---

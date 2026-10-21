@@ -57,9 +57,10 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | Lệnh | Việc |
 |---|---|
 | `modal run -m dire_modal.download::local_status` | In tier + policy — chạy **local**, 0 credit |
-| `modal run -m dire_modal.download::audit` | Đối chiếu cây Baidu thật ↔ manifest (không tải) |
+| `modal run -m dire_modal.download::audit` | Đối chiếu cây Baidu thật ↔ manifest (không tải). `--dirs a,b` để quét thư mục riêng |
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
-| `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 21/154 file → verify |
+| `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng sha256 (~53 MB) |
+| `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 22 file / 3.39 GB → verify |
 | `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run) |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | `gzip -t` toàn bộ + (tuỳ chọn) đẩy R2 |
@@ -76,29 +77,51 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 
 Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2`)
 đọc dữ liệu qua `torchvision.ImageFolder` trên nhánh `dire/` với hai lớp
-`0_real`/`1_fake`. Nghĩa là `recons/` (44 tar) và phần lớn `images/` (49 tar)
-**không nằm trên đường train/eval**. Cây Baidu có 154 file; mặc định chỉ tải **21**.
+`0_real`/`1_fake`. Nghĩa là `recons/` và phần lớn `images/` **không nằm trên
+đường train/eval** của detector.
 
-| tier | file | mục đích |
+**Mọi con số dưới đây là SỐ ĐO THẬT** từ `download::audit` ngày 2026-10-21
+(15 thư mục, 104 file), không phải ước lượng.
+
+| tier | file | size | mục đích |
+|---|---|---|---|
+| `e0` | 0 | — | code / tooling / docs |
+| `e1` | 0 | — | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
+| **`e2`** | **17** | **1.94 GB** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
+| `e3` | 24 | 4.85 GB | cross-domain: +10 tar `lsun_bedroom/imagenet`, ImageNet, CelebA-HQ |
+| **`e4`** | **5** | **1.45 GB** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
+| `e4x` | 17 | 3.47 GB | AEROBLADE trên MỌI generator (tự loại 8 file `*ddim*`) |
+| `e5` | 11 | 2.11 GB | ensemble + hiệu chỉnh ngưỡng (val có đủ 5 tar) |
+| `train` | 4 | 5.74 GB | train lại detector headline từ đầu |
+| `trainx` | 7 | 11.24 GB | train lại detector cross-domain |
+| `trainens` | 3 | 14.60 GB | train 3 detector ensemble |
+| `rawx` | 4 | 4.48 GB | ảnh gốc để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB) |
+| `rawxens` | 6 | 12.10 GB | ảnh gốc cho ensemble |
+| `ckpts` | 6 | 1.58 GB | toàn bộ checkpoint detector (mỗi file 269.4 MB) |
+
+| tổ hợp | file | size |
 |---|---|---|
-| `e0` | 0 | code / tooling / docs |
-| `e1` | 0 | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
-| **`e2`** | **17** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
-| `e3` | 14 | eval mở rộng cross-domain: ImageNet + CelebA-HQ |
-| **`e4`** | **4** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
-| `e5` | 8 | ensemble nhiều detector + hiệu chỉnh ngưỡng trên val |
-| `train` | 4 | train lại detector headline từ đầu |
-| `trainx` | 7 | train lại detector cross-domain |
-| `rawx` | 4 | ảnh gốc train/val để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB) |
-| `ckpts` | 6 | toàn bộ 6 checkpoint detector DIRE |
-| `gap` | động | `dire/test/lsun_bedroom/imagenet/` — liệt kê từ remote, không đoán tên file |
+| **`e2,e4` (mặc định)** | **22** | **3.39 GB** |
+| `e2,e3,e4,e5` — eval đầy đủ, không train | 57 | 10.35 GB |
+| `e2,e3,e4,e4x,e5` | 69 | 12.37 GB |
+| Tier A **cũ** (2 train + 2 val + 16 test) | 20 | **7.42 GB** |
+| Toàn bộ cây đã audit | 104 | **61.40 GB** |
+| ↳ trong đó dữ liệu **train** | — | **47.00 GB (77%)** |
+
+Docs từng ghi "Tier A ≈ 40–70 GB" — đó là số của **cả cây** gán nhầm cho Tier A;
+sai 5.4–9.4 lần. Vì 77% cây là dữ liệu train mà ràng buộc dự án là *chỉ cải
+thiện, không train lại*, phần bỏ được rất lớn: **eval đầy đủ chỉ 10.35 GB**.
 
 Alias cũ vẫn chạy được: `ckpt`→`ckpts` · `A`→`e2,train` · `B`→`e3` · `C`→`rawx` ·
 `D`→ rỗng (toàn bộ nội dung cũ nằm trong `NEVER`).
 
-`NEVER` chặn cứng, không tier nào với tới: `recons/` · `*ddim*` (10 tar ablation
-số bước DDIM, không có bản `dire/` tương ứng) · `lsun_bedroom.pt` (weight ADM
-2.5 GB không có trong cây Baidu).
+`NEVER` chặn cứng, không tier nào với tới: `recons/` · `*ddim*` (8 tar ablation
+số bước DDIM, không có bản `dire/` tương ứng — 2 trong số đó chỉ **130 B**, tức
+rỗng ngay trong dataset gốc) · `lsun_bedroom.pt` (weight ADM 2.5 GB không có
+trong cây Baidu). Audit đo được **1.6 GB** bị chặn trong phạm vi đã quét.
+
+`expand()` khử trùng lặp theo **đường dẫn remote**, không theo object: `e4 ⊂ e4x`
+nên `--tiers e4,e4x` cho 17 file chứ không phải 22.
 
 Policy (tier mặc định, trần dung lượng, số container song song) nằm ở
 [`src/dire_modal/tiers.yaml`](src/dire_modal/tiers.yaml) — cố ý đặt **trong
