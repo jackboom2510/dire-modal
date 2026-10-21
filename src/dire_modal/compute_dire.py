@@ -1,7 +1,8 @@
 """Giai đoạn 2: tự tính DIRE từ ảnh gốc bằng ADM DDIM inversion.
 
 Có 2 việc ở đây:
-  1. `DIRECompute`  — class chạy song song cho cả dataset (max_containers=40).
+  1. `DIRECompute`  — class chạy song song cho cả dataset (số container + timeout
+     lấy từ `tiers.yaml`; xem khối "Guard chi phí" — đừng để cứng 40/24h).
   2. `make_gallery` — sinh vài mẫu `orig | recon | |x-recon|` cho HF Spaces demo.
 
 Cả hai **cần ADM checkpoint** (`/ckpt/pretrained/lsun_adm.pth`) và repo guided-diffusion
@@ -18,9 +19,131 @@ from __future__ import annotations
 
 import modal
 
-from .common import app, gpu_image, vol_shards, vol_ckpt
+from .common import app, cpu_image, gpu_image, vol_shards, vol_ckpt
+from .manifest import POLICY
 
 DIRE_SRC = "/opt/dire/guided-diffusion"  # clone trong image, xem common.py
+
+
+# ===========================================================================
+# 0. Guard chi phí — chạy TRƯỚC khi bật container nào
+# ===========================================================================
+# Bản trước để cứng `max_containers=40` + `timeout=24*3600` trên A100. Một
+# container treo bị tính tiền GPU suốt 24 giờ, nhân 40 container:
+#     40 × 24 h × ~$2.50/h ≈ $2 400 cho MỘT lần chạy hỏng.
+# Điểm chết người là TIMEOUT chứ không phải số container: một ảnh 256² × 20
+# step mất vài giây, nên timeout 24 h chỉ có tác dụng khi container đã treo —
+# đúng lúc nó tốn tiền nhất.
+_CONTAINER_HARD_CAP = 16
+# Timeout tối đa cho MỘT ảnh. Một ảnh 256² × 20 step mất vài giây, nên 1 giờ
+# đã là margin ~1000×. Đặt ở đây để một dòng config sai (24 h) không thể biến
+# 16 container thành $960 trần xấu nhất.
+_TIMEOUT_HARD_CAP = 3600
+
+
+def _clamp_timeout(raw: int) -> int:
+    """Chặn cứng timeout một ảnh vào [60, 3600] giây."""
+    return max(60, min(int(raw), _TIMEOUT_HARD_CAP))
+
+
+def _clamp_containers(raw: int, n_images: int | None = None) -> int:
+    """Chặn cứng số container vào [1, 16].
+
+    Một dòng config sai (``dire_max_containers: 40``) không được phép bật lại
+    40 A100. Không dùng biến env: config đi theo package nên nó là nguồn duy
+    nhất, và guard phải áp dụng cả khi ai đó sửa file.
+    """
+    c = max(1, min(int(raw), _CONTAINER_HARD_CAP))
+    if n_images is not None:
+        c = max(1, min(c, max(1, int(n_images))))
+    return c
+
+
+def estimate_cost(n_images: int, policy=None, containers: int | None = None) -> dict:
+    """Ước tính chi phí GPU cho ``n_images`` ảnh.
+
+    Trả về HAI con số, và con số thứ hai mới là thứ guard phải chặn:
+
+    - ``usd``: kỳ vọng, theo ``sec_per_image`` (bảo thủ, chưa đo thật).
+    - ``worst_usd``: mọi container đều treo tới ``timeout`` — đây là **hoá đơn
+      thật** khi lần chạy hỏng, và là trần cứng của mọi lần chạy.
+    """
+    p = policy or POLICY
+    n = max(0, int(n_images))
+    c = containers if containers is not None else _clamp_containers(
+        p.dire_max_containers, n
+    )
+    timeout_s = _clamp_timeout(p.dire_timeout_s)
+    gpu_hours = n * p.dire_sec_per_image / 3600.0
+    worst_gpu_hours = c * timeout_s / 3600.0
+    return {
+        "images": n,
+        "containers": c,
+        "gpu_hours": gpu_hours,
+        "usd": gpu_hours * p.dire_usd_per_gpu_hour,
+        "worst_gpu_hours": worst_gpu_hours,
+        "worst_usd": worst_gpu_hours * p.dire_usd_per_gpu_hour,
+        "cap_usd": float(p.dire_max_usd),
+        "max_images": int(p.dire_max_images),
+        "sec_per_image": float(p.dire_sec_per_image),
+        "timeout_s": timeout_s,
+    }
+
+
+def _print_estimate(est: dict) -> None:
+    print(
+        f"[tiền] {est['images']} ảnh × {est['sec_per_image']:.1f} s/ảnh = "
+        f"{est['gpu_hours']:.2f} GPU-h ≈ ${est['usd']:.2f}"
+    )
+    print(
+        f"[tiền] trần xấu nhất: {est['containers']} container × "
+        f"{est['timeout_s'] / 60:.0f} phút = {est['worst_gpu_hours']:.2f} GPU-h "
+        f"≈ ${est['worst_usd']:.2f}   (trần cho phép ${est['cap_usd']:.2f})"
+    )
+
+
+def preflight_cost(
+    n_images: int, policy=None, max_usd: float | None = None, force: bool = False
+) -> dict:
+    """Kiểm tiền TRƯỚC khi bật container. Vượt trần ⇒ ``SystemExit``.
+
+    Gọi hàm này là việc đầu tiên trong entrypoint, trước cả bước liệt kê file.
+    ``force=True`` bỏ qua cả ba điều kiện (người dùng tự chịu trách nhiệm), vẫn
+    in đủ số.
+    """
+    p = policy or POLICY
+    cap = float(max_usd) if max_usd else float(p.dire_max_usd)
+    est = estimate_cost(n_images, p)
+    est["cap_usd"] = cap
+    _print_estimate(est)
+
+    if force:
+        if est["usd"] > cap or est["images"] > est["max_images"]:
+            print("[tiền] ⚠ --force: đã bỏ qua trần chi phí. Theo dõi bằng")
+            print("       modal app list  /  modal billing report --resolution h")
+        return est
+
+    if est["images"] > est["max_images"]:
+        raise SystemExit(
+            f"[DỪNG] {est['images']} ảnh > trần {est['max_images']} ảnh/lần "
+            f"(dire_max_images trong src/dire_modal/tiers.yaml).\n"
+            "  Chạy thành nhiều đợt nhỏ, hoặc nâng trần một cách có ý thức."
+        )
+    if est["usd"] > cap:
+        raise SystemExit(
+            f"[DỪNG] ước tính ${est['usd']:.2f} > trần ${cap:.2f}.\n"
+            f"  Giảm --n (đang {est['images']}), hoặc nâng dire_max_usd, "
+            "hoặc dùng --force nếu đã cân nhắc."
+        )
+    if est["worst_usd"] > cap:
+        raise SystemExit(
+            f"[DỪNG] trần xấu nhất ${est['worst_usd']:.2f} > ${cap:.2f}: "
+            f"{est['containers']} container × {est['timeout_s'] / 60:.0f} phút "
+            "treo vẫn vượt ngân sách.\n"
+            "  Giảm dire_max_containers hoặc dire_timeout_s trong tiers.yaml, "
+            "hoặc dùng --force nếu chấp nhận rủi ro đó."
+        )
+    return est
 
 
 def _import_dire():
@@ -125,8 +248,10 @@ def _dire_for_image(model, diffusion, pil_img, steps: int = 20):
     image=gpu_image,
     volumes={"/shards": vol_shards, "/ckpt": vol_ckpt},
     gpu="A100",
-    timeout=24 * 3600,
-    max_containers=40,
+    # 30 phút cho MỘT ảnh (gấp ~300× thời gian thật) thay vì 24 giờ: đây là
+    # trần chi phí thật của một lần chạy, xem khối "Guard chi phí" ở đầu file.
+    timeout=_clamp_timeout(POLICY.dire_timeout_s),
+    max_containers=_clamp_containers(POLICY.dire_max_containers),
 )
 class DIRECompute:
     model_path: str = modal.parameter(default="/ckpt/pretrained/lsun_adm.pth")
@@ -227,3 +352,66 @@ def make_gallery(n: int = 12, steps: int = 20,
     print(f"\n[done] {len(written)} mẫu → {out_dir} · DIRE trung bình {pdf:.2f}")
     return {"samples": written, "out": str(out_dir),
             "download": "modal volume get dire-shards /_gallery ./platforms/hf-spaces/gallery"}
+
+
+# ===========================================================================
+# 3. Liệt kê nguồn (CPU, gần như $0) + entrypoint CÓ GUARD
+# ===========================================================================
+@app.function(
+    image=cpu_image,
+    volumes={"/shards": vol_shards},
+    timeout=600,
+)
+def list_images(src_glob: str = "/shards/test/*/real/*.jpg", limit: int = 200) -> list[str]:
+    """Liệt kê ảnh nguồn trên Volume. CPU, không GPU ⇒ gần như không tốn tiền.
+
+    Tách ra khỏi GPU để bước đếm ảnh (quyết định chi phí) không phải bật A100.
+    """
+    import glob as _glob
+
+    return sorted(_glob.glob(src_glob))[: max(0, int(limit))]
+
+
+@app.local_entrypoint()
+def dire_batch(
+    n: int = 200,
+    steps: int = 20,
+    src_glob: str = "/shards/test/*/real/*.jpg",
+    out_dir: str = "/shards/dire_out",
+    max_usd: float = 0.0,
+    force: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """Chạy DIRE cho tối đa ``n`` ảnh — **có guard chi phí**.
+
+    Thứ tự cố ý: kiểm tiền TRƯỚC, bật container SAU. Vượt trần thì
+    ``SystemExit`` ngay ở dòng đầu, chưa có GPU nào được cấp phát.
+
+    ``modal run -m dire_modal.compute_dire::dire_batch --n 200``
+    ``modal run -m dire_modal.compute_dire::dire_batch --n 5 --dry-run``
+    """
+    from pathlib import Path
+
+    cap = max_usd or POLICY.dire_max_usd
+    preflight_cost(n, max_usd=cap, force=force)  # ← cửa chặn, đứng trước mọi container
+    if dry_run:
+        print("[dry-run] không bật container nào.")
+        return
+
+    paths = list_images.remote(src_glob, n)  # CPU, không GPU
+    if not paths:
+        raise SystemExit(f"[!] không thấy ảnh khớp {src_glob}")
+    if len(paths) < n:
+        # Ước tính lại theo số THẬT (nhỏ hơn nên chắc chắn qua trần).
+        print(f"[tiền] chỉ thấy {len(paths)}/{n} ảnh → tính lại")
+        preflight_cost(len(paths), max_usd=cap, force=force)
+
+    dsts = [f"{out_dir}/{Path(p).stem}.npy" for p in paths]
+    print(f"[chạy] {len(paths)} ảnh · {steps} step · tối đa "
+          f"{_clamp_containers(POLICY.dire_max_containers, len(paths))} container")
+    done = 0
+    for r in DIRECompute(steps=steps).process_one.map(paths, dsts):
+        done += 1
+        if done % 25 == 0 or done == len(paths):
+            print(f"[{done}/{len(paths)}] {r}")
+    print(f"[xong] {done} ảnh → {out_dir}")

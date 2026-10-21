@@ -71,6 +71,8 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `./scripts/bench_storage.sh` | Đo Volume vs R2 (mount + S3 API) |
 | `modal run -m dire_modal.archive::push_hf --repo-id <user>/<repo>` | Mirror lên HF |
 | `modal run -m dire_modal.archive::verify_hf --repo-id <user>/<repo>` | Đối chiếu sha256 mirror |
+| `modal run -m dire_modal.compute_dire::dire_batch --n 200` | Tính DIRE trên GPU — **có preflight chặn chi phí** trước khi bật container |
+| `modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run` | Chỉ in ước tính tiền, không bật GPU nào |
 | `modal run -m dire_modal.compute_dire::make_gallery --n 12` | Sinh gallery |x−recon| cho demo |
 
 ## Chọn dữ liệu theo mục tiêu
@@ -88,7 +90,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | `e0` | 0 | — | code / tooling / docs |
 | `e1` | 0 | — | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
 | **`e2`** | **17** | **1.94 GB** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
-| `e3` | 24 | 4.85 GB | cross-domain: +10 tar `lsun_bedroom/imagenet`, ImageNet, CelebA-HQ |
+| `e3` | 24 | 4.85 GB | +10 tar `lsun_bedroom/imagenet` (**cross-generator**, xem dưới), ImageNet, CelebA-HQ |
 | **`e4`** | **5** | **1.45 GB** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
 | `e4x` | 17 | 3.47 GB | AEROBLADE trên MỌI generator (tự loại 8 file `*ddim*`) |
 | `e5` | 11 | 2.11 GB | ensemble + hiệu chỉnh ngưỡng (val có đủ 5 tar) |

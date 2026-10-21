@@ -65,6 +65,42 @@ fetch_attempts: 3
 # hash đường dẫn remote nên attempt sau resume được mảnh dở, không tải lại.
 subprocess_timeout: 5400
 
+# ============================================================================
+# GUARD CHI PHÍ GPU (compute_dire.py) — đây là phần TIÊU TIỀN THẬT.
+#
+# Bản trước để cứng `max_containers=40` + `timeout=24*3600` trên A100. Một
+# container treo bị tính tiền GPU suốt 24 giờ, nhân 40 container:
+#     40 × 24 h × ~$2.50/h ≈ $2 400 cho MỘT lần chạy hỏng.
+# Điểm chết người là timeout, không phải số container: một ảnh 256² × 20 step
+# mất vài giây, nên timeout 24 h chỉ có tác dụng khi container TREO — đúng lúc
+# nó tốn tiền nhất.
+#
+# Với cấu hình dưới đây, trần xấu nhất là 4 × 0.5 h × $2.50 = ~$5.
+# ============================================================================
+
+# Số container GPU song song tối đa. Code clamp cứng ở [1, 16] để một dòng
+# config sai không thể bật lại 40 container.
+dire_max_containers: 4
+
+# Timeout cho MỘT ảnh (giây). 1800 s = 30 phút, gấp ~300 lần thời gian thật
+# của một ảnh ⇒ đủ rộng cho ảnh lớn/GPU chậm, đủ hẹp để một lần treo không
+# thành hoá đơn. Đây là trần chi phí thật của một lần chạy.
+dire_timeout_s: 1800
+
+# Trần chi phí cho MỘT lần chạy (USD). Preflight tính tiền trước khi bật
+# container nào; vượt trần thì TỪ CHỐI, phải --force mới chạy.
+dire_max_usd: 5.0
+
+# Trần số ảnh cho một lần chạy, chặn trước cả khi tính tiền.
+dire_max_images: 500
+
+# Giá A100 (USD/GPU-giờ). Modal tính theo giây GPU thực dùng.
+dire_usd_per_gpu_hour: 2.5
+
+# Giây/ảnh, BẢO THỦ. Đo thật bằng `scripts/06_measure_dire.sh` rồi cập nhật;
+# preflight dùng số này nên ước tính sẽ sai đúng bằng mức sai của nó.
+dire_sec_per_image: 5.0
+
 # Ghi chú mục đích từng tier — chỉ để in ra cho người đọc, không ảnh hưởng logic.
 # Số file và GB là số đo thật (audit 2026-10-21).
 tiers:
