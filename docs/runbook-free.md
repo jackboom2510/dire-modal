@@ -45,6 +45,42 @@ modal secret list                     # ✅ CỔNG 1: thấy baidu-cred, r2-cred
 
 **Lấy BDUSS/STOKEN:** đăng nhập pan.baidu.com → DevTools → Application → Cookies → sao chép `BDUSS` và `STOKEN`.
 
+### CỔNG 0 — repo import được bằng `modal` THẬT (0 credit, ~1 phút)
+
+Chạy **trước** mọi lệnh `modal run`:
+
+```bash
+./scripts/07_check_imports.sh
+```
+
+Script tạo `.venv`, cài `modal` **thật** (không stub) từ `requirements-dev.txt`,
+rồi import toàn bộ module và chạy cả bộ test.
+
+**Vì sao cần bước riêng này:** bộ test dùng stub tự viết, mà stub không thể bắt
+mọi thứ. Ví dụ thật (2026-10-21) — `compute_dire.py` từng có
+`from __future__ import annotations` (PEP 563). Modal thật đọc `__annotations__`
+**thô**, thấy `'str'` (chuỗi) thay vì `str`, rồi chết ngay lúc **import** module:
+
+```
+KeyError: 'str'
+→ InvalidError("No class parameter encoder implemented for type `...`")
+→ AttributeError: 'str' object has no attribute '__name__'
+```
+
+`AttributeError` cuối cùng che mất nguyên nhân, và vì lỗi ở import nên **mọi**
+lệnh của module đều chết — kể cả `dire_batch --dry-run`, trước khi guard chi phí
+kịp in ra con số nào.
+
+Quy tắc rút ra:
+
+- File nào có `@app.cls` + `modal.parameter` thì **không** được có
+  `from __future__ import annotations`. Có test quét toàn `src/` để chặn.
+- Stub phải mô phỏng **hành vi gây lỗi**, không được bỏ qua nó: stub
+  `modal.parameter` giờ kiểm annotation và báo lỗi nếu thấy chuỗi.
+- Nhưng stub vẫn là code của mình — nên vẫn cần một test dùng `modal` thật
+  (`tests/test_real_modal_import.py`), chạy trong subprocess để có
+  `sys.modules` sạch.
+
 ---
 
 ## 2. Tải dữ liệu về Volume (Modal CPU, ~$1–2)

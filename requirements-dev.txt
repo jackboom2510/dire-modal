@@ -1,0 +1,13 @@
+# Phụ thuộc cho việc CHẠY TEST ở máy local / CI — không cần cho container.
+#
+#   python3 -m venv .venv && . .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#   pytest tests/ -q
+#
+# `modal` ở đây là package THẬT (không phải stub) vì có những lỗi chỉ nó bắt
+# được — xem tests/test_real_modal_import.py và lỗi PEP 563 trong
+# src/dire_modal/compute_dire.py.
+modal>=0.64
+pyyaml>=6.0
+pytest>=8.0
+pyflakes>=3.2
