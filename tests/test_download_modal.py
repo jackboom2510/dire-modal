@@ -151,6 +151,14 @@ case "$cmd" in
       head -c 2000 /dev/zero >> "$saveto/$base"
     elif [ "${MODE:-ok}" = "html" ]; then
       printf '<!DOCTYPE html><html><body>BDUSS expired</body></html>' > "$saveto/$base"
+    elif [ "${MODE:-ok}" = "copy" ]; then
+      # Test tự dựng nội dung (tar không nén, tar cụt, ...) rồi cho binary
+      # chép ra. SRC_FILE_A / SRC_FILE_B cho phép hai nhánh khác nội dung.
+      case "$remote" in
+        *imagenet*) src="${SRC_FILE_B:-$SRC_FILE}" ;;
+        *)          src="${SRC_FILE_A:-$SRC_FILE}" ;;
+      esac
+      cp "$src" "$saveto/$base"
     else
       t=$(mktemp -d); mkdir -p "$t/0_real" "$t/1_fake"
       echo "$remote/r" > "$t/0_real/a.jpg"; echo "$remote/f" > "$t/1_fake/b.jpg"
@@ -487,29 +495,262 @@ def test_probe_pair_answers_even_when_not_gzip():
     """Regression của lần chạy thật: gzip fail không được chặn sha256."""
     import contextlib
     import io
-    import tempfile as _tf
 
     dl, _ = install_stub()
-    os.environ["BDUSS"] = "fake"
-    os.environ["MODE"] = "rar"
-    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
-    dl.RAW = Path(_tf.mkdtemp())
-    # Cô lập đúng biến cần test: bỏ qua size remote (fake `ls` báo 269MB trong
-    # khi fake download ghi vài KB ⇒ size mismatch sẽ lấn át kết quả).
-    orig_ls = dl._ls_sizes
-    dl._ls_sizes = lambda *a, **k: {}
+    # Hai blob KHÁC nhau (nếu giống hệt, probe rơi vào nhánh "sha256 TRÙNG" và
+    # kết luận luôn — đúng, nhưng không kiểm được nhánh cần kiểm ở đây).
+    _probe_env(
+        dl,
+        b"Rar!\x1a\x07\x00" + b"\x01" * 500,
+        b"Rar!\x1a\x07\x00" + b"\x02" * 500,
+    )
     buf = io.StringIO()
     try:
         with contextlib.redirect_stdout(buf):
             dl.probe_pair.local()
     finally:
-        dl._ls_sizes = orig_ls
         os.environ["MODE"] = "ok"
+        for k in ("SRC_FILE_A", "SRC_FILE_B"):
+            os.environ.pop(k, None)
     out = buf.getvalue()
     assert "sha256" in out, "phải in sha256 dù file không phải gzip"
     assert "KẾT LUẬN" in out, "phải đi tới kết luận, không bỏ cuộc giữa đường"
     assert "rar" in out.lower(), "phải báo định dạng thật"
-    assert "KHÔNG đếm được" in out, "phải nói rõ không đếm được ảnh thay vì crash"
+    assert "KHÔNG so được" in out, "phải nói rõ không so được ảnh thay vì crash"
+    assert "CHƯA KẾT LUẬN ĐƯỢC" in out, "không được kết luận bừa khi không đọc được"
+
+
+
+# ---------------------------------------------------------------------------
+# 7. Dữ liệu thật là tar KHÔNG NÉN, không phải gzip
+#    (log 2026-10-21: cả hai file đều "định dạng: tar (không nén)")
+# ---------------------------------------------------------------------------
+def _make_tar(members: dict[str, bytes], mtime: int = 1_700_000_000,
+              compress: bool = False) -> bytes:
+    import io
+    import tarfile
+
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz" if compress else "w") as t:
+        for name, data in members.items():
+            ti = tarfile.TarInfo(name)
+            ti.size = len(data)
+            ti.mtime = mtime
+            t.addfile(ti, io.BytesIO(data))
+    return buf.getvalue()
+
+
+_LSUN = {"0_real/a.jpg": b"AAA" * 100, "0_real/b.jpg": b"BBB" * 100}
+_IMNET = {"0_real/x.jpg": b"XXX" * 100, "0_real/y.jpg": b"YYY" * 100}
+
+
+def test_tar_profile_reads_uncompressed_tar():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    f = Path(_tf.mkdtemp()) / "real.tar.gz"
+    f.write_bytes(_make_tar(_LSUN))  # tar KHÔNG nén, tên .tar.gz
+    prof = dl._tar_profile(f)
+    assert prof["files"] == 2, prof
+    assert prof["classes"] == {"0_real": 2}, prof
+
+
+def test_validate_accepts_uncompressed_tar():
+    """Tar hợp lệ dù không nén ⇒ PHẢI chấp nhận. Coi là lỗi sẽ xoá dữ liệu tốt."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    f = Path(_tf.mkdtemp()) / "real.tar.gz"
+    f.write_bytes(_make_tar(_LSUN))
+    v = dl._validate_ex(f, expected=f.stat().st_size)
+    assert v.ok, v.reason
+    assert v.fmt == "tar (không nén)", v.fmt
+    assert "không nén" in v.reason.lower()
+
+
+def test_validate_rejects_truncated_tar():
+    """Cắt mất block kết thúc ⇒ tar cụt ⇒ đáng tải lại (retryable)."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    blob = _make_tar({"0_real/a.jpg": b"A" * 5000})
+    f = Path(_tf.mkdtemp()) / "real.tar.gz"
+    f.write_bytes(blob[: len(blob) // 2])
+    v = dl._validate_ex(f, expected=0)
+    assert not v.ok, "tar cụt không được coi là hợp lệ"
+    assert v.retryable is True, "tar cụt là lỗi tải dở ⇒ phải retry"
+
+
+def test_fetch_keeps_uncompressed_tar_and_notes_format():
+    """Tải tar không nén ⇒ status ok, file ĐƯỢC GIỮ, và báo định dạng thật."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    src = Path(_tf.mkdtemp()) / "src.tar"
+    src.write_bytes(_make_tar(_LSUN))
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "copy"
+    os.environ["SRC_FILE"] = str(src)
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    try:
+        r = dl._fetch_one_impl(
+            {"remote": "z/a.tar.gz", "local": "z/a.tar.gz", "expected_size": 0}
+        )
+    finally:
+        os.environ["MODE"] = "ok"
+        os.environ.pop("SRC_FILE", None)
+    assert r["status"] == "ok", r
+    assert r["format"] == "tar (không nén)", r
+    assert (dl.RAW / "z/a.tar.gz").exists(), "dữ liệu hợp lệ KHÔNG được bị xoá"
+
+
+def test_pack_opens_any_tar_not_only_gzip():
+    """pack.py hardcode "r:gz" sẽ giết cả stage pack với dữ liệu thật.
+
+    Kiểm bằng AST chứ không grep chuỗi: comment giải thích trong file cũng có
+    chữ "r:gz", grep thô sẽ báo sai.
+    """
+    tree = ast.parse((SRC / "dire_modal" / "pack.py").read_text())
+    modes = [
+        node.args[1].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "open"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "tarfile"
+        and len(node.args) > 1
+        and isinstance(node.args[1], ast.Constant)
+    ]
+    assert modes, "không tìm thấy tarfile.open(..., mode) trong pack.py"
+    assert modes == ["r:*"], f"pack.py phải mở bằng 'r:*', đang là {modes}"
+
+
+# ---------------------------------------------------------------------------
+# 8. So sánh phải theo NỘI DUNG ẢNH, không theo sha256 container
+#    (cùng ảnh + khác mtime ⇒ sha256 container khác, size y hệt)
+# ---------------------------------------------------------------------------
+def test_same_images_different_mtime_compare_identical():
+    import hashlib
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    a = dl._tar_content(_write(d, "a.tar", _make_tar(_LSUN, mtime=1_700_000_000)))
+    b = dl._tar_content(_write(d, "b.tar", _make_tar(_LSUN, mtime=1_700_009_999)))
+    blob_a = (d / "a.tar").read_bytes()
+    blob_b = (d / "b.tar").read_bytes()
+    # đúng cái bẫy: container khác byte, size y hệt
+    assert hashlib.sha256(blob_a).hexdigest() != hashlib.sha256(blob_b).hexdigest()
+    assert len(blob_a) == len(blob_b)
+
+    cmp = dl._content_compare(a, b)
+    assert cmp["status"] == "identical", cmp
+    assert cmp["na"] == cmp["nb"] == 2
+
+
+def test_different_images_compare_disjoint():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    a = dl._tar_content(_write(d, "a.tar", _make_tar(_LSUN)))
+    b = dl._tar_content(_write(d, "b.tar", _make_tar(_IMNET)))
+    cmp = dl._content_compare(a, b)
+    assert cmp["status"] == "disjoint", cmp
+    assert cmp["na"] == 2 and cmp["nb"] == 2, "phải đếm được ảnh, không phải -1"
+
+
+def test_same_images_renamed_compare_same_images():
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    a = dl._tar_content(_write(d, "a.tar", _make_tar({"0_real/a.jpg": b"Z" * 400})))
+    b = dl._tar_content(
+        _write(d, "b.tar", _make_tar({"0_real/khac_ten.jpg": b"Z" * 400}))
+    )
+    cmp = dl._content_compare(a, b)
+    assert cmp["status"] == "same_images", cmp
+
+
+def test_unreadable_compare_does_not_claim_equality():
+    """-1 == -1 KHÔNG được coi là 'số ảnh bằng nhau' (đúng lỗi bản trước)."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    bad = dl._tar_content(_write(d, "bad.tar.gz", b"Rar!\x1a\x07\x00" + b"\x00" * 500))
+    good = dl._tar_content(_write(d, "good.tar", _make_tar(_LSUN)))
+    cmp = dl._content_compare(bad, good)
+    assert cmp["status"] == "unreadable", cmp
+    assert "reason" in cmp
+
+
+# ---------------------------------------------------------------------------
+# 9. probe_pair: hai lần chạy thật, hai kết luận đúng
+# ---------------------------------------------------------------------------
+def _probe_env(dl, src_a: bytes, src_b: bytes):
+    import tempfile as _tf
+
+    d = Path(_tf.mkdtemp())
+    pa, pb = d / "a.tar", d / "b.tar"
+    pa.write_bytes(src_a)
+    pb.write_bytes(src_b)
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "copy"
+    os.environ["SRC_FILE_A"] = str(pa)
+    os.environ["SRC_FILE_B"] = str(pb)
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    dl._ls_sizes = lambda *a, **k: {}
+    return d
+
+
+def _probe_output(dl):
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        dl.probe_pair.local()
+    return buf.getvalue()
+
+
+def _probe_cleanup(dl, orig_ls):
+    os.environ["MODE"] = "ok"
+    for k in ("SRC_FILE_A", "SRC_FILE_B"):
+        os.environ.pop(k, None)
+    dl._ls_sizes = orig_ls
+
+
+def test_probe_says_same_images_when_only_mtime_differs():
+    dl, _ = install_stub()
+    orig_ls = dl._ls_sizes
+    _probe_env(dl, _make_tar(_LSUN, mtime=1), _make_tar(_LSUN, mtime=999_999))
+    try:
+        out = _probe_output(dl)
+    finally:
+        _probe_cleanup(dl, orig_ls)
+    assert "CÙNG HOÀN TOÀN" in out, out
+    assert "KHÁC HOÀN TOÀN" not in out, "sha256 container khác KHÔNG được gọi là ảnh khác"
+    assert "sha256 container : KHÁC" in out
+    assert "bằng chứng YẾU" in out
+
+
+def test_probe_counts_images_and_says_disjoint():
+    dl, _ = install_stub()
+    orig_ls = dl._ls_sizes
+    _probe_env(dl, _make_tar(_LSUN), _make_tar(_IMNET))
+    try:
+        out = _probe_output(dl)
+    finally:
+        _probe_cleanup(dl, orig_ls)
+    assert "KHÁC HOÀN TOÀN" in out, out
+    assert "KHÔNG đọc được" not in out
+    assert "-1" not in out, "không được để -1 lọt vào kết luận" 
+    assert "test domain: HỢP LÝ" in out
 
 
 if __name__ == "__main__":

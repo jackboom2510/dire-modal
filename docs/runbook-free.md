@@ -114,6 +114,7 @@ Giờ `_fetch_one_impl` đọc magic bytes và chia lỗi làm hai loại:
 | Thông báo | Nghĩa | Nên làm |
 |---|---|---|
 | `size 1234 ≠ remote 5678 → tải dở dang` | lỗi mạng/throttle | chạy lại, `fetch_one` resume |
+| `ok — **tar KHÔNG nén**` | dữ liệu **hợp lệ**, chỉ sai tên đuôi | không làm gì: file được giữ, vẫn dùng được |
 | `KHÔNG phải gzip mà là **rar**` | nguồn sai định dạng/tên | **đừng tải lại** — xem lại tên file gốc |
 | `nội dung là HTML/JSON …` | Baidu trả trang lỗi | **đừng tải lại** — kiểm tra BDUSS/link |
 | `hai lần tải cho ra byte GIỐNG HỆT` | byte ổn định ⇒ tất định | **đừng tải lại** |
@@ -125,8 +126,40 @@ sách "tải lại được" khỏi "tải lại vô ích" trước khi `SystemE
 
 `probe_pair` thì **không** đòi file phải là gzip (`expect_archive=False`), vì mục
 đích của nó là so **sha256** — phép so đó đúng trên mọi chuỗi byte. Gặp archive
-lạ, nó vẫn in sha256 + định dạng thật và ghi `ảnh: KHÔNG đếm được — …` thay vì
+lạ, nó vẫn in sha256 + định dạng thật và ghi `ảnh: KHÔNG đọc được — …` thay vì
 chết giữa đường.
+
+### Dữ liệu thật là **tar không nén**, không phải `.tar.gz`
+
+Chạy `probe_pair` trên dữ liệu thật (2026-10-21) cho `định dạng: tar (không nén)`
+ở **cả hai** file: tên đuôi `.tar.gz` nói dối, dữ liệu vẫn nguyên vẹn. Hệ quả:
+
+- Code nào hardcode `tarfile.open(path, "r:gz")` sẽ chết với mọi file thật. Đã
+  sửa ở `_tar_profile` và `pack.py` → `"r:*"` (tự nhận nén **và** không nén).
+  Riêng `pack.py` là chỗ nguy hiểm nhất: không có guard, member đầu tiên ném
+  `ReadError: not a gzip file` là cả stage pack chết.
+- `_validate_ex` **chấp nhận** tar không nén (`_tar_ok` kiểm tra EOF marker 1024
+  byte cuối = 2 block 0). Bản trước xếp nó vào lỗi tất định rồi **`unlink` file
+  vừa tải** — tức là xoá dữ liệu hợp lệ. Chỉ tar **cụt** mới bị coi là lỗi, và
+  khi đó `retryable=True` (tải lại có ý nghĩa).
+
+### `sha256` của container KHÔNG nói được tập ảnh có khác nhau hay không
+
+Tar chứa metadata: `mtime`, owner, thứ tự member, padding. Cùng một tập ảnh,
+đóng gói lại với `mtime` khác ⇒ `sha256` **khác** mà `size` giữ nguyên tuyệt đối.
+Vì vậy `probe_pair` giờ so **từng member** (`_tar_content` + `_content_compare`):
+
+| Kết luận in ra | Nghĩa |
+|---|---|
+| `CÙNG HOÀN TOÀN` | trùng cả tên lẫn byte từng ảnh ⇒ cùng một tập, chỉ khác đóng gói |
+| `CÙNG ảnh, KHÁC tên/thứ tự` | cùng byte ảnh, khác đường dẫn bên trong |
+| `KHÁC HOÀN TOÀN` | 0 ảnh trùng byte ⇒ thật sự hai tập khác nhau |
+| `LỆCH MỘT PHẦN` | giao nhau nhưng không trùng khít ⇒ báo cáo riêng từng nhánh |
+| `KHÔNG so được` | archive không đọc được ⇒ **không kết luận gì** |
+
+Bản trước so `sha256` container rồi so `files == files` với giá trị `-1` khi
+không đếm được. `-1 == -1` là phép so rỗng, và nó đã in ra "Số ảnh bằng nhau
+(-1) ⇒ test domain HỢP LÝ" — kết luận không có cơ sở.
 
 ### Chọn tier theo mục tiêu
 

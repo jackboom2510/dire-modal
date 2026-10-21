@@ -40,6 +40,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections import Counter
 from pathlib import Path
 from typing import NamedTuple
 
@@ -247,7 +248,9 @@ def _diagnose(path: Path) -> str:
 
 # Định dạng "hợp lệ nhưng sai tên": nếu gặp, việc tải lại CHẮC CHẮN vô ích vì
 # nội dung đã đúng số byte và có cấu trúc của một archive thật.
-_KNOWN_ARCHIVES = {"zip", "zip (rỗng)", "rar", "7z", "bzip2", "xz", "zstd", "lz4", "tar (không nén)"}
+# KHÔNG có "tar (không nén)" trong đây: tar không nén vẫn là dữ liệu DÙNG ĐƯỢC,
+# xem ``_tar_ok`` — nó được chấp nhận, không bị coi là lỗi.
+_KNOWN_ARCHIVES = {"zip", "zip (rỗng)", "rar", "7z", "bzip2", "xz", "zstd", "lz4"}
 
 
 class Verdict(NamedTuple):
@@ -298,6 +301,24 @@ def _validate_ex(
     # --- gzip fail: chẩn đoán thay vì chỉ nói "hỏng" -----------------------
     fmt = _diagnose(path)
     detail = (chk.stderr or b"").decode("utf-8", "replace").strip()[:160]
+    if fmt == "tar (không nén)":
+        # Tên `.tar.gz` nhưng nội dung là tar KHÔNG nén. Đây không phải lỗi:
+        # tar đọc được thì dữ liệu vẫn nguyên. Chỉ hỏng khi tar bị cụt
+        # (mất block kết thúc toàn số 0) — khi đó mới đáng tải lại.
+        tar_ok, why = _tar_ok(path)
+        if tar_ok:
+            return Verdict(
+                True,
+                f"ok — **tar KHÔNG nén** (tên .tar.gz sai nhưng dữ liệu hợp lệ)"
+                f"; {why}",
+                fmt=fmt,
+            )
+        return Verdict(
+            False,
+            f"tar không nén nhưng đọc không được: {why} → tải lại có thể hữu ích",
+            retryable=True,
+            fmt=fmt,
+        )
     if fmt in _KNOWN_ARCHIVES:
         return Verdict(
             False,
@@ -349,18 +370,129 @@ def _find_downloaded(tmpdir: Path, want: str) -> Path | None:
     return cands[0] if len(cands) == 1 else None
 
 
-def _tar_profile(path: Path, cap: int = 200_000) -> dict:
-    """Đếm thành viên tar.gz mà KHÔNG giải nén — rẻ, không tốn đĩa.
+def _open_tar(path: Path):
+    """Mở tar **nén hay không nén** đều được.
 
-    Trả về số file và số ảnh theo lớp ``0_real``/``1_fake`` (cấu trúc
-    ImageFolder mà DIRE dùng). ``cap`` để một tar khổng lồ không làm treo hàm.
+    ``"r:gz"`` hardcode là bug thật: dữ liệu DIRE trên Baidu là **tar không
+    nén** dù tên file là ``.tar.gz`` (xác nhận 2026-10-21 trên
+    ``dire/test/lsun_bedroom/{lsun_bedroom,imagenet}/real.tar.gz``: sha256 khác
+    nhau nhưng cả hai đều là ``tar (không nén)``). Với ``"r:gz"``, mọi file như
+    vậy đều ``ReadError: not a gzip file`` — kể cả ``pack.py``, nơi lỗi đó
+    không có guard và sẽ giết cả stage.
     """
     import tarfile
 
+    return tarfile.open(path, "r:*")
+
+
+def _tar_ok(path: Path, cap: int = 200_000) -> tuple[bool, str]:
+    """Tar có đọc được và có KẾT THÚC đúng không (tức là không bị cụt)?
+
+    Kiểm tra rẻ trước: tar hợp lệ luôn kết thúc bằng ≥2 block 512 B toàn số 0
+    (EOF marker). File bị cụt giữa chừng mất marker này ⇒ phát hiện bằng 2 lần
+    đọc nhỏ, không phải quét cả archive nhiều GB.
+    """
+    import tarfile
+
+    try:
+        size = path.stat().st_size
+        if size >= 1024:
+            with path.open("rb") as fh:
+                fh.seek(size - 1024)
+                has_eof = fh.read(1024) == b"\x00" * 1024
+            if has_eof:
+                with _open_tar(path) as t:
+                    for mem in t:  # header đầu tiên phải parse được
+                        return True, f"tar mở được, có EOF marker, member đầu: {mem.name!r}"
+    except (OSError, tarfile.TarError, EOFError) as exc:
+        return False, f"tar không đọc được ({type(exc).__name__}: {exc})"
+
+    # Không thấy EOF marker: có thể tar ghi kiểu append, hoặc bị cụt. Quét thử
+    # tới `cap` member — quét hết mà không lỗi thì vẫn coi là dùng được.
+    n = 0
+    try:
+        with _open_tar(path) as t:
+            for _mem in t:
+                n += 1
+                if n > cap:
+                    return True, f"không thấy EOF marker; đã quét {cap} member không lỗi"
+    except (OSError, tarfile.TarError, EOFError) as exc:
+        return False, f"tar cụt/hỏng ở member thứ {n} ({type(exc).__name__}: {exc})"
+    return True, f"đọc hết {n} member không lỗi (không thấy EOF marker)"
+
+
+def _tar_content(
+    path: Path, cap: int = 200_000, byte_cap: int = 2 << 30
+) -> dict:
+    """Đọc tar (mọi kiểu nén) và trả về **nội dung từng member**.
+
+    ``_tar_profile`` chỉ đếm; hàm này còn băm từng file để trả lời được câu
+    "hai archive có cùng tập ảnh không" — câu mà sha256 của *container* không
+    trả lời được (đổi mtime là sha256 đổi, size giữ nguyên).
+
+    Returns:
+        ``{files, classes, image_bytes, pairs: [(name, size, sha256)],
+        truncated, error}``. ``error`` chỉ có khi không mở/đọc được.
+    """
+    n = 0
+    classes: dict[str, int] = {}
+    image_bytes = 0
+    truncated = False
+    pairs: list[tuple[str, int, str]] = []
+    try:
+        with _open_tar(path) as t:
+            for mem in t:
+                if not mem.isfile():
+                    continue
+                if n >= cap or image_bytes >= byte_cap:
+                    truncated = True
+                    break
+                fh = t.extractfile(mem)
+                if fh is None:
+                    continue
+                h = hashlib.sha256()
+                size = 0
+                while True:
+                    chunk = fh.read(1 << 20)
+                    if not chunk:
+                        break
+                    h.update(chunk)
+                    size += len(chunk)
+                n += 1
+                image_bytes += size
+                pairs.append((mem.name, size, h.hexdigest()))
+                for part in mem.name.split("/"):
+                    if part in ("0_real", "1_fake"):
+                        classes[part] = classes.get(part, 0) + 1
+    except Exception as exc:  # không phải tar, cụt, hoặc lỗi I/O
+        return {
+            "files": -1,
+            "classes": {},
+            "image_bytes": 0,
+            "pairs": [],
+            "truncated": truncated,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "files": n,
+        "classes": classes,
+        "image_bytes": image_bytes,
+        "pairs": pairs,
+        "truncated": truncated,
+    }
+
+
+def _tar_profile(path: Path, cap: int = 200_000) -> dict:
+    """Đếm thành viên tar mà KHÔNG giải nén ra đĩa — rẻ, không tốn dung lượng.
+
+    Trả về số file và số ảnh theo lớp ``0_real``/``1_fake`` (cấu trúc
+    ImageFolder mà DIRE dùng). ``cap`` để một tar khổng lồ không làm treo hàm.
+    Đọc được cả tar nén và không nén (``_open_tar``).
+    """
     n = 0
     classes: dict[str, int] = {}
     truncated = False
-    with tarfile.open(path, "r:gz") as t:
+    with _open_tar(path) as t:
         for mem in t:
             if not mem.isfile():
                 continue
@@ -372,6 +504,61 @@ def _tar_profile(path: Path, cap: int = 200_000) -> dict:
                 if part in ("0_real", "1_fake"):
                     classes[part] = classes.get(part, 0) + 1
     return {"files": n, "classes": classes, "truncated": truncated}
+
+
+def _content_compare(ca: dict, cb: dict) -> dict:
+    """So hai archive theo **nội dung ảnh**, không theo byte của container.
+
+    Vì sao cần: tar chứa metadata (mtime, owner, thứ tự member, padding). Cùng
+    một tập ảnh, đóng gói lại với mtime khác ⇒ sha256 container KHÁC mà size
+    giữ nguyên tuyệt đối. Nên ``sha256(container)`` không trả lời được câu
+    "hai đường dẫn có cùng tập ảnh không" — phải so từng member.
+
+    Returns:
+        ``{status, na, nb, identical, overlap, frac}`` với ``status`` là một
+        trong ``identical`` (trùng cả tên và byte), ``same_images`` (cùng byte
+        ảnh nhưng khác tên/thứ tự), ``partial``, ``disjoint``, ``empty``,
+        ``unreadable``.
+    """
+    if "error" in ca or "error" in cb:
+        return {
+            "status": "unreadable",
+            "reason": ca.get("error") or cb.get("error"),
+            "na": ca.get("files", -1),
+            "nb": cb.get("files", -1),
+        }
+
+    na, nb = ca["files"], cb["files"]
+    a_pairs, b_pairs = ca["pairs"], cb["pairs"]
+    if na <= 0 or nb <= 0:
+        return {"status": "empty", "na": na, "nb": nb, "identical": 0, "overlap": 0}
+
+    ia = {name: (size, sha) for name, size, sha in a_pairs}
+    ib = {name: (size, sha) for name, size, sha in b_pairs}
+    identical = sum(1 for n in set(ia) & set(ib) if ia[n] == ib[n])
+
+    # So theo đa tập sha để bắt ca "cùng ảnh nhưng khác tên/thứ tự".
+    ca_cnt = Counter(sha for _, _, sha in a_pairs)
+    cb_cnt = Counter(sha for _, _, sha in b_pairs)
+    overlap = sum((ca_cnt & cb_cnt).values())
+
+    if identical == na == nb:
+        status = "identical"
+    elif overlap == na == nb:
+        status = "same_images"
+    elif overlap == 0:
+        status = "disjoint"
+    else:
+        status = "partial"
+    return {
+        "status": status,
+        "na": na,
+        "nb": nb,
+        "identical": identical,
+        "overlap": overlap,
+        "frac": min(overlap / na, overlap / nb),
+        "truncated": ca.get("truncated") or cb.get("truncated"),
+    }
 
 
 def _all_expected() -> dict[str, list[str]]:
@@ -687,38 +874,65 @@ def probe_pair(
             print(f"[probe] không tải được {p}: {r['error']} → không kết luận gì")
             return
 
-    prof: dict[str, dict] = {}
+    content: dict[str, dict] = {}
     dig: dict[str, str] = {}
     print(f"\n{'='*78}\nPROBE: ngữ nghĩa dire/test/<A>/<B>/\n{'='*78}")
     for p in (a, b):
         path = RAW / p
-        try:
-            prof[p] = _tar_profile(path)
-        except Exception as exc:  # không phải tar/gzip ⇒ vẫn so được sha256
-            prof[p] = {"files": -1, "classes": {}, "truncated": False,
-                       "error": f"{type(exc).__name__}: {exc}"}
+        content[p] = _tar_content(path)
         dig[p] = res[p].get("sha256") or _sha256(path)
         print(f"\n  {p}")
         print(f"    size   : {_human(path.stat().st_size)}")
-        print(f"    sha256 : {dig[p]}")
+        print(f"    sha256 : {dig[p]}  ← của CONTAINER, không phải của ảnh")
         print(f"    định dạng: {_diagnose(path)}")
-        if "error" in prof[p]:
-            print(f"    ảnh    : KHÔNG đếm được — {prof[p]['error']}")
+        c = content[p]
+        if "error" in c:
+            print(f"    ảnh    : KHÔNG đọc được — {c['error']}")
         else:
-            cls = prof[p]["classes"]
-            print(f"    ảnh    : {prof[p]['files']}  {cls or '(không thấy 0_real/1_fake)'}")
-        if prof[p].get("truncated"):
-            print("    ⚠ dừng đếm sớm (tar lớn hơn cap)")
+            cls = c["classes"]
+            print(
+                f"    ảnh    : {c['files']}  {cls or '(không thấy 0_real/1_fake)'}"
+                f"  · {_human(c['image_bytes'])} dữ liệu ảnh"
+            )
+        if c.get("truncated"):
+            print("    ⚠ dừng đọc sớm (archive lớn hơn cap) — số dưới đây là một phần")
 
-    na, nb = prof[a]["files"], prof[b]["files"]
+    cmp = _content_compare(content[a], content[b])
     print(f"\n{'-'*78}")
-    if dig[a] == dig[b]:
+    same_bytes = dig[a] == dig[b]
+    print(f"  sha256 container : {'TRÙNG' if same_bytes else 'KHÁC'}")
+
+    if same_bytes:
+        # Byte y hệt thì chắc chắn cùng nội dung, khỏi cần đọc.
         print("  KẾT LUẬN: sha256 TRÙNG ⇒ hai đường dẫn chứa CÙNG một tập ảnh.")
         print("  ⇒ <B> KHÔNG phải 'test domain' theo nghĩa tập ảnh khác nhau.")
         print("  ⇒ CHƯA được diễn giải dire/test/lsun_bedroom/imagenet/ là cross-domain.")
-        print("    Cần đọc bảng cross-dataset trong paper DIRE hoặc datasets.py gốc.")
-    else:
-        print("  KẾT LUẬN: sha256 KHÁC ⇒ hai tập ảnh thật sự khác nhau.")
+        return
+
+    st = cmp["status"]
+    if st in ("unreadable", "empty"):
+        why = cmp.get("reason") or "archive rỗng"
+        print(f"  nội dung ảnh     : KHÔNG so được ({why})")
+        print("\n  KẾT LUẬN: CHƯA KẾT LUẬN ĐƯỢC.")
+        print("  ⇒ sha256 container KHÁC **không** chứng minh tập ảnh khác nhau:")
+        print("    tar chứa metadata (mtime/thứ tự/padding) — đổi mtime là sha256 đổi,")
+        print("    size giữ nguyên. Cần archive đọc được để so từng ảnh.")
+        return
+
+    na, nb = cmp["na"], cmp["nb"]
+    if st == "identical":
+        print(f"  nội dung ảnh     : CÙNG HOÀN TOÀN ({cmp['identical']}/{na} ảnh trùng tên + trùng byte)")
+        print("\n  KẾT LUẬN: hai đường dẫn là CÙNG một tập ảnh, chỉ khác đóng gói.")
+        print("  ⇒ sha256 container KHÁC nhưng nội dung GIỐNG ⇒ sha256 container là")
+        print("    bằng chứng YẾU, đừng dùng nó để kết luận cross-domain.")
+        print("  ⇒ <B> KHÔNG phải test domain khác ảnh.")
+    elif st == "same_images":
+        print(f"  nội dung ảnh     : CÙNG ảnh, KHÁC tên/thứ tự ({cmp['overlap']}/{na} ảnh trùng byte)")
+        print("\n  KẾT LUẬN: cùng tập ảnh, chỉ đổi tên hoặc đổi thứ tự member.")
+        print("  ⇒ Vẫn KHÔNG phải test domain khác ảnh.")
+    elif st == "disjoint":
+        print(f"  nội dung ảnh     : KHÁC HOÀN TOÀN (0/{na} ảnh trùng byte)")
+        print("\n  KẾT LUẬN: hai tập ảnh thật sự KHÁC nhau.")
         if na == nb:
             print(f"  Số ảnh bằng nhau ({na}) ⇒ đọc <B> là test domain: HỢP LÝ.")
             print("  ⇒ dire/test/lsun_bedroom/imagenet/ đo detector LSUN trên ảnh ImageNet,")
@@ -726,6 +940,16 @@ def probe_pair(
         else:
             print(f"  ⚠ Số ảnh LỆCH: {na} vs {nb} ⇒ cỡ mẫu không đồng đều.")
             print("    mean AP gộp chung các nhánh sẽ bị lệch — báo cáo riêng từng nhánh.")
+    else:
+        print(
+            f"  nội dung ảnh     : LỆCH MỘT PHẦN ({cmp['overlap']}/{na} và "
+            f"{cmp['overlap']}/{nb} trùng byte, {cmp['frac']:.0%})"
+        )
+        print("\n  KẾT LUẬN: hai tập ảnh GIAO NHAU nhưng không trùng khít.")
+        print("  ⇒ Không phải 'cùng tập'; cũng không phải hai tập rời nhau.")
+        print("  ⇒ Báo cáo riêng từng nhánh, đừng gộp mean AP.")
+    if cmp.get("truncated"):
+        print("  ⚠ Một archive bị dừng đọc sớm ⇒ tỉ lệ trùng chỉ là cận dưới.")
 
 
 @app.function(
@@ -853,9 +1077,14 @@ def _fetch_one_impl(f: dict) -> dict:
                         digest = _sha256(local)
                         vol_raw.commit()  # bắt buộc để file sống qua container khác
                         print(f"[OK] {remote_rel}  {_human(size)}  sha256={digest[:12]}…")
+                        if v.fmt and v.fmt != "gzip":
+                            # Dữ liệu dùng được nhưng tên đuôi nói dối — nêu ra
+                            # để không ai đi tìm "file hỏng" ở chỗ khác.
+                            print(f"       ↳ {v.fmt} — {v.reason}")
                         return {
                             "remote": remote_rel, "local": str(local), "status": "ok",
                             "size": size, "sha256": digest, "attempts": attempt,
+                            "format": v.fmt or "gzip",
                         }
 
                     # --- thất bại: chia làm hai loại, vì cách chữa khác hẳn ---

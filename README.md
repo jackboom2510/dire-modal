@@ -59,11 +59,11 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.download::local_status` | In tier + policy — chạy **local**, 0 credit |
 | `modal run -m dire_modal.download::audit` | Đối chiếu cây Baidu thật ↔ manifest (không tải). `--dirs a,b` để quét thư mục riêng |
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
-| `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng sha256 (~53 MB) |
+| `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng **so từng ảnh** trong tar (~53 MB) |
 | `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 22 file / 3.39 GB → verify |
 | `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run) |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
-| `./scripts/02_verify.sh` | `gzip -t` toàn bộ + (tuỳ chọn) đẩy R2 |
+| `./scripts/02_verify.sh` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) + (tuỳ chọn) đẩy R2 |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |
 | `./scripts/04_eval_pretrained.sh` | Eval checkpoint tác giả (cổng: ACC ≈ 99% trên ADM-LSUN) |
 | `./scripts/05_train_repro.sh` | Train reproduce (`--detach`) |

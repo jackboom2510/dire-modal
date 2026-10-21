@@ -44,8 +44,12 @@ def pack_one(src_rel: str, split: str) -> dict:
     pattern = str(out_dir / "shard-%06d.tar")
     count = 0
     label = _label_from_path(src_rel)
+    # "r:*" chứ KHÔNG phải "r:gz": dữ liệu DIRE trên Baidu là tar *không nén*
+    # dù tên file là .tar.gz. Với "r:gz", member đầu tiên ném
+    # "ReadError: not a gzip file" và cả stage pack chết — không có guard nào ở
+    # đây, khác với `_tar_profile` bên download.py.
     with wds.ShardWriter(pattern, maxcount=SHARD_SIZE) as sink, tarfile.open(
-        src, "r:gz"
+        src, "r:*"
     ) as tf:
         for member in tf:
             if not member.isfile():
