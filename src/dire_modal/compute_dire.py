@@ -15,8 +15,22 @@ code không có Modal/checkpoint. Lần chạy đầu tiên cần kiểm tra k�
   (b) `ddim_reverse_sample_loop` trả (x, _) hay chỉ x,
   (c) kích thước bộ nhớ khi batch > 1 ở 256×256.
 """
-from __future__ import annotations
-
+# ⚠ TUYỆT ĐỐI KHÔNG thêm `from __future__ import annotations` vào file này.
+#
+# PEP 563 biến mọi annotation thành CHUỖI. Modal đọc `__annotations__` thô để
+# validate `modal.parameter`, nên `model_path: str` tới nó dưới dạng `'str'`
+# chứ không phải `str`, và nó chết ngay lúc IMPORT module:
+#
+#     KeyError: 'str'
+#     → InvalidError("No class parameter encoder implemented for type `...`")
+#     → AttributeError: 'str' object has no attribute '__name__'
+#
+# AttributeError cuối cùng che mất InvalidError thật sự, nên đọc traceback
+# không thấy nguyên nhân. Lỗi nằm ở import chứ không ở class ⇒ MỌI lệnh của
+# module này chết, kể cả `make_gallery`.
+#
+# Dockerfile dùng Python 3.11 nên mọi annotation trong file (`dict`, `list[str]`,
+# `int | None`) đều evaluate được ở runtime — không cần future import.
 import modal
 
 from .common import app, cpu_image, gpu_image, vol_shards, vol_ckpt
@@ -153,7 +167,11 @@ def _import_dire():
     if DIRE_SRC not in sys.path:
         sys.path.insert(0, DIRE_SRC)
     from guided_diffusion import script_util  # noqa: PLC0415
-    from guided_diffusion.dist_util import dev  # noqa: F401,PLC0415
+
+    # Import vì TÁC DỤNG PHỤ: `dist_util` chọn device (cuda/cpu) lúc import.
+    # Dùng `__import__` thay vì `from ... import dev  # noqa: F401` vì pyflakes
+    # KHÔNG hiểu `noqa` — nó vẫn báo "imported but unused" và làm đỏ cổng 0.
+    __import__("guided_diffusion.dist_util")
 
     return script_util
 
@@ -212,7 +230,6 @@ def _dire_for_image(model, diffusion, pil_img, steps: int = 20):
     x0 = torch.from_numpy(_to_neg1_1(pil_img)).permute(2, 0, 1).unsqueeze(0)
     with torch.inference_mode():
         # 1) DDIM inversion: ảnh → nhiễu (eta=0 → tất định)
-        spacing = gd.SpacedDiffusion.get_ddim_sample_times if hasattr(gd.SpacedDiffusion, "get_ddim_sample_times") else None
         ddim = gd.SpacedDiffusion(
             use_timesteps=gd.space_timesteps(diffusion.num_timesteps, str(steps)),
             betas=diffusion.betas,
@@ -321,7 +338,6 @@ def make_gallery(n: int = 12, steps: int = 20,
         )
 
     model, diffusion = _load_adm(ckpt)
-    import torch
     model = model.cuda()
 
     out_dir = Path(out)

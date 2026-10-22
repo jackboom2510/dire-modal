@@ -56,6 +56,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 
 | Lệnh | Việc |
 |---|---|
+| `./scripts/07_check_imports.sh` | **CỔNG 0**: import bằng `modal` THẬT + toàn bộ test. 0 credit, chạy trước mọi lệnh khác |
 | `modal run -m dire_modal.download::local_status` | In tier + policy — chạy **local**, 0 credit |
 | `modal run -m dire_modal.download::audit` | Đối chiếu cây Baidu thật ↔ manifest (không tải). `--dirs a,b` để quét thư mục riêng |
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |

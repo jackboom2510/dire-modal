@@ -76,15 +76,86 @@ def _function(**kw):
     return deco
 
 
+class _Parameter:
+    """Marker của ``modal.parameter()`` — giữ default, KHÔNG trả default trực tiếp.
+
+    Trả thẳng default (``lambda default=None, **kw: default``) là stub quá dễ
+    dãi: nó không bao giờ kiểm annotation, nên nó che mất đúng lớp lỗi đã làm
+    ``compute_dire`` không import được bằng Modal thật (xem ``_check_params``).
+    """
+
+    __slots__ = ("default",)
+
+    def __init__(self, default=None):
+        self.default = default
+
+
+# Các kiểu thật sự được `modal.parameter()` nhận (modal 1.6: str/int/bool/float).
+_PARAM_TYPES = (str, int, float, bool)
+
+
+def _check_params(C) -> dict:
+    """Mô phỏng `modal.cls._Cls._validate_construction_mechanism`.
+
+    Modal thật đọc annotation **thô** (``inspect.get_annotations`` mặc định
+    ``eval_str=False``). Nếu file có ``from __future__ import annotations``
+    (PEP 563) thì annotation là CHUỖI ``'str'`` chứ không phải ``str``, và Modal
+    chết ngay lúc import:
+
+        KeyError: 'str'
+        → InvalidError("No class parameter encoder implemented for type `...`")
+        → AttributeError: 'str' object has no attribute '__name__'
+
+    Stub cũ trả thẳng default nên KHÔNG BAO GIỜ chạm tới đoạn này. Đây đúng là
+    bài học của ``Function object is not callable``: stub phải mô phỏng hành vi
+    gây lỗi, không được bỏ qua nó.
+
+    Trả ``{tên: default}`` để ``__init__`` áp default như Modal thật.
+    """
+    params = {k: v for k, v in vars(C).items() if isinstance(v, _Parameter)}
+    if not params:
+        return {}
+
+    # KHÔNG dùng inspect.get_annotations(eval_str=True): Modal thật không resolve.
+    annotations = dict(C.__annotations__)
+    missing = params.keys() - annotations.keys()
+    if missing:
+        raise TypeError(
+            "All modal.parameter() specifications need to be type-annotated; "
+            f"thiếu: {sorted(missing)}"
+        )
+    for name in params:
+        declared = annotations[name]
+        if isinstance(declared, str):
+            raise TypeError(
+                f"Class parameter '{name}': annotation là CHUỖI ({declared!r}), "
+                "không phải kiểu thật.\n"
+                "  Nguyên nhân: file có `from __future__ import annotations` "
+                "(PEP 563) → Modal thật đọc `__annotations__` thô nên thấy 'str'.\n"
+                "  Triệu chứng thật: KeyError: 'str' → InvalidError → "
+                "AttributeError: 'str' object has no attribute '__name__'\n"
+                "  Sửa: bỏ future import khỏi file chứa @app.cls."
+            )
+        if declared not in _PARAM_TYPES:
+            raise TypeError(
+                f"Class parameter '{name}': {declared!r} is not a supported "
+                f"modal.parameter() type. Use one of: "
+                f"{', '.join(t.__name__ for t in _PARAM_TYPES)}"
+            )
+    return {k: params[k].default for k in params}
+
+
 def _cls(**kw):
     def deco(C):
         C._modal_kw = kw
+        C._modal_params = _check_params(C)  # ← raise ngay lúc DECORATE (như Modal thật)
         orig_init = C.__dict__.get("__init__")
 
         def __init__(self, **kwargs):
             if orig_init is not None:
                 orig_init(self)
-            for k, v in kwargs.items():
+            merged = {**C._modal_params, **kwargs}
+            for k, v in merged.items():
                 setattr(self, k, v)
 
         C.__init__ = __init__
@@ -178,7 +249,7 @@ def install_stub():
     modal.cls = _cls
     modal.method = _method
     modal.enter = lambda *a, **k: (lambda fn: fn)
-    modal.parameter = lambda default=None, **kw: default
+    modal.parameter = lambda default=None, **kw: _Parameter(default)
     sys.modules["modal"] = modal
     _OWNS_MODULES = True
     if str(SRC) not in sys.path:
@@ -201,6 +272,126 @@ def _raised(fn, *a, **k):
     except SystemExit as exc:
         return str(exc)
     return None
+
+
+# ---------------------------------------------------------------------------
+# 0. Stub phải CẮN: PEP 563 (`from __future__ import annotations`) làm Modal
+#    thật chết lúc import. Stub cũ trả thẳng default nên không bao giờ thấy.
+# ---------------------------------------------------------------------------
+_PEP563_MODULE = '''
+from __future__ import annotations
+
+import modal
+
+app = modal.App("pep563")
+
+
+@app.cls()
+class WithFuture:
+    steps: int = modal.parameter(default=20)
+'''
+
+
+def _import_source_as_module(name: str, source: str):
+    """Import một module từ chuỗi, dưới stub đang cài."""
+    import importlib.util
+
+    path = Path(tempfile.mkdtemp()) / f"{name}.py"
+    path.write_text(source, encoding="utf-8")
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    try:
+        spec.loader.exec_module(mod)
+    finally:
+        sys.modules.pop(name, None)
+    return mod
+
+
+def test_stub_rejects_pep563_string_annotations():
+    """Stub phải báo lỗi y như Modal thật khi annotation là chuỗi.
+
+    Nếu test này FAIL vì "không raise", nghĩa là stub đã quay lại quá dễ dãi —
+    và nó sẽ lại che mất lỗi `AttributeError: 'str' object has no attribute
+    '__name__'` đã làm `modal run -m dire_modal.compute_dire::dire_batch` chết
+    ngay khi import.
+    """
+    install_stub()
+    try:
+        _import_source_as_module("_pep563_demo", _PEP563_MODULE)
+    except TypeError as exc:
+        msg = str(exc)
+        assert "CHUỖI" in msg and "PEP 563" in msg, msg
+        assert "__name__" in msg, "phải nhắc triệu chứng thật của Modal"
+    else:
+        raise AssertionError(
+            "stub KHÔNG bắt được annotation dạng chuỗi ⇒ nó lại che lỗi import"
+        )
+
+
+def test_compute_dire_has_no_future_annotations():
+    """`compute_dire.py` không được có `from __future__ import annotations`."""
+    import ast as _ast
+
+    tree = _ast.parse(COMPUTE.read_text())
+    bad = [
+        n
+        for n in tree.body
+        if isinstance(n, _ast.ImportFrom)
+        and n.module == "__future__"
+        and any(a.name == "annotations" for a in n.names)
+    ]
+    assert not bad, (
+        "compute_dire.py có `from __future__ import annotations` ⇒ Modal đọc "
+        "`__annotations__` thô và chết lúc import với AttributeError: 'str' "
+        "object has no attribute '__name__'"
+    )
+
+
+def test_no_module_mixes_future_annotations_with_modal_parameter():
+    """Module nào dùng `modal.parameter` cũng không được có future import.
+
+    Quét cả `src/` chứ không chỉ compute_dire.py: lỗi này sẽ tái xuất hiện y
+    nguyên nếu ai thêm `modal.parameter` vào một file đang có future import.
+    """
+    import ast as _ast
+
+    offenders = []
+    for path in sorted((SRC / "dire_modal").rglob("*.py")):
+        src = path.read_text(encoding="utf-8", errors="replace")
+        if "modal.parameter" not in src:
+            continue
+        tree = _ast.parse(src)
+        has_future = any(
+            isinstance(n, _ast.ImportFrom)
+            and n.module == "__future__"
+            and any(a.name == "annotations" for a in n.names)
+            for n in tree.body
+        )
+        if has_future:
+            offenders.append(path.name)
+    assert not offenders, (
+        f"{offenders} vừa có `from __future__ import annotations` vừa dùng "
+        "`modal.parameter` ⇒ Modal thật sẽ chết lúc import"
+    )
+
+
+def test_compute_dire_parameters_are_real_types():
+    cd, _ = install_stub()
+    ann = cd.DIRECompute.__annotations__
+    assert ann["model_path"] is str, ann
+    assert ann["steps"] is int, ann
+    assert cd.DIRECompute._modal_params == {
+        "model_path": "/ckpt/pretrained/lsun_adm.pth",
+        "steps": 20,
+    }, cd.DIRECompute._modal_params
+
+
+def test_dire_compute_constructs_with_defaults_and_overrides():
+    cd, _ = install_stub()
+    assert cd.DIRECompute().steps == 20
+    assert cd.DIRECompute(steps=7).steps == 7
+    assert cd.DIRECompute().model_path == "/ckpt/pretrained/lsun_adm.pth"
 
 
 # ---------------------------------------------------------------------------
