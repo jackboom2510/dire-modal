@@ -65,6 +65,31 @@ fetch_attempts: 3
 # hash đường dẫn remote nên attempt sau resume được mảnh dở, không tải lại.
 subprocess_timeout: 5400
 
+# --- Tải: tốc độ + resume xuyên container -----------------------------------
+#
+# Bản trước tải vào /tmp của container. Hệ quả: container chết giữa chừng là
+# mất tiến độ (BaiduPCS-Go resume dựa trên file dở còn nằm trong thư mục đích),
+# và bước chuyển sang /raw phải COPY 692 MB qua FUSE vì khác filesystem.
+#
+# Nay staging nằm TRONG Volume: /raw/.staging/. Đổi lại:
+#   + resume sống qua container chết (commit định kỳ bên dưới)
+#   + bước công bố là os.replace() CÙNG filesystem ⇒ atomic, không copy
+#   - mỗi write() của BaiduPCS-Go đi qua FUSE (67 KB/s thì không đáng kể)
+#
+# Muốn quay lại /tmp cho nhanh (đổi lại là mất resume xuyên container):
+#     DIRE_STAGING_DIR=/tmp/baidu_staging modal run ...
+dire_staging: ".staging"      # tên thư mục con trong /raw
+
+# Số kết nối song song CHO MỘT FILE (cờ -p của BaiduPCS-Go).
+# 0 = không truyền cờ, giữ mặc định của BaiduPCS-Go. Đo trước khi nâng:
+# log thật cho 67 KB/s cho một phiên đơn, và throttle theo SỐ PHIÊN.
+baidu_parallel: 0
+
+# Chu kỳ commit Volume khi đang tải (giây). 0 = chỉ commit sau khi file xong.
+# Commit là thứ làm resume xuyên container có tác dụng; đặt quá nhỏ sẽ tốn
+# thời gian vì mỗi commit phải đồng bộ với kho phân tán.
+staging_commit_s: 45
+
 # ============================================================================
 # GUARD CHI PHÍ GPU (compute_dire.py) — đây là phần TIÊU TIỀN THẬT.
 #

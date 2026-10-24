@@ -62,7 +62,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
 | `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng **so từng ảnh** trong tar (~53 MB) |
 | `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 22 file / 3.39 GB → verify |
-| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run) |
+| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run). `--concurrency N` để chỉnh số container (clamp 1–8) |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) + (tuỳ chọn) đẩy R2 |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |

@@ -37,6 +37,16 @@
 #
 #  alias cũ: ckpt→ckpts · A→e2,train · B→e3 · C→rawx · D→(bị NEVER chặn, rỗng)
 #
+# ---- Tải: tốc độ + resume xuyên container ----------------------------------
+#
+#  dire_staging        ".staging"  staging trong /raw (env DIRE_STAGING_DIR ghi đè)
+#  baidu_parallel      0           số kết nối/file (-p); 0 = để BaiduPCS-Go quyết
+#  staging_commit_s    45          commit Volume định kỳ khi đang tải ⇒ resume
+#                                  sống qua container chết (clamp [0, 600])
+#
+#  Bản cũ tải vào /tmp ⇒ container chết là mất tiến độ, và bước sang /raw phải
+#  COPY toàn bộ file. Nay staging trong Volume ⇒ os.replace (O(1)) + resume.
+
 # ---- Guard chi phí GPU (compute_dire.py) — copy từ src/dire_modal/tiers.yaml --
 #
 #  dire_max_containers    4        clamp cứng [1, 16]

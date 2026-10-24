@@ -24,6 +24,7 @@ import ast
 import os
 import sys
 import tempfile
+import time
 import types
 from pathlib import Path
 
@@ -54,6 +55,10 @@ class FakeFunction:
 
     def local(self, *a, **k):
         return self._fn(*a, **k)
+
+    def with_options(self, **kw):
+        merged = {**self._kw, **kw}
+        return FakeFunction(self._fn, merged)
 
 
 class _Img:
@@ -107,7 +112,9 @@ def install_stub():
         sys.path.insert(0, str(SRC))
     from dire_modal import download  # noqa: PLC0415
 
-    download.time.sleep = lambda _s: None
+    # Patch MÓC riêng, KHÔNG patch time.sleep (module time là của cả process —
+    # patch nó làm mọi sleep khác, kể cả trong pytest, thành no-op).
+    download._sleep = lambda _s: None
     return download, vol
 
 
@@ -149,6 +156,9 @@ case "$cmd" in
       # Tái hiện ca THẬT 2026-10-21: đúng số byte nhưng KHÔNG phải gzip.
       printf 'Rar!\x1a\x07\x00' > "$saveto/$base"
       head -c 2000 /dev/zero >> "$saveto/$base"
+    elif [ "${MODE:-ok}" = "partial" ]; then
+      # Tải dở: có file, đúng vài trăm byte, exit 0 — BaiduPCS-Go thật làm vậy
+      head -c 300 /dev/urandom > "$saveto/$base"
     elif [ "${MODE:-ok}" = "html" ]; then
       printf '<!DOCTYPE html><html><body>BDUSS expired</body></html>' > "$saveto/$base"
     elif [ "${MODE:-ok}" = "copy" ]; then
@@ -757,6 +767,245 @@ def test_probe_counts_images_and_says_disjoint():
     assert "KHÔNG đọc được" not in out
     assert "-1" not in out, "không được để -1 lọt vào kết luận" 
     assert "test domain: HỢP LÝ" in out
+
+
+
+# ---------------------------------------------------------------------------
+# 10. Staging nằm TRONG Volume, không phải /tmp ephemeral
+# ---------------------------------------------------------------------------
+def test_staging_lives_in_volume_by_default():
+    dl, _ = install_stub()
+    dl.RAW = Path(tempfile.mkdtemp())
+    d = dl._tmpdir_for("dire/test/a/real.tar.gz")
+    assert str(d).startswith(str(dl.RAW)), (
+        f"staging phải nằm trong Volume để sống qua container, đang ở {d}"
+    )
+    assert d.parent.name == dl.POLICY.dire_staging, d.parent
+    assert d.parent.parent == dl.RAW, f"staging phải là con trực tiếp của Volume: {d}"
+
+
+def test_staging_can_be_overridden_to_tmp():
+    """Chốt an toàn: muốn đổi lại /tmp thì phải qua env, và phải nói rõ hậu quả."""
+    dl, _ = install_stub()
+    dl.RAW = Path(tempfile.mkdtemp())
+    old = os.environ.get("DIRE_STAGING_DIR")
+    os.environ["DIRE_STAGING_DIR"] = "/tmp/dire_staging_test"
+    try:
+        d = dl._tmpdir_for("x/y.tar.gz")
+    finally:
+        if old is None:
+            os.environ.pop("DIRE_STAGING_DIR", None)
+        else:
+            os.environ["DIRE_STAGING_DIR"] = old
+    assert str(d).startswith("/tmp/dire_staging_test"), d
+
+
+def test_staging_dir_is_stable_across_calls():
+    """Cùng remote ⇒ cùng thư mục, nếu không thì không resume được."""
+    dl, _ = install_stub()
+    dl.RAW = Path(tempfile.mkdtemp())
+    a = dl._tmpdir_for("train/adm.tar.gz")
+    b = dl._tmpdir_for("train/adm.tar.gz")
+    c = dl._tmpdir_for("val/adm.tar.gz")
+    assert a == b, "phải ổn định giữa các attempt/lần chạy"
+    assert a != c, "hai file cùng tên khác thư mục KHÔNG được chung staging"
+
+
+# ---------------------------------------------------------------------------
+# 11. Công bố file: rename cùng filesystem, không copy
+# ---------------------------------------------------------------------------
+def test_publish_renames_instead_of_copying():
+    """Staging trong Volume ⇒ os.replace (O(1)). Copy là lỗi hiệu năng thật."""
+    import unittest.mock as mock
+
+    dl, _ = install_stub()
+    d = Path(tempfile.mkdtemp())
+    got, local = d / "staging.bin", d / "final.bin"
+    got.write_bytes(b"x" * 1000)
+    with mock.patch.object(dl.os, "replace", wraps=dl.os.replace) as rep, \
+         mock.patch.object(dl.shutil, "move", wraps=dl.shutil.move) as mv:
+        dl._publish(got, local)
+    assert rep.called, "phải dùng os.replace khi cùng filesystem"
+    assert not mv.called, "không được copy khi cùng filesystem"
+    assert local.read_bytes() == b"x" * 1000 and not got.exists()
+
+
+def test_publish_falls_back_to_copy_across_filesystems():
+    """DIRE_STAGING_DIR=/tmp ⇒ khác filesystem ⇒ EXDEV ⇒ phải copy được."""
+    dl, _ = install_stub()
+    import shutil as _sh
+
+    if not Path("/dev/shm").is_dir():
+        return
+    src_dir = Path(tempfile.mkdtemp(dir="/dev/shm"))
+    try:
+        got = src_dir / "staging.bin"
+        got.write_bytes(b"y" * 500)
+        local = Path(tempfile.mkdtemp()) / "final.bin"
+        dl._publish(got, local)  # không được raise EXDEV
+        assert local.read_bytes() == b"y" * 500
+    finally:
+        _sh.rmtree(src_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# 12. Commit định kỳ — thứ làm resume xuyên container có tác dụng
+# ---------------------------------------------------------------------------
+def test_periodic_commit_calls_volume_commit():
+    dl, _ = install_stub()
+    before = dl.vol_raw.commits
+    with dl._PeriodicCommit(0.01) as pc:
+        time.sleep(0.15)
+    assert dl.vol_raw.commits - before >= 2, "phải commit trong lúc đang tải"
+    assert pc.commits >= 2
+
+
+def test_periodic_commit_disabled_when_zero():
+    dl, _ = install_stub()
+    before = dl.vol_raw.commits
+    with dl._PeriodicCommit(0) as pc:
+        time.sleep(0.05)
+    assert dl.vol_raw.commits == before
+    assert pc.commits == 0
+
+
+def test_commit_interval_is_clamped():
+    dl, _ = install_stub()
+    import dataclasses as _dc
+
+    orig = dl.POLICY
+    try:
+        dl.POLICY = _dc.replace(orig, staging_commit_s=99_999)
+        assert dl._commit_interval() == 600, "commit 27 giờ một lần là vô nghĩa"
+        dl.POLICY = _dc.replace(orig, staging_commit_s=-5)
+        assert dl._commit_interval() == 0
+    finally:
+        dl.POLICY = orig
+
+
+# ---------------------------------------------------------------------------
+# 13. Tải hỏng KHÔNG được xoá mảnh dở (đó là tiến độ)
+# ---------------------------------------------------------------------------
+def test_failed_download_keeps_partial_for_resume():
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "partial"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(tempfile.mkdtemp())
+    try:
+        r = dl._fetch_one_impl(
+            {"remote": "z/a.tar.gz", "local": "z/a.tar.gz", "expected_size": 10_000}
+        )
+    finally:
+        os.environ["MODE"] = "ok"
+    assert r["status"] == "error", r
+    staging = dl._tmpdir_for("z/a.tar.gz")
+    left = [p for p in staging.rglob("*") if p.is_file()]
+    assert left, (
+        "mảnh dở phải được GIỮ để lần chạy sau resume; bản /tmp xoá nó đi "
+        "nên container chết là mất tiến độ"
+    )
+    assert not (dl.RAW / "z/a.tar.gz").exists(), "file dở không được lọt vào /raw"
+
+
+# ---------------------------------------------------------------------------
+# 14. Cache kiểm tra: đừng đọc lại 3.39 GB mỗi lần chạy
+# ---------------------------------------------------------------------------
+def test_validation_cache_skips_second_validation():
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "ok"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(tempfile.mkdtemp())
+    payload = {"remote": "c/a.tar.gz", "local": "c/a.tar.gz", "expected_size": 0}
+    first = dl._fetch_one_impl(payload)
+    assert first["status"] == "ok", first
+
+    # Nếu cache hỏng, lần hai sẽ gọi _validate_ex (đọc cả file).
+    def _boom(*a, **k):
+        raise AssertionError("đã kiểm lại từ đầu thay vì dùng cache")
+
+    orig = dl._validate_ex
+    dl._validate_ex = _boom
+    try:
+        second = dl._fetch_one_impl(payload)
+    finally:
+        dl._validate_ex = orig
+    assert second["status"] == "skipped", second
+    assert second["sha256"] == first["sha256"], "sha256 phải lấy từ cache, không đọc lại"
+
+
+def test_validation_cache_invalidated_when_file_changes():
+    dl, _ = install_stub()
+    d = Path(tempfile.mkdtemp())
+    f = d / "x.bin"
+    f.write_bytes(b"a" * 100)
+    dl._record_valid("x.bin", f, "sha-a", "gzip")
+    assert dl._cached_valid("x.bin", f) is not None
+    time.sleep(0.01)
+    f.write_bytes(b"b" * 200)  # size + mtime đổi
+    assert dl._cached_valid("x.bin", f) is None, "file đổi thì KHÔNG được tin cache"
+
+
+def test_validation_cache_never_caches_failures():
+    dl, _ = install_stub()
+    d = Path(tempfile.mkdtemp())
+    f = d / "bad.tar.gz"
+    f.write_bytes(b"Rar!\x1a\x07\x00" + b"\x00" * 200)
+    v = dl._validate_cached("bad.tar.gz", f)
+    assert not v.ok
+    assert dl._load_state().get("bad.tar.gz") is None, (
+        "cache âm mà sai thì file lành sẽ bị tải lại mãi mãi"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 15. Vùng nội bộ không được lọt vào verify/prune
+# ---------------------------------------------------------------------------
+def test_verify_ignores_staging_and_state():
+    import contextlib
+    import io
+
+    dl, _ = install_stub()
+    dl.RAW = Path(tempfile.mkdtemp())
+    staging = dl._tmpdir_for("z/a.tar.gz")
+    staging.mkdir(parents=True, exist_ok=True)
+    (staging / "a.tar.gz").write_bytes(b"d\x1f\x8b khong phai tar")
+    (dl.RAW / ".state").mkdir(parents=True, exist_ok=True)
+    (dl.RAW / ".state" / "validated.json").write_text("{}")
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        dl.verify.local()  # không được SystemExit vì file dở "hỏng"
+    out = buf.getvalue()
+    assert "đã kiểm 0 file" in out, out
+    assert "All OK." in out, out
+
+
+def test_internal_paths_detected():
+    dl, _ = install_stub()
+    for rel in (".staging/x/y.tar.gz", ".state/validated.json", ".staging"):
+        assert dl._is_internal(rel), rel
+    for rel in ("dire/test/a/real.tar.gz", "checkpoints/x.pth"):
+        assert not dl._is_internal(rel), rel
+
+
+# ---------------------------------------------------------------------------
+# 16. Concurrency: tham số phải có tác dụng thật (trước đây bị bỏ qua)
+# ---------------------------------------------------------------------------
+def test_clamp_concurrency():
+    dl, _ = install_stub()
+    assert dl._clamp_concurrency(0) == 1
+    assert dl._clamp_concurrency(4) == 4
+    assert dl._clamp_concurrency(26) == 8, "26 phiên là đúng cấu hình làm Baidu throttle"
+    assert dl._clamp_concurrency(-3) == 1
+
+
+def test_fetch_one_exposes_with_options_for_concurrency_override():
+    dl, _ = install_stub()
+    kw = dl.fetch_one._kw
+    over = dl.fetch_one.with_options(max_containers=4)
+    assert over._kw["max_containers"] == 4
+    assert over._kw["timeout"] == kw["timeout"], "override không được làm mất timeout"
 
 
 if __name__ == "__main__":

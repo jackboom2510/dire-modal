@@ -378,6 +378,16 @@ class Policy:
     max_containers: int = 2
     fetch_attempts: int = 3
     subprocess_timeout: int = 5400
+    # --- tải: tốc độ + resume xuyên container ------------------------------
+    # 0 = KHÔNG truyền cờ -p (mặc định của BaiduPCS-Go). >0 = số kết nối song
+    # song CHO MỘT FILE. Baidu throttle theo phiên, nên nhiều kết nối có thể
+    # nhanh hơn, nhưng cũng dễ bị cắt hơn — đổi sau khi đo.
+    baidu_parallel: int = 0
+    # Tên thư mục staging trong /raw. Đổi qua env DIRE_STAGING_DIR nếu muốn.
+    dire_staging: str = ".staging"
+    # Chu kỳ commit Volume khi đang tải (giây). Manifest dở nằm trong Volume nên
+    # phải commit định kỳ, nếu không container chết là mất tiến độ.
+    staging_commit_s: int = 45
     # --- guard chi phí GPU (compute_dire.py) -------------------------------
     # Đây là phần TIÊU TIỀN THẬT. Bản trước để cứng 40 container × timeout
     # 24 h trên A100 ≈ $2 400 trần xấu nhất cho một lần chạy hỏng.
@@ -411,6 +421,15 @@ def load_policy() -> Policy:
             ),
             subprocess_timeout=int(
                 raw.get("subprocess_timeout", _POLICY_FALLBACK.subprocess_timeout)
+            ),
+            baidu_parallel=int(
+                raw.get("baidu_parallel", _POLICY_FALLBACK.baidu_parallel)
+            ),
+            dire_staging=str(
+                raw.get("dire_staging", _POLICY_FALLBACK.dire_staging)
+            ),
+            staging_commit_s=int(
+                raw.get("staging_commit_s", _POLICY_FALLBACK.staging_commit_s)
             ),
             dire_max_containers=int(
                 raw.get("dire_max_containers", _POLICY_FALLBACK.dire_max_containers)

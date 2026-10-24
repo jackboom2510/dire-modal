@@ -34,11 +34,14 @@ from __future__ import annotations
 
 import csv
 import datetime
+import errno
 import hashlib
+import json
 import os
 import re
 import shutil
 import subprocess
+import threading
 import time
 from collections import Counter
 from pathlib import Path
@@ -60,6 +63,12 @@ from .manifest import (
 )
 
 RAW = Path("/raw")
+
+# Móc sleep để test thay được MÀ KHÔNG patch `time.sleep` toàn cục.
+# (Test cũ gán `download.time.sleep = lambda _s: None` — vì `download.time` là
+# module `time` của stdlib, việc đó vô hiệu hoá sleep của cả process, kể cả
+# pytest, và làm test về thread/commit chạy sai một cách khó hiểu.)
+_sleep = time.sleep
 
 _UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 _SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b", re.I)
@@ -140,6 +149,67 @@ def _baidu(
         text=capture,
         timeout=timeout,
     )
+
+
+# ---------------------------------------------------------------------------
+# Commit định kỳ: thứ làm staging trong Volume có nghĩa
+# ---------------------------------------------------------------------------
+# Modal chỉ bền hoá thay đổi của Volume khi ``vol_raw.commit()`` chạy xong. File
+# dở nằm trong Volume mà chưa commit thì container chết là mất — tức là staging
+# trong Volume **không tự động** cho resume xuyên container; phải commit giữa
+# chừng. Thread dưới đây làm việc đó trong lúc BaiduPCS-Go đang chạy.
+_COMMIT_LOCK = threading.Lock()
+
+
+def _commit_volume(reason: str = "") -> bool:
+    """``vol_raw.commit()`` có khoá + không bao giờ raise (commit lỗi ≠ mất file)."""
+    with _COMMIT_LOCK:
+        try:
+            vol_raw.commit()
+            return True
+        except Exception as exc:  # noqa: BLE001 — commit lỗi không được giết việc tải
+            print(f"[warn] commit Volume thất bại{f' ({reason})' if reason else ''}: {exc}")
+            return False
+
+
+class _PeriodicCommit:
+    """Commit Volume mỗi ``interval`` giây trong lúc đang tải.
+
+    ``interval <= 0`` ⇒ tắt (chỉ commit sau khi file xong). Dùng làm context
+    manager để thread chắc chắn dừng kể cả khi subprocess raise.
+    """
+
+    def __init__(self, interval: float):
+        self.interval = float(interval or 0)
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self.commits = 0
+
+    def __enter__(self):
+        if self.interval <= 0:
+            return self
+        self._thread = threading.Thread(target=self._run, daemon=True,
+                                        name="dire-volume-commit")
+        self._thread.start()
+        return self
+
+    def _run(self) -> None:
+        # wait() trả True khi stop() được gọi ⇒ thoát ngay, không phải chờ hết
+        # một chu kỳ nữa.
+        while not self._stop.wait(self.interval):
+            if _commit_volume("định kỳ khi đang tải"):
+                self.commits += 1
+
+    def __exit__(self, *exc) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=self.interval + 60)
+
+
+def _commit_interval() -> float:
+    """Chu kỳ commit, clamp [0, 600]. 0 = tắt commit định kỳ."""
+    raw = int(POLICY.staging_commit_s or 0)
+    return float(max(0, min(raw, 600)))
 
 
 def _abs(remote_rel: str) -> str:
@@ -350,15 +420,157 @@ def _validate(path: Path, expected: int = 0) -> tuple[bool, str]:
     return v.ok, v.reason
 
 
+def _is_internal(rel: str) -> bool:
+    """True nếu đường dẫn thuộc vùng nội bộ (staging / cache), không phải dữ liệu.
+
+    ``/raw/.staging`` chứa file DỞ và ``/raw/.state`` chứa cache kiểm tra.
+    Chúng nằm trong Volume để sống qua container, nhưng KHÔNG được xuất hiện
+    trong báo cáo, trong `prune`, hay trong `verify` — file dở mà bị đem đi
+    `gzip -t` thì lúc nào cũng "hỏng", và `prune` sẽ đề nghị xoá đúng thứ đang
+    giữ tiến độ tải.
+    """
+    first = rel.replace("\\", "/").lstrip("/").split("/", 1)[0]
+    return first in {POLICY.dire_staging, ".staging", ".state"}
+
+
+def _staging_root() -> Path:
+    """Nơi hạ file dở. MẶC ĐỊNH nằm TRONG Volume (``/raw/.staging``).
+
+    Vì sao không dùng ``/tmp`` của container nữa:
+
+    - ``/tmp`` là ephemeral. Container chết giữa chừng (hết thời gian, bị
+      preempt, mất mạng) là **mất sạch tiến độ**, vì BaiduPCS-Go resume dựa
+      trên file dở còn nằm trong thư mục đích. Ở 67 KB/s, một file 692 MB cần
+      ~2.9 giờ — mất tiến độ ở phút 170 là mất gần 3 giờ.
+    - ``/tmp`` khác filesystem với ``/raw`` ⇒ bước công bố phải COPY toàn bộ
+      file qua FUSE (``shutil.move`` = copy + unlink). Với ``/raw/.staging``,
+      bước đó là ``os.replace`` **cùng** filesystem: atomic, không copy byte nào.
+
+    Đổi lại: mỗi ``write()`` của BaiduPCS-Go đi qua FUSE. Ở băng thông Baidu
+    (67 KB/s đo được) thì đây là nhiễu, không phải nút cổ chai — mạng chậm hơn
+    đĩa khoảng ba bậc độ lớn.
+
+    Muốn quay lại ``/tmp`` (nhanh hơn một chút, nhưng mất resume xuyên
+    container): đặt ``DIRE_STAGING_DIR=/tmp/baidu_staging``.
+    """
+    override = os.environ.get("DIRE_STAGING_DIR", "").strip()
+    if override:
+        return Path(override)
+    return RAW / POLICY.dire_staging
+
+
+def _state_dir() -> Path:
+    """Cache kết quả kiểm tra. Cũng nằm trong Volume để dùng lại giữa các lần chạy."""
+    return RAW / ".state"
+
+
+def _publish(got: Path, local: Path) -> None:
+    """Đưa file đã tải từ staging tới đường dẫn chính thức.
+
+    Cùng filesystem (staging trong Volume) ⇒ ``os.replace``: atomic, O(1),
+    không copy byte nào. Khác filesystem (ai đó đặt ``DIRE_STAGING_DIR=/tmp``)
+    ⇒ ``rename(2)`` ném ``EXDEV`` (errno 18) và phải ``shutil.move`` = copy +
+    unlink, đúng lỗi #1 của bản cũ.
+    """
+    try:
+        os.replace(got, local)
+        return
+    except OSError as exc:
+        if exc.errno != errno.EXDEV:
+            raise
+        print(f"[warn] staging khác filesystem → copy thay vì rename: {exc.strerror}")
+    if local.exists():
+        local.unlink()
+    shutil.move(str(got), str(local))
+
+
 def _tmpdir_for(remote_rel: str) -> Path:
-    """Thư mục tmp RIÊNG cho mỗi đường dẫn remote (sửa lỗi #4).
+    """Thư mục staging RIÊNG cho mỗi đường dẫn remote (sửa lỗi #4).
 
     Hash theo đường dẫn nên (a) không bao giờ trùng giữa ``train/adm.tar.gz`` và
     ``val/adm.tar.gz``, và (b) ỔN ĐỊNH giữa các attempt ⇒ BaiduPCS-Go resume
-    được mảnh dở thay vì tải lại từ đầu.
+    được mảnh dở thay vì tải lại từ đầu. Với staging trong Volume, tính ổn định
+    này còn sống **qua các container** — đó là toàn bộ lý do đổi chỗ.
     """
     digest = hashlib.sha1(remote_rel.encode()).hexdigest()[:12]
-    return Path("/tmp") / f"baidu_{digest}"
+    return _staging_root() / f"baidu_{digest}"
+
+
+# ---------------------------------------------------------------------------
+# Cache kiểm tra: đừng đọc lại 3.39 GB mỗi lần chạy
+# ---------------------------------------------------------------------------
+# `_validate_ex` chạy `gzip -t` trên từng file, tức là ĐỌC TOÀN BỘ file. Với
+# Tier A mặc định (3.39 GB) thì mỗi lần chạy lại đều đọc hết qua FUSE chỉ để
+# trả lời "file này vẫn tốt chứ". Cache theo (size, mtime_ns) bỏ được việc đó
+# mà vẫn an toàn: file bị ghi đè hay sửa thì mtime đổi.
+#
+# CHỈ cache kết quả TỐT. Không bao giờ cache "hỏng" — nếu cache âm bị sai thì
+# một file lành sẽ bị tải lại mãi mãi.
+def _load_state() -> dict[str, dict]:
+    path = _state_dir() / "validated.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_state(state: dict[str, dict]) -> None:
+    try:
+        path = _state_dir() / "validated.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(state, ensure_ascii=False, separators=(",", ":")),
+                       encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:  # cache hỏng không được làm chết việc tải
+        print(f"[warn] không ghi được cache kiểm tra: {exc}")
+
+
+def _record_valid(rel: str, path: Path, digest: str, fmt: str) -> None:
+    st = path.stat()
+    state = _load_state()
+    state[rel] = {
+        "size": st.st_size,
+        "mtime_ns": st.st_mtime_ns,
+        "sha256": digest,
+        "fmt": fmt,
+        "checked": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+    }
+    _save_state(state)
+
+
+def _cached_valid(rel: str | None, path: Path, expected: int = 0) -> Verdict | None:
+    """Trả ``Verdict`` từ cache nếu (size, mtime_ns) khớp, ngược lại ``None``."""
+    if not rel:
+        return None
+    rec = _load_state().get(rel)
+    if not rec:
+        return None
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    if st.st_size != rec.get("size") or st.st_mtime_ns != rec.get("mtime_ns"):
+        return None  # file đã bị ghi đè/sửa ⇒ không tin cache
+    if expected and st.st_size != expected:
+        return None
+    return Verdict(True, f"ok (cache, kiểm lúc {rec.get('checked', '?')})",
+                   fmt=str(rec.get("fmt") or ""))
+
+
+def _validate_cached(rel: str | None, path: Path, expected: int = 0,
+                     expect_archive: bool = True) -> Verdict:
+    """``_validate_ex`` + dùng cache khi có. Ghi cache khi kiểm thành công."""
+    hit = _cached_valid(rel, path, expected)
+    if hit is not None:
+        return hit
+    v = _validate_ex(path, expected, expect_archive=expect_archive)
+    if v.ok and rel:
+        try:
+            _record_valid(rel, path, _sha256(path), v.fmt)
+        except OSError:
+            pass
+    return v
 
 
 def _find_downloaded(tmpdir: Path, want: str) -> Path | None:
@@ -620,8 +832,22 @@ def _report(
     return known, unknown, largest
 
 
-def _execute(tiers: str, max_gb: float, do_fetch: bool) -> None:
-    """Ruột của cả ``plan`` và ``main`` — tránh hai bản logic lệch nhau."""
+def _clamp_concurrency(raw: int) -> int:
+    """Số container tải song song: [1, 8], không hơn.
+
+    Trước đây tham số ``--concurrency`` bị bỏ qua hoàn toàn (lỗi #3) nên người
+    dùng tưởng chỉnh được mà không chỉnh được gì. Nay nó có tác dụng THẬT,
+    nhưng vẫn bị chặn trần: Baidu throttle theo số phiên, và log thật cho thấy
+    26 phiên cùng lúc ⇒ 0B/s hàng loạt. 8 là mức còn có thể có lợi.
+    """
+    return max(1, min(int(raw or 0), 8))
+
+
+def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0) -> None:
+    """Ruột của cả ``plan`` và ``main`` — tránh hai bản logic lệch nhau.
+
+    ``concurrency`` > 0 ghi đè ``max_containers`` trong policy (clamp [1, 8]).
+    """
     ents = resolve_many(tiers)
     if not ents:
         if any(t.strip() in {"e0", "e1"} for t in tiers.split(",")):
@@ -673,10 +899,16 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool) -> None:
         {"remote": f.remote, "local": f.local, "expected_size": sizes.get(f.remote) or 0}
         for f in files
     ]
-    print(f"\n[fetch] {len(payloads)} file · tối đa {POLICY.max_containers} container "
-          f"song song · {POLICY.fetch_attempts} attempt/file")
+    workers = _clamp_concurrency(concurrency or POLICY.max_containers)
+    print(f"\n[fetch] {len(payloads)} file · tối đa {workers} container song song · "
+          f"{POLICY.fetch_attempts} attempt/file")
+    print(f"[fetch] staging: {_staging_root()} "
+          f"(commit mỗi {_commit_interval():g}s — resume sống qua container chết)")
+    if POLICY.baidu_parallel:
+        print(f"[fetch] -p {POLICY.baidu_parallel} kết nối/file")
     t0 = time.time()
-    results = list(fetch_one.map(payloads, order_outputs=False))
+    fn = fetch_one.with_options(max_containers=workers) if workers != POLICY.max_containers else fetch_one
+    results = list(fn.map(payloads, order_outputs=False))
     dt = time.time() - t0
 
     ok = [r for r in results if r["status"] == "ok"]
@@ -977,6 +1209,7 @@ def main(
     tiers: str = POLICY.default_tiers,
     max_gb: float = POLICY.max_gb,
     mode: str = "plan",
+    concurrency: int = 0,
 ) -> None:
     """Lên kế hoạch rồi (tuỳ chọn) tải.
 
@@ -988,8 +1221,13 @@ def main(
 
         modal run -m dire_modal.download::main --tiers e2,e4            # dry-run
         modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
+        modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch --concurrency 4
     """
-    _execute(tiers, max_gb, do_fetch=mode.strip().lower() in {"fetch", "commit", "yes"})
+    _execute(
+        tiers, max_gb,
+        do_fetch=mode.strip().lower() in {"fetch", "commit", "yes"},
+        concurrency=concurrency,
+    )
 
 
 def _fetch_one_impl(f: dict) -> dict:
@@ -1014,14 +1252,22 @@ def _fetch_one_impl(f: dict) -> dict:
 
     # --- đã có & hợp lệ → skip (idempotent, chạy lại bao nhiêu lần cũng được)
     if local.exists() and local.stat().st_size > 0:
-        ok, why = _validate(local, expected)
-        if ok:
-            print(f"[SKIP] {remote_rel} đã có & hợp lệ")
+        # `_validate_cached` dùng cache (size, mtime_ns) khi có: không phải đọc
+        # lại 3.39 GB qua FUSE mỗi lần chạy chỉ để hỏi "file này vẫn tốt chứ".
+        v = _validate_cached(f["local"], local, expected)
+        if v.ok:
+            rec = _load_state().get(f["local"]) or {}
+            cached_digest = rec.get("sha256")
+            print(f"[SKIP] {remote_rel} đã có & hợp lệ"
+                  + (" (cache)" if cached_digest else ""))
             return {
                 "remote": remote_rel, "local": str(local), "status": "skipped",
-                "size": local.stat().st_size, "sha256": _sha256(local),
+                "size": local.stat().st_size,
+                # sha256 có sẵn trong cache thì không đọc lại file lần nữa
+                "sha256": cached_digest or _sha256(local),
+                "format": v.fmt or "gzip",
             }
-        print(f"[REDO] {remote_rel}: {why}")
+        print(f"[REDO] {remote_rel}: {v.reason}")
         local.unlink(missing_ok=True)
 
     local.parent.mkdir(parents=True, exist_ok=True)
@@ -1037,11 +1283,24 @@ def _fetch_one_impl(f: dict) -> dict:
                 _baidu_login()
                 # KHÔNG capture output: để progress bar chảy ra log của Modal.
                 # Chính nhờ log đó mà chẩn đoán ra throttle 0B/s.
-                cp = _baidu(
-                    ["d", "--saveto", str(tmpdir), remote],
-                    timeout=POLICY.subprocess_timeout,
-                    capture=False,
-                )
+                # `-p N` = số kết nối song song cho MỘT file. Chỉ truyền khi
+                # policy > 0: mặc định 0 nghĩa là "để BaiduPCS-Go tự quyết",
+                # tránh phụ thuộc vào đúng tên cờ của từng phiên bản.
+                par = int(POLICY.baidu_parallel or 0)
+                args = ["d", "--saveto", str(tmpdir)]
+                if par > 0:
+                    args += ["-p", str(min(par, 32))]
+                args.append(remote)
+
+                # Commit định kỳ TRONG lúc tải: đây là thứ khiến staging trong
+                # Volume thực sự cho resume xuyên container. Không có nó thì
+                # container chết là mất sạch tiến độ, y như khi dùng /tmp.
+                with _PeriodicCommit(_commit_interval()):
+                    cp = _baidu(
+                        args,
+                        timeout=POLICY.subprocess_timeout,
+                        capture=False,
+                    )
                 got = _find_downloaded(tmpdir, Path(remote).name)
                 if got is None:
                     # Phân biệt hai ca, vì cách chữa khác nhau hoàn toàn:
@@ -1062,19 +1321,22 @@ def _fetch_one_impl(f: dict) -> dict:
                             "đường dẫn remote sai, hoặc BDUSS/STOKEN hết hạn"
                         )
                 else:
-                    # Lỗi #1: /tmp là overlayfs của container, /raw là Volume mạng.
-                    # Path.rename() gọi rename(2) ⇒ EXDEV errno 18, thất bại TUYỆT
-                    # ĐỐI chứ không phải do mạng. shutil.move() = `mv` của shell:
-                    # khác filesystem thì copy + unlink ⇒ qua được.
-                    if local.exists():
-                        local.unlink()
-                    shutil.move(str(got), str(local))
-
-                    # Tính verdict MỘT lần: gzip -t trên file 26 MB không rẻ.
-                    v = _validate_ex(local, expected, expect_archive=expect_archive)
+                    # KIỂM TRA TRONG STAGING, chỉ công bố khi hợp lệ.
+                    #
+                    # Thứ tự này quan trọng: nếu move sang /raw rồi mới kiểm thì
+                    # bước kiểm hỏng phải xoá file khỏi /raw — và mảnh dở (đúng
+                    # thứ dùng để resume) biến mất. Giữ nó trong staging thì lần
+                    # attempt sau, hoặc lần chạy sau ở CONTAINER KHÁC, resume
+                    # được từ đúng chỗ đã tải.
+                    v = _validate_ex(got, expected, expect_archive=expect_archive)
                     if v.ok:
-                        size = local.stat().st_size
-                        digest = _sha256(local)
+                        digest = _sha256(got)
+                        size = got.stat().st_size
+                        # Cùng filesystem ⇒ os.replace: atomic, không copy byte.
+                        if local.exists():
+                            local.unlink()
+                        _publish(got, local)
+                        _record_valid(f["local"], local, digest, v.fmt or "gzip")
                         vol_raw.commit()  # bắt buộc để file sống qua container khác
                         print(f"[OK] {remote_rel}  {_human(size)}  sha256={digest[:12]}…")
                         if v.fmt and v.fmt != "gzip":
@@ -1087,17 +1349,15 @@ def _fetch_one_impl(f: dict) -> dict:
                             "format": v.fmt or "gzip",
                         }
 
-                    # --- thất bại: chia làm hai loại, vì cách chữa khác hẳn ---
-                    digest = _sha256(local)
-                    size_now = local.stat().st_size
-                    # file hỏng đã move sang Volume → dọn để lần sau không skip nhầm
-                    local.unlink(missing_ok=True)
+                    # --- thất bại ---
                     last = v.reason
+                    size_now = got.stat().st_size
 
                     if not v.retryable:
-                        # Lỗi TẤT ĐỊNH (file nguồn sai định dạng, hoặc Baidu trả
-                        # trang lỗi). Log thật: 3 attempt × 6 phút cho cùng một
-                        # file = 19 phút vô ích. Dừng ngay.
+                        # Lỗi TẤT ĐỊNH (nguồn sai định dạng / Baidu trả trang
+                        # lỗi). Tải lại ra đúng chuỗi byte đó ⇒ xoá mảnh dở đi,
+                        # giữ lại chỉ làm lần sau resume vào một file vô dụng.
+                        got.unlink(missing_ok=True)
                         print(f"[STOP] {remote_rel}: {v.reason}")
                         return {
                             "remote": remote_rel, "local": str(local),
@@ -1106,9 +1366,13 @@ def _fetch_one_impl(f: dict) -> dict:
                             "deterministic": True, "format": v.fmt,
                         }
 
-                    # Cùng một chuỗi byte qua hai lần tải ⇒ tải lại cũng thế.
-                    # Đây là bằng chứng mạnh nhất mà không cần hỏi thêm Baidu.
+                    digest = _sha256(got)
                     if digest == prev_sha:
+                        # Với resume, "hai lần cho ra byte GIỐNG HỆT" nghĩa là
+                        # KHÔNG thêm được byte nào ⇒ dừng. Nếu attempt sau resume
+                        # được thì file dài ra và sha sẽ khác, nên điều kiện này
+                        # không chặn nhầm đường resume.
+                        got.unlink(missing_ok=True)
                         msg = (
                             f"hai lần tải cho ra byte GIỐNG HỆT (sha256={digest[:12]}…, "
                             f"{_human(size_now)}) ⇒ lỗi tất định, dừng thử lại. {v.reason}"
@@ -1121,6 +1385,9 @@ def _fetch_one_impl(f: dict) -> dict:
                             "deterministic": True, "format": v.fmt,
                         }
                     prev_sha = digest
+                    # Mảnh dở Ở LẠI staging: đây là tiến độ. Commit ngay để nó
+                    # sống qua container chết (thay vì đợi chu kỳ định kỳ).
+                    _commit_volume("giữ mảnh dở giữa các attempt")
             except subprocess.TimeoutExpired:
                 last = f"BaiduPCS-Go treo quá {POLICY.subprocess_timeout}s (0B/s)"
             except subprocess.CalledProcessError as exc:
@@ -1130,9 +1397,16 @@ def _fetch_one_impl(f: dict) -> dict:
 
             print(f"[RETRY {attempt}/{POLICY.fetch_attempts}] {remote_rel}: {last}")
             if attempt < POLICY.fetch_attempts:
-                time.sleep(30 * attempt)
+                _sleep(30 * attempt)
     finally:
-        shutil.rmtree(tmpdir, ignore_errors=True)
+        # CỐ Ý không xoá staging: mảnh dở nằm trong Volume là thứ cho phép lần
+        # chạy SAU (container khác) resume thay vì tải lại từ 0. Bản dùng /tmp
+        # không thể làm điều này vì container chết là mất luôn thư mục.
+        if tmpdir.exists():
+            kept = sum(p.stat().st_size for p in tmpdir.rglob("*") if p.is_file())
+            if kept:
+                print(f"[staging] giữ {_human(kept)} ở {tmpdir} để lần sau resume")
+                _commit_volume("giữ mảnh dở")
 
     # Lỗi #5: KHÔNG raise. Exception lọt ra .map() sẽ cancel mọi task anh em
     # ("Runner terminated" ×15 trong log) và vứt hết file đang tải dở.
@@ -1182,12 +1456,21 @@ def prune(tiers: str = POLICY.default_tiers, mode: str = "dry") -> None:
         if not p.is_file() or p.name.startswith("_"):
             continue
         rel = str(p.relative_to(RAW))
-        if rel in keep:
+        if rel in keep or _is_internal(rel):
             continue
         size = p.stat().st_size
         total += size
         orphans.append((p, size))
 
+    staging = _staging_root()
+    if staging.exists() and staging.is_dir():
+        st_files = [p for p in staging.rglob("*") if p.is_file()]
+        st_bytes = sum(p.stat().st_size for p in st_files)
+        if st_files:
+            print(f"\n[staging] {staging}: {len(st_files)} mảnh dở · {_human(st_bytes)}")
+            print("  Đây là TIẾN ĐỘ tải dở, không phải rác — lần chạy sau sẽ resume.")
+            print("  Chỉ xoá khi chắc chắn không tải lại: rm -rf "
+                  f"{staging}")
     print(f"\n{'='*78}\nPRUNE — tier {tiers!r} giữ {len(keep)} file\n{'='*78}")
     if not orphans:
         print("  Không có file thừa.")
@@ -1225,8 +1508,11 @@ def verify() -> None:
     bad: list[tuple[str, str, bool]] = []
     n = 0
     for p in sorted(RAW.rglob("*.tar.gz")):
+        rel = str(p.relative_to(RAW))
+        if _is_internal(rel):
+            continue  # file dở trong staging không phải dữ liệu để kiểm
         n += 1
-        v = _validate_ex(p)
+        v = _validate_cached(rel, p)
         tag = "OK  " if v.ok else "FAIL"
         print(f"[{tag}] {_human(p.stat().st_size):>10}  {p.relative_to(RAW)}")
         if v.ok:
@@ -1234,7 +1520,7 @@ def verify() -> None:
         # Chẩn đoán định dạng: "gzip FAIL" không nói được gì; "là rar/HTML"
         # mới cho biết phải làm gì.
         print(f"        ↳ {v.reason}")
-        bad.append((str(p.relative_to(RAW)), v.reason, v.retryable))
+        bad.append((rel, v.reason, v.retryable))
 
     print(f"\nđã kiểm {n} file · hỏng {len(bad)}")
     if bad:
@@ -1276,6 +1562,9 @@ def local_status() -> None:
     print(f"max_containers   = {POLICY.max_containers}   (Baidu throttle theo số phiên)")
     print(f"fetch_attempts   = {POLICY.fetch_attempts}")
     print(f"subproc timeout  = {POLICY.subprocess_timeout}s")
+    print(f"staging          = {_staging_root()}  (env DIRE_STAGING_DIR ghi đè)")
+    print(f"commit định kỳ   = {_commit_interval():g}s khi đang tải")
+    print(f"baidu_parallel   = {POLICY.baidu_parallel}  (0 = để BaiduPCS-Go tự quyết)")
     print(f"\n{'TIER':<8} {'FILE':>5}  MỤC ĐÍCH")
     print("-" * 78)
     for tier in TIERS:
