@@ -45,7 +45,7 @@ nhiêu credit".
 
 ```bash
 ./scripts/07_check_imports.sh          # cổng 0, 0 credit
-python3 -m pytest tests/ -q            # 75 test (2 skip nếu thiếu modal)
+python3 -m pytest tests/ -q            # 77 test (2 skip nếu thiếu modal)
 python3 -m pyflakes src/dire_modal/*.py tests/
 ```
 
@@ -57,6 +57,6 @@ Nêu: **triệu chứng → nguyên nhân → cách sửa → test** (kèm "X te
 trên `main` cũ") → **phần chưa làm**. Nếu harness của mình sai, nói rõ ra.
 
 Nếu cần thêm tài liệu mới: kiểm xem có file nào đã nói điều đó chưa. Repo này
-đã có `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `README.md`,
-`docs/runbook-free.md`, `docs/adr-000*.md` — thêm file thứ tám cho cùng một nội
+đã có `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `spec.md`,
+`README.md`, `docs/runbook-free.md`, `docs/adr-000*.md` — thêm file thứ tám cho cùng một nội
 dung là tạo chỗ để lệch nhau.

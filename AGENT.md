@@ -3,7 +3,8 @@
 > Đọc file này trước, rồi mới mở code. Cập nhật lần cuối: 2026-10-24.
 > Các file còn lại: [instructions.md](instructions.md) (cách làm việc) ·
 > [plan.md](plan.md) (đang ở đâu, làm gì tiếp) · [skills.md](skills.md) (công thức
-> cho từng loại việc) · [CLAUDE.md](CLAUDE.md) (ghi chú riêng cho Claude).
+> cho từng loại việc) · [CLAUDE.md](CLAUDE.md) (ghi chú riêng cho Claude) ·
+> [spec.md](spec.md) (đặc tả SPEC-001: tái tạo DIRE + cải thiện theo AEROBLADE).
 
 ## Repo này là gì
 
@@ -28,7 +29,8 @@ lời được "cái này tốn bao nhiêu credit".
 | `src/dire_modal/common.py` | `app`, image, Volume, Secret — import từ đây |
 | `tools/` | Script thuần stdlib: `free_quota.py`, `storage_cost.py` |
 | `scripts/00..07_*.sh` | Cổng tuần tự; `07_check_imports.sh` là cổng 0 |
-| `tests/` | 75 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
+| `tests/` | 77 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
+| `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
 | `docs/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
 | `platforms/hf-spaces/` | Demo Gradio trên HF Spaces (CPU free) |
@@ -61,7 +63,7 @@ cách phòng ở [instructions.md](instructions.md).
 Chạy tay từng phần:
 
 ```bash
-python3 -m pytest tests/ -q                     # 75 test (2 skip nếu thiếu modal)
+python3 -m pytest tests/ -q                     # 77 test (2 skip nếu thiếu modal)
 python3 -m pytest tests/test_real_modal_import.py -q   # cần `pip install modal`
 python3 -m pyflakes src/dire_modal/download.py tests/
 bash -n scripts/*.sh
@@ -98,6 +100,7 @@ container. Sửa policy mà chỉ sửa `configs/` là sửa vào chỗ vô tác
 
 ## Bắt đầu từ đâu
 
+- Muốn biết **sẽ xây cái gì và tại sao** → [spec.md](spec.md), rồi [plan.md](plan.md)
 - Muốn biết đang làm gì tiếp → [plan.md](plan.md)
 - Sắp sửa code → [instructions.md](instructions.md)
 - Gặp một việc cụ thể (tải hỏng, thêm tier, guard GPU, viết test) →

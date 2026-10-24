@@ -1,4 +1,4 @@
-"""Test cho bộ tài liệu agent (`AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md`).
+"""Test cho bộ tài liệu agent (`AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md`, `spec.md`).
 
 Vì sao có file này
 ------------------
@@ -14,8 +14,13 @@ Test này kiểm:
   2. Mọi đường dẫn trong backtick (`src/...`, `tests/...`, `tools/...`) đều tồn tại
      — trừ danh sách `KNOWN_MISSING` được khai báo tường minh.
   3. Mọi `dire_modal.<module>::<entrypoint>` được nhắc đều là hàm thật.
-  4. `KNOWN_MISSING` không bị "mục" — nếu file xuất hiện thì phải xoá khỏi danh
-     sách, nếu không danh sách sẽ che lỗi mới trong tương lai.
+  4. `KNOWN_MISSING` và `PLANNED_ENTRYPOINTS` không bị "mục" — nếu file/entrypoint
+     xuất hiện thì phải xoá khỏi danh sách, nếu không danh sách sẽ che lỗi mới.
+
+`PLANNED_ENTRYPOINTS` là ngoại lệ có kiểm soát cho `spec.md`: spec viết TRƯỚC
+code nên nó phải được phép nhắc entrypoint chưa tồn tại. Nhưng mỗi cái phải
+được `plan.md` theo dõi, và khi code xong thì test sẽ đỏ để buộc xoá khỏi danh
+sách — không cho phép "kế hoạch" biến thành lời nói suông vĩnh viễn.
 
 Chạy::
 
@@ -30,12 +35,35 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS = ["AGENT.md", "instructions.md", "plan.md", "skills.md", "CLAUDE.md"]
+DOCS = [
+    "AGENT.md",
+    "instructions.md",
+    "plan.md",
+    "skills.md",
+    "CLAUDE.md",
+    "spec.md",
+]
 
 # Đường dẫn được nhắc trong tài liệu nhưng CỐ Ý chưa tồn tại.
 # Mỗi mục phải kèm lý do, và `plan.md` phải đang theo dõi nó.
 KNOWN_MISSING = {
     "tools/iaas_cost.py": "được docs/iaas-options.md nhắc; plan.md mục 1 đang theo dõi",
+    # 5 test dưới đây do spec.md §15 TRUY VẾT yêu cầu — phải viết cùng mốc tương ứng.
+    "tests/test_eval_contract.py": "spec.md FR-1, mốc M1; plan.md đang theo dõi",
+    "tests/test_dire_equivalence.py": "spec.md FR-2, mốc M2; plan.md đang theo dõi",
+    "tests/test_aero_sign.py": "spec.md FR-3, mốc M3; plan.md đang theo dõi",
+    "tests/test_fusion_no_leak.py": "spec.md FR-5, mốc M4; plan.md đang theo dõi",
+    "tests/test_run_json.py": "spec.md FR-7, mốc M1; plan.md đang theo dõi",
+}
+
+# Entrypoint được `spec.md` nhắc nhưng CHƯA viết. Mỗi mục phải:
+#   - có lý do (mốc nào của spec sẽ tạo ra nó),
+#   - được `plan.md` theo dõi,
+#   - và KHÔNG được tồn tại — nếu tồn tại thì test đỏ, buộc xoá khỏi danh sách.
+PLANNED_ENTRYPOINTS = {
+    ("compute_dire", "equivalence"): "spec.md FR-2, mốc M2 — phép so map tự tính vs map tác giả",
+    ("aero", "main"): "spec.md FR-3, mốc M3 — AEROBLADE trên ảnh gốc",
+    ("fusion", "fit"): "spec.md FR-5, mốc M4 — trọng số kết hợp, chỉ fit trên val",
 }
 
 _LINK_RE = re.compile(r"\]\(([A-Za-z0-9._/-]+\.md)\)")
@@ -112,11 +140,34 @@ def test_referenced_entrypoints_exist():
     bad = []
     for name in DOCS:
         for mod, fn in _ENTRY_RE.findall(_read(name)):
-            if (mod, fn) not in entries:
-                bad.append(f"{name} → dire_modal.{mod}::{fn}")
+            if (mod, fn) in entries:
+                continue
+            if (mod, fn) in PLANNED_ENTRYPOINTS:
+                continue
+            bad.append(f"{name} → dire_modal.{mod}::{fn}")
     assert not bad, (
         "entrypoint được nhắc nhưng không tồn tại:\n  " + "\n  ".join(bad)
     )
+
+
+def test_planned_entrypoints_are_actually_missing():
+    """Đã viết xong thì phải xoá khỏi `PLANNED_ENTRYPOINTS` — nếu không nó che lỗi mới."""
+    entries = _entrypoints()
+    appeared = [f"dire_modal.{m}::{f}" for (m, f) in PLANNED_ENTRYPOINTS if (m, f) in entries]
+    assert not appeared, (
+        f"{appeared} đã tồn tại ⇒ xoá khỏi PLANNED_ENTRYPOINTS trong tests/test_agent_docs.py"
+    )
+
+
+def test_planned_entrypoints_are_tracked_in_plan():
+    """Mỗi entrypoint chỉ nằm trong spec là chưa đủ — phải có việc trong plan.md."""
+    plan = _read("plan.md")
+    for (mod, fn), reason in PLANNED_ENTRYPOINTS.items():
+        # phải là token đầy đủ `mod::fn` — chỉ so tên hàm thì "main" khớp bừa
+        assert f"{mod}::{fn}" in plan, (
+            f"dire_modal.{mod}::{fn} ({reason}) không có trong plan.md — "
+            "hoặc thêm việc vào plan, hoặc bỏ nó khỏi spec"
+        )
 
 
 def test_agent_md_points_to_all_other_docs():

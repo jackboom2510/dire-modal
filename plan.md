@@ -25,7 +25,8 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không 
 | PR #7 | Guard chi phí GPU | trần $2 400 → **$5** |
 | PR #8 | PEP 563 làm `compute_dire` không import được | 51 test; cổng 0 bằng modal thật |
 | PR #9 *(đang mở)* | Staging trong Volume + rename thay vì copy + cache kiểm tra | resume xuyên container; bỏ 6.8 GB đọc lại/lần |
-| PR #9 *(đang mở)* | Bộ tài liệu agent: `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md` | 8 test canh link/entrypoint/đường dẫn trong tài liệu |
+| PR #9 *(đang mở)* | Bộ tài liệu agent: `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md` | 10 test canh link/entrypoint/đường dẫn trong tài liệu |
+| PR #9 *(đang mở)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
 
 Kết luận dữ liệu quan trọng (chốt bằng `probe_pair` trên dữ liệu thật):
 
@@ -90,6 +91,26 @@ Detector trước (đã có), DIRE-viz sau. Cần VAE từ HF Hub và gallery đ
 `.staging` không tự dọn. Hiện `prune` chỉ **báo** dung lượng và nói rõ đó là
 tiến độ, không phải rác. Nếu thêm tính năng xoá tự động thì phải có ngưỡng tuổi
 và mặc định là dry-run.
+
+### 7. Thực thi SPEC-001 (`spec.md`)
+
+Spec đã viết xong, **chưa có dòng code nào** của nó. Thứ tự mốc trong spec §12
+là ràng buộc, không phải đề xuất: `M2` (FR-2) chặn `M4` (FR-4).
+
+| Mốc | Việc | Test phải viết kèm | Entrypoint phải tạo |
+|---|---|---|---|
+| M1 | Port `eval.py`, thêm TPR@5%FPR, ghi CSV + `run.json` | `tests/test_run_json.py`, `tests/test_eval_contract.py` | — (`dire_modal.eval::main` đã có) |
+| M2 | `compute_dire` khớp DIRE map của tác giả (tương quan ≥ 0.90) | `tests/test_dire_equivalence.py` | `dire_modal.compute_dire::equivalence` |
+| M3 | Bọc AEROBLADE | `tests/test_aero_sign.py` | `dire_modal.aero::main` |
+| M4 | Format bias + fusion (chỉ fit trên val) | `tests/test_fusion_no_leak.py` | `dire_modal.fusion::fit` |
+| M5 | Robustness + báo cáo tổng | — | — |
+
+**Vì sao 5 test trên chưa tồn tại:** spec viết trước code, và chúng được khai
+báo trong `KNOWN_MISSING` của `tests/test_agent_docs.py` để không bị quên. Khi
+viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu để lại.
+
+**Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
+truy được về một `run.json`.
 
 ## Việc đã quyết là KHÔNG làm
 
