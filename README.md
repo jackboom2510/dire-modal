@@ -43,6 +43,11 @@ Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.m
 | [`docs/storage-comparison.md`](docs/storage-comparison.md) | Modal Volume vs R2 vs Local vs Kaggle/HF — 18 tiêu chí, điểm hoà vốn, quy tắc ngưỡng |
 | [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |
 | [`docs/adr-0002-iaas.md`](docs/adr-0002-iaas.md) | ADR: chiến lược đa nền tảng + ngưỡng rời Modal |
+| [`AGENT.md`](AGENT.md) | Điểm vào cho agent: bản đồ repo, 6 lỗi dễ làm hỏng nhất, nguồn sự thật |
+| [`instructions.md`](instructions.md) | Quy tắc làm việc: test phải "cắn", stub đúng ngữ nghĩa, tiền, dữ liệu, git |
+| [`plan.md`](plan.md) | Đang ở đâu, việc tiếp theo, việc đã quyết là KHÔNG làm |
+| [`skills.md`](skills.md) | Công thức 8 việc thường gặp: tải hỏng, thêm tier, guard GPU, viết test… |
+| [`CLAUDE.md`](CLAUDE.md) | Bản ngắn cho Claude: 5 điểm dễ sai + lệnh kiểm |
 
 ## Công cụ
 
