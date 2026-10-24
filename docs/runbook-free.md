@@ -138,6 +138,60 @@ Vượt trần ⇒ `main` từ chối tải và in rõ tổng ước lượng. �
 file nào `ls -l` không đọc được size thì bị tính bằng size của file lớn nhất đã
 biết, để guard không vô hiệu đúng lúc cần nó nhất.
 
+### Tốc độ tải và resume xuyên container
+
+Ba thay đổi, mỗi cái nhắm một chi phí khác nhau:
+
+**1. Staging nằm trong Volume (`/raw/.staging`), không phải `/tmp`.**
+
+`/tmp` là ephemeral: container chết giữa chừng là mất sạch tiến độ, vì
+BaiduPCS-Go resume dựa trên file dở còn nằm trong thư mục đích. Ở 67 KB/s, file
+692 MB cần ~2.9 giờ — mất tiến độ ở phút 170 là mất gần 3 giờ.
+
+Giờ staging ở trong Volume và được **commit định kỳ** (`staging_commit_s`, mặc
+định 45 s), nên lần chạy sau — kể cả ở container khác — resume được từ đúng chỗ
+đã tải. Commit cũng chạy ngay sau mỗi attempt thất bại.
+
+Đổi lại mỗi `write()` của BaiduPCS-Go đi qua FUSE. Ở băng thông Baidu thì đây là
+nhiễu: mạng chậm hơn đĩa khoảng ba bậc độ lớn. Muốn quay lại `/tmp` (nhanh hơn
+một chút, mất resume xuyên container): `DIRE_STAGING_DIR=/tmp/baidu_staging`.
+
+**2. Bước công bố là `os.replace`, không phải copy.**
+
+Staging cùng filesystem với `/raw` ⇒ rename nguyên tử, O(1). Bản trước tải vào
+`/tmp` rồi `shutil.move()` sang `/raw`, tức là **copy toàn bộ file** — 692 MB
+cho file lớn nhất. Nhánh dự phòng `EXDEV` vẫn còn cho trường hợp staging bị trỏ
+ra ngoài Volume.
+
+**3. Kiểm tra chạy trong staging, chỉ công bố khi hợp lệ.**
+
+Nếu move sang `/raw` rồi mới kiểm thì bước kiểm hỏng phải xoá file khỏi `/raw`,
+và **mảnh dở biến mất** — đúng thứ dùng để resume. Giữ nó trong staging thì
+attempt sau (hoặc container sau) resume được.
+
+**4. Cache kiểm tra (`.state/validated.json`).**
+
+`gzip -t` phải đọc toàn bộ file. Với Tier A mặc định, mỗi lần chạy lại đều đọc
+**3.39 GB** chỉ để trả lời "file này vẫn tốt chứ", rồi `sha256` đọc thêm 3.39 GB
+nữa. Cache theo `(size, mtime_ns)` bỏ được cả hai: file bị ghi đè thì `mtime`
+đổi nên cache tự vô hiệu. **Chỉ cache kết quả TỐT** — cache âm mà sai thì một
+file lành sẽ bị tải lại mãi mãi.
+
+**5. `--concurrency` giờ có tác dụng thật.**
+
+```bash
+modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch --concurrency 4
+```
+
+Trước đây tham số này bị bỏ qua hoàn toàn (lỗi #3), nên tưởng chỉnh được mà
+không chỉnh được gì. Nay nó ghi đè `max_containers`, **clamp [1, 8]**: Baidu
+throttle theo số phiên, và log thật cho thấy 26 phiên đồng thời ⇒ `0B/s` hàng
+loạt. Nếu vẫn 0 byte thì giảm xuống 1 trước khi nghĩ tới việc tăng.
+
+`baidu_parallel` (mặc định 0 = không truyền cờ) là số kết nối song song **cho
+một file** (`-p N`). Chỉ nâng sau khi đo — nhiều kết nối có thể nhanh hơn, cũng
+có thể bị cắt sớm hơn.
+
 ### Khi tải xong mà vẫn `gzip -t` fail
 
 Đã xảy ra thật (2026-10-21): `real.tar.gz` tải **đủ đúng 27 863 040 byte** — khớp

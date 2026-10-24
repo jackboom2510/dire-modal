@@ -43,6 +43,12 @@ Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.m
 | [`docs/storage-comparison.md`](docs/storage-comparison.md) | Modal Volume vs R2 vs Local vs Kaggle/HF — 18 tiêu chí, điểm hoà vốn, quy tắc ngưỡng |
 | [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |
 | [`docs/adr-0002-iaas.md`](docs/adr-0002-iaas.md) | ADR: chiến lược đa nền tảng + ngưỡng rời Modal |
+| [`spec.md`](spec.md) | **SPEC-001** (SDD): tái tạo experiment DIRE + cải thiện theo AEROBLADE. 7 yêu cầu `FR-*` có tiêu chí nghiệm thu, 6 mốc, bảng rủi ro |
+| [`AGENT.md`](AGENT.md) | Điểm vào cho agent: bản đồ repo, 6 lỗi dễ làm hỏng nhất, nguồn sự thật |
+| [`instructions.md`](instructions.md) | Quy tắc làm việc: test phải "cắn", stub đúng ngữ nghĩa, tiền, dữ liệu, git |
+| [`plan.md`](plan.md) | Đang ở đâu, việc tiếp theo, việc đã quyết là KHÔNG làm |
+| [`skills.md`](skills.md) | Công thức 8 việc thường gặp: tải hỏng, thêm tier, guard GPU, viết test… |
+| [`CLAUDE.md`](CLAUDE.md) | Bản ngắn cho Claude: 5 điểm dễ sai + lệnh kiểm |
 
 ## Công cụ
 
@@ -62,7 +68,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
 | `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng **so từng ảnh** trong tar (~53 MB) |
 | `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 22 file / 3.39 GB → verify |
-| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run) |
+| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run). `--concurrency N` để chỉnh số container (clamp 1–8) |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) + (tuỳ chọn) đẩy R2 |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |
