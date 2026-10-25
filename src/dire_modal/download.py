@@ -528,6 +528,40 @@ def _slack_of(v: "SizeEst | int | None") -> int:
     return v.slack if isinstance(v, SizeEst) else 0
 
 
+# Git Bash / MSYS2 "chuyển đổi tham số": mọi argv bắt đầu bằng "/" bị đổi thành
+# đường dẫn Windows TRƯỚC khi tiến trình Python nhìn thấy. Trong container Linux
+# thì không có ổ C:, nên lệnh chết ngay:
+#
+#     ./tools/tree.sh
+#     [!] C:/Program Files/Git/raw không tồn tại. Volume mount: [...]
+#
+# (xảy ra thật 2026-10-25 trên Windows.) Sửa ở hai lớp: script export
+# MSYS_NO_PATHCONV=1 (gốc rễ), và hàm dưới đây cho người gõ `modal run` trực tiếp.
+_MSYS_PATH_RE = re.compile(r"^[A-Za-z]:[\\/].*?[\\/]Git[\\/](?P<rest>.*)$", re.I)
+
+
+def _demangle(path: str) -> str:
+    r"""``C:/Program Files/Git/raw/checkpoints`` → ``/raw/checkpoints``.
+
+    Chỉ sửa khi chuỗi ĐÚNG là dạng ``<ổ>:\...\Git\...`` — dạng mà MSYS2 sinh
+    ra. Đường dẫn Linux hợp lệ không bao giờ có tiền tố ổ đĩa, nên không có ca
+    sửa nhầm.
+    """
+    if not path:
+        return path
+    m = _MSYS_PATH_RE.match(path.strip())
+    if not m:
+        return path
+    return "/" + m.group("rest").replace("\\", "/").lstrip("/")
+
+
+def _demangle_list(spec: str) -> str:
+    """Như :func:`_demangle` nhưng cho danh sách phân cách bằng dấu phẩy."""
+    if not spec:
+        return spec
+    return ",".join(_demangle(p) for p in spec.split(","))
+
+
 def _parse_ls_estimates(text: str) -> dict[str, SizeEst]:
     """Parse ``BaiduPCS-Go ls -l`` → ``{basename: SizeEst}``.
 
@@ -1395,6 +1429,7 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
     ``concurrency`` > 0 ghi đè ``max_containers`` trong policy (clamp [1, 8]).
     ``force`` tải lại cả file đã có trong cache — chỉ dùng khi nghi cache sai.
     """
+    paths = _demangle_list(paths)   # Git Bash: "/raw/x" → "C:/.../Git/raw/x"
     unresolved: list[DirSpec] = []
     blocked: list[tuple[File, str]] = []
 
@@ -1633,6 +1668,7 @@ def _write_manifest(results: list[dict], quiet: bool = False) -> None:
 )
 def ls_remote(path: str = "/") -> list[str]:
     """Dò cây remote. ``modal run -m dire_modal.download::ls_remote --path /apps``"""
+    path = _demangle(path)
     _baidu_login()
     cp = _baidu(["ls", path], timeout=300, check=True)
     print(cp.stdout)
@@ -1645,6 +1681,7 @@ def ls_remote(path: str = "/") -> list[str]:
     timeout=3600,
 )
 def audit(dirs: str = "") -> None:
+    dirs = _demangle_list(dirs)
     """Đối chiếu cây remote thật ↔ manifest. **Không tải gì.**
 
     Việc này phải chạy TRƯỚC khi tin bất kỳ con số GB nào, vì nó là thứ phát
@@ -1732,6 +1769,7 @@ def probe_pair(
     a: str = "dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz",
     b: str = "dire/test/lsun_bedroom/imagenet/real.tar.gz",
 ) -> None:
+    a, b = _demangle(a), _demangle(b)
     """Chốt ngữ nghĩa ``dire/test/<A>/<B>/`` BẰNG BẰNG CHỨNG, không đoán.
 
     Vấn đề: hai file ``real.tar.gz`` này có size **bằng nhau y hệt** (26.6 MB)
@@ -2622,6 +2660,8 @@ def tree(
     (dùng để grep/đối chiếu manifest) · ``out`` = ghi thêm ra file trong Volume rồi
     commit, phòng khi log bị cắt.
     """
+    path = _demangle(path)
+    out = _demangle(out)
     root = Path(path)
     if not root.exists():
         raise SystemExit(

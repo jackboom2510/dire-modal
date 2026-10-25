@@ -577,6 +577,36 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv       # lưu tr�
 | Cần TPU miễn phí | **TRC**: apply, phải open-source nghiên cứu, hàng đợi có thể dài |
 | Chỉ có thời gian, không có tiền | Kaggle 30 h/tuần + Colab (tương tác) + Lightning → đủ để dev, **không** đủ cho stage-2 |
 
+## Windows / Git Bash: `/raw` biến thành `C:/Program Files/Git/raw`
+
+Triệu chứng (đã xảy ra thật):
+
+```bash
+$ ./tools/tree.sh
+SystemExit: [!] C:/Program Files/Git/raw không tồn tại. Volume mount: ['/ckpt', '/raw', '/shards']
+```
+
+MSYS2 "chuyển đổi tham số": **mọi argv bắt đầu bằng `/`** bị đổi thành đường dẫn
+Windows **trước khi** tiến trình Python nhìn thấy. Container Linux không có ổ `C:`
+nên lệnh chết — và thông báo lỗi còn in ra đường dẫn đã bị đổi, rất khó đoán.
+
+Đã chặn ở hai lớp:
+
+| Lớp | Việc |
+|---|---|
+| shell | `export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'` trong `scripts/lib.sh`, `scripts/check.sh`, mọi `tools/*.sh` (Linux/macOS bỏ qua hai biến này) |
+| Python | `_demangle()` trong `download.py` sửa `C:/…/Git/raw/…` → `/raw/…` cho `tree`, `ls_remote`, `audit`, `probe_pair`, `--paths` |
+
+Gõ tay thì thêm biến vào trước lệnh:
+
+```bash
+MSYS_NO_PATHCONV=1 modal volume ls dire-raw /raw/.staging
+MSYS_NO_PATHCONV=1 modal run -m dire_modal.download::tree --path /raw/checkpoints
+```
+
+Đường dẫn **tương đối** (`checkpoints/lsun_adm.pth`) không bị đổi, nên đó cũng là
+một cách tránh.
+
 ## Dừng giữa chừng mà không mất dữ liệu
 
 Không cần "tạm dừng" riêng: **staging trong Volume đã được commit định kỳ**

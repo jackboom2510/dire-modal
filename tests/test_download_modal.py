@@ -595,6 +595,55 @@ def test_validate_size_mismatch_is_retryable():
 
 
 # ---------------------------------------------------------------------------
+# Windows / Git Bash: "/raw" bị MSYS2 đổi thành "C:/Program Files/Git/raw"
+# ---------------------------------------------------------------------------
+def test_demangle_fixes_the_exact_git_bash_failure():
+    """Chuỗi y nguyên trong lỗi thật của `./tools/tree.sh` trên Windows.
+
+        SystemExit: [!] C:/Program Files/Git/raw không tồn tại.
+    """
+    dl, _ = install_stub()
+    assert dl._demangle("C:/Program Files/Git/raw") == "/raw"
+    assert dl._demangle("C:/Program Files/Git/raw/checkpoints") == "/raw/checkpoints"
+    # Git for Windows bản cũ nằm ở Program Files (x86); dấu \ cũng phải chịu
+    assert dl._demangle("C:\\Program Files (x86)\\Git\\raw\\a.tar.gz") == "/raw/a.tar.gz"
+
+
+def test_demangle_leaves_normal_paths_alone():
+    dl, _ = install_stub()
+    for p in ("/raw", "/raw/checkpoints", "checkpoints/lsun_adm.pth",
+              "/apps/AirExplorer/dire/test", "", "/raw/.staging/_held"):
+        assert dl._demangle(p) == p, p
+    # Không phải thư mục Git của MSYS thì không được "sửa" bừa
+    assert dl._demangle("C:/data/raw") == "C:/data/raw"
+    assert dl._demangle("D:/GitLab/raw") == "D:/GitLab/raw"
+
+
+def test_demangle_applies_to_comma_lists():
+    """`--paths a,b` và `--dirs a,b` cũng bị MSYS đổi từng phần tử."""
+    dl, _ = install_stub()
+    assert dl._demangle_list(
+        "C:/Program Files/Git/raw/a.tar.gz,/raw/b.tar.gz"
+    ) == "/raw/a.tar.gz,/raw/b.tar.gz"
+
+
+def test_tree_reports_the_path_it_actually_looked_at():
+    """`tree` phải demangle TRƯỚC khi báo lỗi, nếu không thông báo gây nhiễu."""
+    dl, _ = install_stub()
+    seen: list[str] = []
+    orig = dl._demangle
+    dl._demangle = lambda p: seen.append(p) or orig(p)
+    try:
+        try:
+            dl.tree.local(path="/raw/khong_ton_tai")
+        except SystemExit as exc:
+            assert "/raw/khong_ton_tai" in str(exc), str(exc)
+    finally:
+        dl._demangle = orig
+    assert seen, "tree phải gọi _demangle"
+
+
+# ---------------------------------------------------------------------------
 # Dừng êm: SIGTERM / Ctrl+C không được làm mất byte đã tải
 # ---------------------------------------------------------------------------
 def test_sigterm_stops_without_retry_and_keeps_staging():

@@ -88,3 +88,44 @@ def test_bash_syntax():
     for p in sorted(SCRIPTS.glob("*.sh")):
         r = subprocess.run(["bash", "-n", str(p)], capture_output=True, text=True)
         assert r.returncode == 0, f"{p.name}: {r.stderr.strip()}"
+
+
+# ---------------------------------------------------------------------------
+# 7. Windows / Git Bash: đừng để "/raw" bị đổi thành "C:/Program Files/Git/raw"
+# ---------------------------------------------------------------------------
+def _scripts_invoking_modal() -> list[Path]:
+    out = []
+    for d in (SCRIPTS, ROOT / "tools"):
+        for f in sorted(d.glob("*.sh")):
+            text = f.read_text(encoding="utf-8")
+            if re.search(r"^\s*modal\s", text, re.M):
+                out.append(f)
+    return out
+
+
+def test_every_script_that_runs_modal_disables_msys_path_conversion():
+    """Git Bash đổi `/raw` → `C:/Program Files/Git/raw` trước khi Modal thấy.
+
+    Đã xảy ra thật (2026-10-25, Windows): `./tools/tree.sh` chết với
+    `[!] C:/Program Files/Git/raw không tồn tại`. Trên Linux/macOS hai biến này
+    bị bỏ qua, nên bật vô điều kiện là cách rẻ nhất.
+    """
+    files = _scripts_invoking_modal()
+    assert files, "không tìm thấy script nào gọi modal — test đang kiểm nhầm chỗ?"
+
+    def _guarded(text: str) -> bool:
+        # Hoặc tự export, hoặc `source scripts/lib.sh` (lib.sh export lúc source).
+        return ("MSYS_NO_PATHCONV" in text
+                or re.search(r"(^|\s)(source|\.)\s+.*lib\.sh", text, re.M) is not None)
+
+    missing = [f.relative_to(ROOT).as_posix() for f in files
+               if not _guarded(f.read_text(encoding="utf-8"))]
+    assert not missing, (
+        "script gọi `modal` mà không tắt MSYS path conversion: " + ", ".join(missing)
+    )
+
+
+def test_workflows_get_the_guard_through_lib_sh():
+    """`01`/`02` không tự export — chúng `source lib.sh`, nên lib.sh phải có."""
+    lib = (SCRIPTS / "lib.sh").read_text(encoding="utf-8")
+    assert "MSYS_NO_PATHCONV" in lib and "MSYS2_ARG_CONV_EXCL" in lib

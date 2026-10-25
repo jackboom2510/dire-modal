@@ -12,6 +12,12 @@
 # ra cây bằng CLI thuần.
 set -euo pipefail
 
+# Git Bash (MSYS2) đổi mọi tham số bắt đầu bằng "/" thành đường dẫn Windows:
+#   --path /raw  →  C:/Program Files/Git/raw  →  container Linux không thấy.
+# Hai biến này tắt việc đó; trên Linux/macOS chúng bị bỏ qua, vô hại.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
+
 PATH_IN_VOL="${PATH_IN_VOL:-/raw}"
 VOL_NAME="${VOL_NAME:-dire-raw}"
 ARGS=()
@@ -30,6 +36,6 @@ if [ "${SAVE:-0}" = "1" ]; then
   cat <<TIP
 
 [i] Muốn kéo bản lưu về máy (log của Modal có thể bị cắt):
-      modal volume get ${VOL_NAME} ${REMOTE_OUT#/raw} ./_tree.txt
+      MSYS_NO_PATHCONV=1 modal volume get ${VOL_NAME} ${REMOTE_OUT#/raw} ./_tree.txt
 TIP
 fi

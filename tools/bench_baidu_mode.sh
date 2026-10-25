@@ -14,7 +14,13 @@
 #
 # Cách làm: sửa `baidu_mode` trong src/dire_modal/tiers.yaml rồi chạy
 # `download::bench_concurrency` với đúng 1 file — script này in sẵn lệnh.
+
 set -euo pipefail
+
+# Git Bash (MSYS2) đổi mọi tham số bắt đầu bằng "/" thành đường dẫn Windows:
+#   --path /raw  →  C:/Program Files/Git/raw  →  container Linux không thấy.
+# Hai biến này tắt việc đó; trên Linux/macOS chúng bị bỏ qua, vô hại.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 
 FILE="${FILE:-dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz}"
 YAML="src/dire_modal/tiers.yaml"
