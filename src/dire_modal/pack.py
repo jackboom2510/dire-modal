@@ -20,6 +20,43 @@ def _label_from_path(p: str) -> int:
     return 0 if "/real/" in p or p.endswith("/real") else 1
 
 
+def shard_group(src_rel: str, split: str) -> str:
+    """Tên nhóm shard, GIỮ NHÁNH — chỗ từng gây đếm trùng 1000 ảnh real.
+
+    Bản cũ dùng ``out_dir = /shards/{split}/{tên tar}``, nên::
+
+        dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz → /shards/test/real/
+        dire/test/lsun_bedroom/imagenet/real.tar.gz     → /shards/test/real/  ← trùng
+        dire/test/imagenet/lsun_bedroom/real.tar.gz     → /shards/test/real/  ← trùng
+
+    Ba nhánh khác nhau ghi vào CÙNG một thư mục, và ``_DONE`` của nhánh đầu làm
+    hai nhánh sau bị ``[SKIP]`` vĩnh viễn. Ai đọc ``/shards/test/*`` sẽ trộn
+    nhánh cross-generator với nhánh chính — đúng kiểu đếm trùng mà ``probe_pair``
+    đã cảnh báo.
+
+    Nhóm mới = phần đường dẫn giữa ``<split>/`` và tên file, nối bằng ``__``::
+
+        dire/test/lsun_bedroom/imagenet/real.tar.gz → "lsun_bedroom__imagenet__real"
+
+    Đây là thay đổi PHÁ VỠ tương thích của ``/shards`` cũ: shard đã pack bằng
+    bản trước nằm ở thư mục khác tên nên sẽ pack lại (không xoá gì, chỉ tốn
+    thời gian). Eval thì không bị ảnh hưởng — nó đọc tar gốc trong ``/raw``.
+    """
+    rel = src_rel.replace("\\", "/").lstrip("/")
+    parts = [p for p in rel.split("/") if p]
+    try:
+        i = parts.index(split)
+    except ValueError:
+        i = 0
+    mid = parts[i + 1: -1]          # bỏ "<split>/" ở đầu, "<name>.tar.gz" ở cuối
+    name = parts[-1] if parts else ""
+    for suffix in (".tar.gz", ".tgz"):
+        if name.endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return "__".join([*mid, name]) if mid else name
+
+
 @app.function(
     image=cpu_image,
     volumes={"/raw": vol_raw, "/shards": vol_shards},
@@ -27,11 +64,11 @@ def _label_from_path(p: str) -> int:
     cpu=2.0,
 )
 def pack_one(src_rel: str, split: str) -> dict:
-    """Pack 1 file .tar.gz → nhiều shard trong /shards/{split}/{src_stem}/."""
+    """Pack 1 file .tar.gz → nhiều shard trong /shards/{split}/{nhóm}/."""
     import webdataset as wds
 
     src = Path("/raw") / src_rel
-    stem = src.name.replace(".tar.gz", "")
+    stem = shard_group(src_rel, split)
     out_dir = Path("/shards") / split / stem
     out_dir.mkdir(parents=True, exist_ok=True)
 

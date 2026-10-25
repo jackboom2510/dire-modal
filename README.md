@@ -80,6 +80,8 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.archive::verify_hf --repo-id <user>/<repo>` | Đối chiếu sha256 mirror |
 | `modal run -m dire_modal.compute_dire::dire_batch --n 200` | Tính DIRE trên GPU — **có preflight chặn chi phí** trước khi bật container |
 | `modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run` | Chỉ in ước tính tiền, không bật GPU nào |
+| `modal run -m dire_modal.eval::main --tiers e2` | **Eval 1 checkpoint trên mọi cặp (real, generator)** → CSV + `run.json` |
+| `modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2` | Đo băng thông thật ở các mức song song (quyết định `max_containers`) |
 | `modal run -m dire_modal.compute_dire::make_gallery --n 12` | Sinh gallery |x−recon| cho demo |
 
 ## Chọn dữ liệu theo mục tiêu
