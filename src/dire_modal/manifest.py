@@ -388,6 +388,11 @@ class Policy:
     # Chu kỳ commit Volume khi đang tải (giây). Manifest dở nằm trong Volume nên
     # phải commit định kỳ, nếu không container chết là mất tiến độ.
     staging_commit_s: int = 45
+    # Giết BaiduPCS-Go nếu file trong staging không lớn thêm trong bao nhiêu giây.
+    # 0 = tắt watchdog. Đo thật 2026-10-25: `0B/s in 42m48s` — không có watchdog
+    # thì BaiduPCS-Go ngồi chờ tới hết `subprocess_timeout` (90 phút) và đốt
+    # sạch ngân sách thời gian của lần chạy.
+    stall_timeout_s: int = 600
     # --- guard chi phí GPU (compute_dire.py) -------------------------------
     # Đây là phần TIÊU TIỀN THẬT. Bản trước để cứng 40 container × timeout
     # 24 h trên A100 ≈ $2 400 trần xấu nhất cho một lần chạy hỏng.

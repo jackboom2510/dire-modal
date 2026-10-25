@@ -64,6 +64,54 @@ from .manifest import (
 
 RAW = Path("/raw")
 
+# ---------------------------------------------------------------------------
+# Ngân sách thời gian — lần chạy thật 2026-10-25 chết vì chỗ này
+# ---------------------------------------------------------------------------
+# `fetch_one` có timeout của Modal = `fetch_attempts × subprocess_timeout + 1800`
+# = 3 × 5400 + 1800 = **18 000s**. Nhưng bên trong KHÔNG có deadline: cả 3
+# attempt đều được phép chạy đủ 5400s, tức 16 200s, chỉ còn 1 800s để chứa
+#   cold start + 3× `_baidu_login` + 2× `_sleep(30·n)` (90s)
+#   + 3× join thread commit (105s) + 3× đọc CẢ file để `gzip -t`/`sha256`
+#
+# Log thật cho thấy đúng hệ quả: một task đốt 3 attempt rồi bị Modal giết ở
+# 18 000s với `FunctionTimeoutError`, và vì `_execute` dùng `list(fn.map(...))`
+# nên kết quả của các file ĐÃ XONG cũng mất sạch.
+#
+# `FunctionTimeoutError` KHÔNG bắt được trong hàm — nó giết container. Nên cách
+# duy nhất đúng là không bao giờ để attempt vượt ngân sách còn lại.
+FETCH_CALL_TIMEOUT_S = POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800
+
+# Chừa cho phần KHÔNG phải tải: cold start (pull image + mount Volume), 3×
+# `_baidu_login`, 2× backoff (90s), 3× join thread commit (3×105s), 3× đọc cả
+# file để `gzip -t`/`sha256`, và shutdown. Đo được ~1 000s trong lần chạy hỏng;
+# 1 800 là mức có dư.
+#
+# Con số này KHÔNG làm mất attempt nào: 18 000 − 1 800 = 16 200 = 3 × 5 400, đúng
+# `fetch_attempts × subprocess_timeout`. Attempt thứ 4 (nếu có) tự bị chặn.
+_FETCH_RESERVE_S = 1800
+
+# Dưới mức này thì một attempt không kịp làm gì — nhưng resume vẫn giữ tiến độ,
+# nên dừng sạch rồi chạy lại tốt hơn là bị giết giữa chừng.
+_MIN_ATTEMPT_S = 600
+
+# Orchestrator `main` KHÔNG được chết trước các task con: nếu nó bị Modal giết
+# thì không ai kịp in tổng kết. 24h là trần của Modal; thời gian chờ ở đây gần
+# như miễn phí (function chỉ ngồi chờ `.map`).
+ORCHESTRATOR_TIMEOUT_S = 24 * 3600
+
+
+def _attempt_timeout(started: float, now: float | None = None) -> float:
+    """Số giây còn được phép dùng cho MỘT lệnh ``BaiduPCS-Go``.
+
+    Trả ``0`` khi đã hết ngân sách ⇒ caller phải dừng, giữ mảnh dở trong
+    staging, và trả ``status="partial"`` để lần chạy sau resume.
+    """
+    now = time.monotonic() if now is None else now
+    left = FETCH_CALL_TIMEOUT_S - (now - started) - _FETCH_RESERVE_S
+    if left < _MIN_ATTEMPT_S:
+        return 0.0
+    return min(float(POLICY.subprocess_timeout), float(left))
+
 # Móc sleep để test thay được MÀ KHÔNG patch `time.sleep` toàn cục.
 # (Test cũ gán `download.time.sleep = lambda _s: None` — vì `download.time` là
 # module `time` của stdlib, việc đó vô hiệu hoá sleep của cả process, kể cả
@@ -149,6 +197,69 @@ def _baidu(
         text=capture,
         timeout=timeout,
     )
+
+
+# ---------------------------------------------------------------------------
+# Watchdog chống treo 0B/s
+# ---------------------------------------------------------------------------
+# Log thật 2026-10-25: `↓ 153.69MB/154.19MB 0B/s in 42m48s` — Baidu cắt băng
+# thông giữa chừng và BaiduPCS-Go **không tự bỏ cuộc**, nó ngồi chờ tới hết
+# `subprocess_timeout` (90 phút). Ba attempt như vậy là 4.5 giờ đốt vào 0 byte.
+#
+# Watchdog nhìn kích thước file trong staging: không lớn thêm trong
+# `stall_timeout_s` giây thì giết, để attempt sau resume từ đúng chỗ đó.
+class _Stalled(RuntimeError):
+    """BaiduPCS-Go không ghi thêm byte nào trong `stall_timeout_s` giây."""
+
+
+# Nhịp kiểm tiến độ. Test hạ xuống rất nhỏ; production 10s là đủ mịn so với
+# một file cần hàng chục phút, và mỗi lần kiểm chỉ là `stat` trên thư mục staging.
+_POLL_S = 10.0
+
+
+def _dir_bytes(d: Path) -> int:
+    """Tổng byte trong thư mục staging (lỗi đọc ⇒ 0, không được giết việc tải)."""
+    try:
+        return sum(p.stat().st_size for p in d.rglob("*") if p.is_file())
+    except OSError:
+        return 0
+
+
+def _baidu_download(args: list[str], timeout: float, stall_s: float, watch: Path) -> int:
+    """Chạy ``BaiduPCS-Go d``, trả exit code; giết nếu treo hoặc quá hạn.
+
+    Vì sao không dùng ``subprocess.run(timeout=...)``: nó chỉ biết *tổng* thời
+    gian, không biết "đang treo". Với file 154 MB ở 24 KB/s thì 90 phút là
+    *hợp lý*, còn 90 phút ở 0 B/s là mất trắng — chỉ watchdog phân biệt được.
+    """
+    proc = subprocess.Popen(["BaiduPCS-Go", *args])
+    t0 = time.monotonic()
+    last_size = -1
+    last_change = t0
+    try:
+        while True:
+            try:
+                return proc.wait(timeout=_POLL_S)
+            except subprocess.TimeoutExpired:
+                pass
+            now = time.monotonic()
+            size = _dir_bytes(watch)
+            if size != last_size:
+                last_size, last_change = size, now
+            if stall_s > 0 and now - last_change >= stall_s:
+                raise _Stalled(
+                    f"không ghi thêm byte nào trong {stall_s:.0f}s "
+                    f"(giữ {size} B trong staging)"
+                )
+            if now - t0 >= timeout:
+                raise subprocess.TimeoutExpired(cmd="BaiduPCS-Go", timeout=timeout)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            try:
+                proc.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                pass
 
 
 # ---------------------------------------------------------------------------
@@ -908,21 +1019,49 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0) ->
         print(f"[fetch] -p {POLICY.baidu_parallel} kết nối/file")
     t0 = time.time()
     fn = fetch_one.with_options(max_containers=workers) if workers != POLICY.max_containers else fetch_one
-    results = list(fn.map(payloads, order_outputs=False))
+
+    # Duyệt `.map()` theo TỪNG kết quả thay vì `list(...)`.
+    #
+    # `list(fn.map(...))` chỉ trả về khi MỌI task xong. Một task chạm trần thời
+    # gian của Modal (`FunctionTimeoutError`) làm cả lời gọi raise ⇒ toàn bộ kết
+    # quả của các file đã tải xong bị vứt, dù dữ liệu vẫn nằm trong Volume.
+    # Duyệt từng cái + ghi manifest ngay (kèm commit) thì phần đã xong luôn được
+    # ghi lại, kể cả khi container orchestrator bị giết ở giây sau đó.
+    results: list[dict] = []
+    aborted = ""
+    try:
+        for r in fn.map(payloads, order_outputs=False):
+            results.append(r)
+            _write_manifest([r], quiet=True)
+    except Exception as exc:  # noqa: BLE001 — phải in tổng kết dù đợt tải gãy
+        aborted = f"{type(exc).__name__}: {exc}"
+        print(f"\n[warn] đợt tải dừng giữa chừng — {aborted}")
+        print("       Kết quả của các file đã xong VẪN được ghi (xem _manifest.tsv).")
     dt = time.time() - t0
 
     ok = [r for r in results if r["status"] == "ok"]
     skipped = [r for r in results if r["status"] == "skipped"]
+    partial = [r for r in results if r["status"] == "partial"]
     errs = [r for r in results if r["status"] == "error"]
+    missing = len(payloads) - len(results)
 
-    _write_manifest(results)
+    _write_manifest([])  # in đường dẫn; không thêm dòng nào
 
     print(f"\n{'='*78}\nKẾT QUẢ  ({dt/60:.1f} phút)\n{'='*78}")
     print(f"  ok      : {len(ok)}")
     print(f"  skipped : {len(skipped)}  (đã có sẵn & hợp lệ)")
+    print(f"  partial : {len(partial)}  (hết ngân sách thời gian — chạy lại để resume)")
     print(f"  error   : {len(errs)}")
+    if missing:
+        print(f"  chưa có kết quả : {missing} file (task bị giết trước khi trả về)")
+    for r in partial:
+        print(f"      {r['remote']}\n          → {r['error']}")
     for r in errs:
         print(f"      {r['remote']}\n          → {r['error']}")
+
+    if partial or missing:
+        print("\nChạy lại đúng lệnh trên: file đã xong sẽ skip, file dở resume từ"
+              " đúng byte đã tải (staging nằm trong Volume).")
 
     if errs:
         # KHÔNG raise: để người dùng chạy lại và fetch_one sẽ skip file đã ok.
@@ -930,21 +1069,34 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0) ->
         print("Nếu vẫn 0 byte: BDUSS hết hạn, hoặc giảm max_containers xuống 1.")
 
 
-def _write_manifest(results: list[dict]) -> None:
+def _write_manifest(results: list[dict], quiet: bool = False) -> None:
+    """Ghi thêm dòng vào ``/raw/_manifest.tsv`` và commit NGAY.
+
+    ``quiet=True`` để gọi được sau TỪNG file trong lúc `.map()` đang chảy: khi
+    container bị Modal giết, không có `finally` nào chạy, nên đây là chỗ duy nhất
+    giữ được kết quả của những file đã xong.
+
+    Không commit qua `vol_raw.commit()` trực tiếp mà qua `_commit_volume()`:
+    cùng khoá với thread commit định kỳ, và commit lỗi không được giết việc tải.
+    """
     out = RAW / "_manifest.tsv"
     write_header = not out.exists()
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    with out.open("a", newline="") as fh:
-        w = csv.writer(fh, delimiter="\t")
-        if write_header:
-            w.writerow(["timestamp", "remote", "local", "size_bytes", "sha256", "status"])
-        for r in results:
-            w.writerow(
-                [now, r.get("remote", ""), r["local"], r["size"], r.get("sha256", ""),
-                 r["status"]]
-            )
-    vol_raw.commit()
-    print(f"[manifest] → {out}")
+    if results or write_header:
+        with out.open("a", newline="") as fh:
+            w = csv.writer(fh, delimiter="\t")
+            if write_header:
+                w.writerow(
+                    ["timestamp", "remote", "local", "size_bytes", "sha256", "status"]
+                )
+            for r in results:
+                w.writerow(
+                    [now, r.get("remote", ""), r["local"], r["size"], r.get("sha256", ""),
+                     r["status"]]
+                )
+    _commit_volume("ghi _manifest.tsv")
+    if not quiet:
+        print(f"[manifest] → {out}")
 
 
 # ============================================================================
@@ -1049,7 +1201,8 @@ def audit(dirs: str = "") -> None:
     # Tải HAI file TUẦN TỰ ⇒ timeout phải gấp đôi của một file. Bản đầu dùng
     # timeout của MỘT file nên có thể bị Modal kill giữa file thứ hai và báo
     # lỗi khó hiểu hơn chính nguyên nhân.
-    timeout=2 * POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    # Gọi `_fetch_one_impl` HAI lần, mỗi lần có ngân sách riêng FETCH_CALL_TIMEOUT_S.
+    timeout=2 * FETCH_CALL_TIMEOUT_S + 600,
     cpu=1.0,
 )
 def probe_pair(
@@ -1202,8 +1355,11 @@ def plan(tiers: str = POLICY.default_tiers, max_gb: float = POLICY.max_gb) -> No
     image=cpu_image,
     secrets=[baidu_secret],
     volumes={"/raw": vol_raw},
-    # 3 attempt × timeout mỗi lệnh + dư 30 phút cho sha256 / gzip -t
-    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    # Orchestrator chỉ ngồi chờ `.map()` nên rất rẻ, nhưng nếu NÓ bị giết thì
+    # không ai kịp in tổng kết. Trước đây nó dùng cùng công thức 18 000s như
+    # `fetch_one` ⇒ hai bên chết cùng lúc, và vì `_execute` gọi
+    # `list(fn.map(...))` nên kết quả của các file đã xong bị vứt sạch.
+    timeout=ORCHESTRATOR_TIMEOUT_S,
 )
 def main(
     tiers: str = POLICY.default_tiers,
@@ -1276,9 +1432,23 @@ def _fetch_one_impl(f: dict) -> dict:
     last = "chưa thử"
     prev_sha = ""  # sha256 của lần tải trước, để phát hiện lỗi TẤT ĐỊNH
     expect_archive = bool(f.get("expect_archive", True))
+    started = time.monotonic()   # mốc tính ngân sách của CẢ lần gọi này
+    budget_out = False           # dừng vì hết ngân sách (≠ lỗi tải)
+    kept_bytes = 0
 
     try:
         for attempt in range(1, POLICY.fetch_attempts + 1):
+            # Không bao giờ để attempt vượt ngân sách: Modal giết container ở
+            # FETCH_CALL_TIMEOUT_S và `FunctionTimeoutError` KHÔNG bắt được.
+            tmo = _attempt_timeout(started)
+            if tmo <= 0:
+                budget_out = True
+                last = (
+                    f"hết ngân sách {FETCH_CALL_TIMEOUT_S}s của lần gọi này sau "
+                    f"{attempt - 1} attempt — chạy lại để resume"
+                )
+                print(f"[BUDGET] {remote_rel}: {last}")
+                break
             try:
                 _baidu_login()
                 # KHÔNG capture output: để progress bar chảy ra log của Modal.
@@ -1296,10 +1466,11 @@ def _fetch_one_impl(f: dict) -> dict:
                 # Volume thực sự cho resume xuyên container. Không có nó thì
                 # container chết là mất sạch tiến độ, y như khi dùng /tmp.
                 with _PeriodicCommit(_commit_interval()):
-                    cp = _baidu(
+                    rc = _baidu_download(
                         args,
-                        timeout=POLICY.subprocess_timeout,
-                        capture=False,
+                        timeout=tmo,
+                        stall_s=float(POLICY.stall_timeout_s or 0),
+                        watch=tmpdir,
                     )
                 got = _find_downloaded(tmpdir, Path(remote).name)
                 if got is None:
@@ -1317,7 +1488,7 @@ def _fetch_one_impl(f: dict) -> dict:
                         )
                     else:
                         last = (
-                            f"BaiduPCS-Go không tạo file nào (exit {cp.returncode}) — "
+                            f"BaiduPCS-Go không tạo file nào (exit {rc}) — "
                             "đường dẫn remote sai, hoặc BDUSS/STOKEN hết hạn"
                         )
                 else:
@@ -1388,8 +1559,10 @@ def _fetch_one_impl(f: dict) -> dict:
                     # Mảnh dở Ở LẠI staging: đây là tiến độ. Commit ngay để nó
                     # sống qua container chết (thay vì đợi chu kỳ định kỳ).
                     _commit_volume("giữ mảnh dở giữa các attempt")
+            except _Stalled as exc:
+                last = f"Baidu cắt băng thông: {exc} → thử lại (resume từ chỗ dở)"
             except subprocess.TimeoutExpired:
-                last = f"BaiduPCS-Go treo quá {POLICY.subprocess_timeout}s (0B/s)"
+                last = f"BaiduPCS-Go treo quá {tmo:.0f}s (0B/s)"
             except subprocess.CalledProcessError as exc:
                 last = f"BaiduPCS-Go exit {exc.returncode}"
             except Exception as exc:  # kể cả OSError/EXDEV nếu còn sót đường nào
@@ -1403,13 +1576,20 @@ def _fetch_one_impl(f: dict) -> dict:
         # chạy SAU (container khác) resume thay vì tải lại từ 0. Bản dùng /tmp
         # không thể làm điều này vì container chết là mất luôn thư mục.
         if tmpdir.exists():
-            kept = sum(p.stat().st_size for p in tmpdir.rglob("*") if p.is_file())
-            if kept:
-                print(f"[staging] giữ {_human(kept)} ở {tmpdir} để lần sau resume")
+            kept_bytes = _dir_bytes(tmpdir)
+            if kept_bytes:
+                print(f"[staging] giữ {_human(kept_bytes)} ở {tmpdir} để lần sau resume")
                 _commit_volume("giữ mảnh dở")
 
     # Lỗi #5: KHÔNG raise. Exception lọt ra .map() sẽ cancel mọi task anh em
     # ("Runner terminated" ×15 trong log) và vứt hết file đang tải dở.
+    #
+    # `partial` KHÁC `error`: file chỉ dở vì hết ngân sách thời gian, không phải
+    # vì nguồn hỏng. Gộp hai thứ này làm báo cáo sai — người đọc tưởng phải sửa
+    # gì đó, trong khi việc cần làm chỉ là chạy lại.
+    if budget_out:
+        return {"remote": remote_rel, "local": str(local), "status": "partial",
+                "error": last, "size": 0, "kept_bytes": kept_bytes}
     return {"remote": remote_rel, "local": str(local), "status": "error",
             "error": last, "size": 0}
 
@@ -1421,7 +1601,10 @@ def _fetch_one_impl(f: dict) -> dict:
     # max_containers là fix của lỗi #3: bản cũ không đặt nên .map() bung ~26
     # container, tự làm Baidu throttle xuống 0B/s. retries=0 vì retry nằm trong
     # vòng lặp thủ công — exception lọt ra .map() sẽ huỷ cả đợt (lỗi #5).
-    timeout=POLICY.fetch_attempts * POLICY.subprocess_timeout + 1800,
+    # Trần an toàn của NỀN TẢNG. Việc chặn thật nằm ở `_attempt_timeout()`
+    # bên trong (`_FETCH_RESERVE_S` chừa chỗ cho cold start + validate + commit),
+    # vì `FunctionTimeoutError` không bắt được và sẽ giết cả đợt `.map()`.
+    timeout=FETCH_CALL_TIMEOUT_S,
     cpu=0.25,
     max_containers=POLICY.max_containers,
     retries=modal.Retries(max_retries=0),
@@ -1565,6 +1748,10 @@ def local_status() -> None:
     print(f"staging          = {_staging_root()}  (env DIRE_STAGING_DIR ghi đè)")
     print(f"commit định kỳ   = {_commit_interval():g}s khi đang tải")
     print(f"baidu_parallel   = {POLICY.baidu_parallel}  (0 = để BaiduPCS-Go tự quyết)")
+    print(f"ngân sách 1 file = {FETCH_CALL_TIMEOUT_S}s/attempt-budget "
+          f"(chừa {_FETCH_RESERVE_S}s, tối thiểu {_MIN_ATTEMPT_S}s/attempt)")
+    print(f"watchdog treo    = {POLICY.stall_timeout_s}s không lớn thêm → giết (0 = tắt)")
+    print(f"timeout main     = {ORCHESTRATOR_TIMEOUT_S}s")
     print(f"\n{'TIER':<8} {'FILE':>5}  MỤC ĐÍCH")
     print("-" * 78)
     for tier in TIERS:
