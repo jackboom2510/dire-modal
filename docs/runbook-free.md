@@ -143,6 +143,67 @@ Vượt trần ⇒ `main` từ chối tải và in rõ tổng ước lượng. �
 file nào `ls -l` không đọc được size thì bị tính bằng size của file lớn nhất đã
 biết, để guard không vô hiệu đúng lúc cần nó nhất.
 
+### 2b. Tải ở MÁY LOCAL — không dùng Modal, không dùng Volume
+
+Modal có ba trần mà **không đường nào ở trên tránh được**: mỗi attempt 1800 s,
+mỗi lần gọi `fetch_one` 7200 s, mỗi app 20 h ngân sách. Ở 76.6 KiB/s — trần của
+**tài khoản Baidu**, không phải của Modal — thì `e2` (1.94 GB) cần 7.4 h, nên
+file 269 MB *luôn* bị cắt ít nhất một lần.
+
+Máy local không có ba trần đó. Bật terminal, để chạy, Ctrl+C lúc nào cũng được.
+
+```bash
+# Kế hoạch (KHÔNG tải gì) — in size từng file + tổng, đối chiếu trần
+bash tools/local_download.sh
+
+# Tải thật
+DEST=./data/raw bash tools/local_download.sh --mode fetch
+
+# Đường ngắn nhất tới con số đầu tiên (3 file / ~0.40 GB / ~1.5 h)
+TIERS=e2min DEST=./data/raw bash tools/local_download.sh --mode fetch
+
+# Nhiều tier: e2 + checkpoint tác giả (22 file / 3.25 GB / ~12 h)
+TIERS=e2,ckpts DEST=D:/dire-raw bash tools/local_download.sh --mode fetch
+
+# Chỉ vài file cụ thể
+bash tools/local_download.sh --paths e2/lsun_bedroom/lsun_bedroom/iddpm.tar.gz --mode fetch
+```
+
+Tương đương (không cần git checkout `tools/`): `python -m dire_modal.local_fetch`
+với cùng tham số, khi `src/` đã có trong `PYTHONPATH`.
+
+**Cần một lần:**
+
+1. `BaiduPCS-Go` trong `PATH` — https://github.com/qjfoidnh/BaiduPCS-Go/releases
+   ⚠ user free **phải** đặt `max_parallel=1`, `max_download_load=1` trong config.
+   Tăng thread ⇒ Baidu throttle 0 B/s hàng giờ (đo được: k=1 → 76.6 KiB/s,
+   k=2 → 75.0 KiB/s, tức thêm phiên không nhanh hơn).
+2. `BaiduPCS-Go login -bduss=<BDUSS>` (BDUSS lấy từ cookie trình duyệt).
+
+**Khác biệt so với đường Modal — có chủ đích:**
+
+| | Modal | Local |
+|---|---|---|
+| thời gian mỗi attempt | 1800 s (trần nền tảng) | `--stall-s` (mặc định 900 s **không ghi thêm byte nào** thì bỏ) |
+| số attempt | 3 | `--attempts` (mặc định 5) |
+| ngân sách | 20 h/app | `--max-hours` (mặc định 0 = không giới hạn) |
+| song song | 1 container | tuần tự, đúng 1 phiên Baidu |
+| Ctrl+C | SIGTERM → commit Volume | `finally` giữ nguyên staging |
+| kiểm tra file | `fetchcore` | **cùng** `fetchcore` — không có bản sao thứ hai |
+
+Phép kiểm "file đã đúng chưa" dùng chung module `src/dire_modal/fetchcore.py`
+(`_validate_ex`, `SizeEst` + `slack`, `gzip -t` trước size, `_hold` chuyển chứ
+không xoá). Đây là bài học của sự cố 2026-10-25: hai bên trả lời khác nhau cho
+cùng một câu hỏi là đúng thứ sinh ra lỗi.
+
+**Resume**: mảnh dở nằm ở `<DEST>/.staging/baidu_<hash ổn định theo đường dẫn
+remote>/`, cùng nơi BaiduPCS-Go để `.BaiduPCS-Go-downloading`. Chạy lại đúng
+lệnh là tải tiếp từ byte đã có; file đã xong in `[SKIP]`.
+
+**Kiểm lại không cần Baidu**: `_manifest.tsv` ở `<DEST>/` ghi mỗi file đã tải
+(timestamp, remote, local, size, sha256, status) và `.state/validated.json` giữ
+cache `(size, mtime_ns, sha256)`.
+
 ### Tốc độ tải và resume xuyên container
 
 Ba thay đổi, mỗi cái nhắm một chi phí khác nhau:
