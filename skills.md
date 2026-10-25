@@ -88,6 +88,12 @@ modal run -m dire_modal.download::main \
 **Kiểm:** `modal run -m dire_modal.download::verify` (chỉ đọc `/raw`, không tải
 byte nào) phải in định dạng thật cho từng file hỏng.
 
+**Xem Volume có gì:** `modal volume ls <volume> [path]` — nhưng **chỉ một tầng**,
+và khi stdout không phải TTY thì nó chỉ in đường dẫn (mất cột size). Cần cả cây
+thì `modal run -m dire_modal.download::tree --path /raw` (thêm `--flat` để ra
+`<size>\t<path>`). Đừng lặp `modal volume ls` bằng bash: mỗi lần là một round-trip
+gRPC, mà cây `dire-raw` hơn trăm thư mục.
+
 ---
 
 ## Skill 2 — Thêm hoặc sửa một tier
