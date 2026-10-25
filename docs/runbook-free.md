@@ -607,6 +607,33 @@ MSYS_NO_PATHCONV=1 modal run -m dire_modal.download::tree --path /raw/checkpoint
 Đường dẫn **tương đối** (`checkpoints/lsun_adm.pth`) không bị đổi, nên đó cũng là
 một cách tránh.
 
+## Có nên "reset toàn bộ volume" không?
+
+**Không.** Ở 76.6 KiB/s, 1 GB trong Volume đáng giá **~3.8 giờ** băng thông Baidu
+— reset là ném đi chừng đó, và lần chạy sau vẫn dùng đúng code đó.
+
+Cũng không có dữ liệu "bẩn" cần dọn: phép kiểm cũ sai theo hướng **quá khắt
+khe** (loại file tốt), chứ chưa bao giờ nhận file hỏng vào `/raw`. Mọi file đã
+công bố đều đã qua `gzip -t` + `sha256`.
+
+```bash
+bash tools/tree.sh --depth 2
+MSYS_NO_PATHCONV=1 modal run -m dire_modal.download::prune --tiers e2   # dry: chỉ in
+```
+
+`prune` in ra bốn vùng nội bộ, **bốn kết luận khác nhau**:
+
+| Vùng | Là gì | Xoá? |
+|---|---|---|
+| `.staging/` | mảnh dở — **tiến độ tải** | ⛔ **KHÔNG** — lần sau resume từ đây |
+| `.staging/_held/` | file không qua kiểm | ⚠️ kiểm tay (`gzip -t`) trước |
+| `.bench/` | rác của `bench_concurrency` | ✅ xoá được (~775 MB từng nằm im ở đây) |
+| `.state/` | cache `(size, mtime_ns, sha256)` | ✅ xoá được, chỉ khiến lần sau kiểm lại |
+
+Chỉ reset khi **thật sự** cần: (a) muốn chứng minh pipeline chạy từ zero, (b)
+nghi Volume hỏng ở tầng filesystem, (c) muốn đo lại tốc độ trên trạng thái sạch.
+Còn muốn tải lại một file cụ thể thì dùng `--force`, không cần reset.
+
 ## Dừng giữa chừng mà không mất dữ liệu
 
 Không cần "tạm dừng" riêng: **staging trong Volume đã được commit định kỳ**

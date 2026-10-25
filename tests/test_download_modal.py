@@ -594,6 +594,41 @@ def test_validate_size_mismatch_is_retryable():
     assert not v.ok and v.retryable is True, "lệch size là lỗi mạng ⇒ đáng retry"
 
 
+def test_prune_reports_internal_areas_before_anyone_resets_the_volume():
+    """`.bench` là RÁC nhưng `prune` cố ý bỏ qua nó (nội bộ) ⇒ phải IN RA.
+
+    Không in thì 775 MB `.bench` nằm im, và câu hỏi duy nhất còn lại là "reset
+    cả volume?" — tức là xoá luôn 738 MB `.staging` (≈2.7 h tải ở 76.6 KiB/s).
+    """
+    import contextlib
+    import io
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    dl.RAW = Path(_tf.mkdtemp())
+    (dl.RAW / ".bench" / "k1").mkdir(parents=True)
+    (dl.RAW / ".bench" / "k1" / "x.tar.gz").write_bytes(b"b" * 2048)
+    st = dl.RAW / dl.POLICY.dire_staging
+    (st / "baidu_abc").mkdir(parents=True)
+    (st / "baidu_abc" / "real.tar.gz").write_bytes(b"s" * 4096)
+    (st / "_held" / "baidu_abc").mkdir(parents=True)
+    (st / "_held" / "baidu_abc" / "bad.tar.gz").write_bytes(b"h" * 512)
+    (dl.RAW / ".state").mkdir(parents=True, exist_ok=True)
+    (dl.RAW / ".state" / "validated.json").write_text("{}", encoding="utf-8")
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        dl.prune.local(tiers="e2min", mode="dry")
+    out = buf.getvalue()
+
+    assert ".bench" in out and "RÁC" in out, out
+    assert "modal volume rm" in out and "dire-raw" in out, out
+    assert ".staging" in out and "ĐỪNG xoá" in out, out
+    assert "_held" in out, out
+    # `.bench` KHÔNG được lọt vào danh sách file thừa (nó là nội bộ)
+    assert "x.tar.gz" not in out.split("PRUNE")[-1], out
+
+
 # ---------------------------------------------------------------------------
 # Windows / Git Bash: "/raw" bị MSYS2 đổi thành "C:/Program Files/Git/raw"
 # ---------------------------------------------------------------------------

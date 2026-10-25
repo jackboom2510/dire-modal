@@ -58,7 +58,15 @@ from typing import NamedTuple
 
 import modal
 
-from .common import app, baidu_secret, cpu_image, vol_ckpt, vol_raw, vol_shards
+from .common import (
+    RAW_VOLUME,
+    app,
+    baidu_secret,
+    cpu_image,
+    vol_ckpt,
+    vol_raw,
+    vol_shards,
+)
 from .manifest import (
     BAIDU_ROOT,
     NEVER,
@@ -2543,15 +2551,41 @@ def prune(tiers: str = POLICY.default_tiers, mode: str = "dry") -> None:
         total += size
         orphans.append((p, size))
 
+    # --- vùng nội bộ: không phải dữ liệu, cũng KHÔNG phải "file thừa" ---------
+    # `_is_internal()` cố ý loại chúng khỏi danh sách orphan (đem `.staging` đi
+    # `gzip -t` thì lúc nào cũng "hỏng"), nhưng im lặng về chúng thì có hại:
+    # `.bench` từng chiếm 775 MB mà không lệnh nào nhắc tới. Ba vùng, ba kết
+    # luận khác nhau — nên in riêng, kèm nhãn "xoá được / ĐỪNG xoá".
+    def _dir_stat(d: Path) -> tuple[int, int]:
+        files = [p for p in d.rglob("*") if p.is_file()]
+        return len(files), sum(p.stat().st_size for p in files)
+
     staging = _staging_root()
-    if staging.exists() and staging.is_dir():
-        st_files = [p for p in staging.rglob("*") if p.is_file()]
-        st_bytes = sum(p.stat().st_size for p in st_files)
-        if st_files:
-            print(f"\n[staging] {staging}: {len(st_files)} mảnh dở · {_human(st_bytes)}")
-            print("  Đây là TIẾN ĐỘ tải dở, không phải rác — lần chạy sau sẽ resume.")
-            print("  Chỉ xoá khi chắc chắn không tải lại: rm -rf "
-                  f"{staging}")
+    n_st, b_st = _dir_stat(staging) if staging.is_dir() else (0, 0)
+    held = staging / "_held"
+    n_hd, b_hd = _dir_stat(held) if held.is_dir() else (0, 0)
+
+    if n_st - n_hd:
+        print(f"\n[internal] .staging: {_human(b_st - b_hd)} · {n_st - n_hd} mảnh dở"
+              "  ← TIẾN ĐỘ, ĐỪNG xoá (lần chạy sau resume từ đây)")
+    if n_hd:
+        print(f"[internal] .staging/_held: {_human(b_hd)} · {n_hd} file"
+              "  ← file không qua kiểm, KHÔNG bị xoá tự động")
+        print("            kiểm tay (`gzip -t`) rồi xoá nếu chắc là rác")
+    bench = RAW / ".bench"
+    if bench.is_dir():
+        n_b, b_b = _dir_stat(bench)
+        if n_b:
+            print(f"[internal] .bench: {_human(b_b)} · {n_b} file"
+                  "  ← RÁC của bench_concurrency, xoá được")
+            print(f"            MSYS_NO_PATHCONV=1 modal volume rm {RAW_VOLUME} "
+                  "/raw/.bench -r")
+    state = _state_dir()
+    if state.is_dir():
+        n_s, b_s = _dir_stat(state)
+        if n_s:
+            print(f"[internal] .state: {_human(b_s)} · {n_s} file"
+                  "  ← cache kiểm tra, xoá được (lần sau kiểm lại từ đầu)")
     print(f"\n{'='*78}\nPRUNE — tier {tiers!r} giữ {len(keep)} file\n{'='*78}")
     if not orphans:
         print("  Không có file thừa.")
