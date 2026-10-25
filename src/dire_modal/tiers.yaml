@@ -63,11 +63,17 @@ fetch_attempts: 3
 # ⚠ Giá trị này KHÔNG còn là timeout hiệu lực: `_attempt_timeout()` cắt nó theo
 # ngân sách còn lại của lần gọi (xem `download.FETCH_CALL_TIMEOUT_S`), và
 # `stall_timeout_s` cắt sớm hơn nếu phiên treo hẳn. Nó là TRẦN cho một attempt.
-# 5400s là cần thiết, không phải dư: tar lớn nhất đo được là 692.8 MB
-# (dire/test/imagenet/lsun_bedroom/adm.tar.gz), ở 67 KB/s thì cần ~2.9 giờ —
-# nghĩa là file đó CÓ THỂ cần nhiều hơn 1 attempt. Thư mục tmp ổn định theo
-# hash đường dẫn remote nên attempt sau resume được mảnh dở, không tải lại.
-subprocess_timeout: 5400
+# 2026-10-25: hạ 5400 → 1800. Lý do là số ĐO, không phải cảm giác:
+#   * log thật cho 24.25 KB/s và 48.49 KB/s cho một phiên (không phải 67 KB/s).
+#   * tar lớn nhất là 692.8 MB. Ở 48 KB/s nó cần 4.0 giờ — KHÔNG attempt nào
+#     tải xong trong một lần, bất kể đặt 5400 hay 1800.
+#   * Vậy resume mới là cơ chế chính, và attempt ngắn hơn = nhiều lần lấy phiên
+#     mới hơn. Ở 5400s, một phiên đã bị throttle phải chờ 90 phút mới được thử
+#     lại; ở 1800s là 30 phút.
+#   * `stall_timeout_s` vẫn cắt sớm hơn nhiều khi phiên treo hẳn (0 B/s).
+# Thư mục staging ổn định theo hash đường dẫn remote nên attempt sau resume được
+# mảnh dở, không tải lại từ 0.
+subprocess_timeout: 1800
 
 # Giết BaiduPCS-Go nếu file trong staging không lớn thêm trong N giây.
 #

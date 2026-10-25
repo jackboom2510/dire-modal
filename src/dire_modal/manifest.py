@@ -377,7 +377,10 @@ class Policy:
     max_gb: float = 25.0
     max_containers: int = 2
     fetch_attempts: int = 3
-    subprocess_timeout: int = 5400
+    # Trần cho MỘT attempt. Hạ từ 5400 → 1800 sau khi log thật cho thấy băng
+    # thông chỉ 24–48 KB/s: ở tốc độ đó không attempt nào tải xong file 692 MB,
+    # nên resume là cơ chế chính và attempt ngắn = nhiều lần lấy phiên mới hơn.
+    subprocess_timeout: int = 1800
     # --- tải: tốc độ + resume xuyên container ------------------------------
     # 0 = KHÔNG truyền cờ -p (mặc định của BaiduPCS-Go). >0 = số kết nối song
     # song CHO MỘT FILE. Baidu throttle theo phiên, nên nhiều kết nối có thể

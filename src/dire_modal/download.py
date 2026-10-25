@@ -541,7 +541,10 @@ def _is_internal(rel: str) -> bool:
     giữ tiến độ tải.
     """
     first = rel.replace("\\", "/").lstrip("/").split("/", 1)[0]
-    return first in {POLICY.dire_staging, ".staging", ".state"}
+    # `.bench` là thư mục nháp của `bench_concurrency`: tải lại vài MB để đo
+    # tốc độ, xong là xoá. Nếu không loại ở đây thì `prune` sẽ đề nghị xoá nó
+    # (vô hại) và `verify` đem file dở đi `gzip -t` (báo hỏng sai).
+    return first in {POLICY.dire_staging, ".staging", ".state", ".bench"}
 
 
 def _staging_root() -> Path:
@@ -954,10 +957,12 @@ def _clamp_concurrency(raw: int) -> int:
     return max(1, min(int(raw or 0), 8))
 
 
-def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0) -> None:
+def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
+             force: bool = False) -> None:
     """Ruột của cả ``plan`` và ``main`` — tránh hai bản logic lệch nhau.
 
     ``concurrency`` > 0 ghi đè ``max_containers`` trong policy (clamp [1, 8]).
+    ``force`` tải lại cả file đã có trong cache — chỉ dùng khi nghi cache sai.
     """
     ents = resolve_many(tiers)
     if not ents:
@@ -1006,9 +1011,42 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0) ->
         print("\n[DRY-RUN] Chưa tải gì. Tải thật: thêm --mode fetch")
         return
 
+    # --- đừng bật container cho việc đã xong ------------------------------
+    # Trước đây payload dựng cho MỌI file rồi mới `.map()`: file đã có vẫn được
+    # giao cho một container, container đó bật lên, mount Volume, chạy
+    # `_validate_cached` rồi in [SKIP]. Đúng nhưng tốn cold start cho mỗi file
+    # và làm `plan` không trả lời được câu "có cần chạy không".
+    #
+    # Ở đây chỉ dùng CACHE (`_cached_valid`), không gọi `_validate_cached`: bản
+    # đầy đủ đọc cả file để `gzip -t` + `sha256`, tức 2 lần đọc 3.39 GB ngay
+    # trong container orchestrator. Cache trượt thì giao cho worker — nó có
+    # đúng phép kiểm đó và sẽ tự [SKIP].
+    todo, have = [], []
+    for f in files:
+        p_local = RAW / f.local
+        exp = sizes.get(f.remote) or 0
+        if force:
+            todo.append(f)
+        elif p_local.exists() and p_local.stat().st_size > 0 and (
+            _cached_valid(f.local, p_local, exp) is not None
+        ):
+            have.append(f)
+        else:
+            todo.append(f)
+
+    if have:
+        print(f"\n[skip] {len(have)}/{len(files)} file đã có & hợp lệ (theo cache)"
+              f" → không bật container cho chúng")
+    if not todo:
+        print("\n[done] Không còn file nào cần tải. Không bật container tải nào.")
+        print("       (Kiểm lại toàn bộ nếu cần: --force, hoặc chạy ::verify)")
+        return
+    if force:
+        print(f"[force] tải lại cả {len(files)} file, bỏ qua cache kiểm tra")
+
     payloads = [
         {"remote": f.remote, "local": f.local, "expected_size": sizes.get(f.remote) or 0}
-        for f in files
+        for f in todo
     ]
     workers = _clamp_concurrency(concurrency or POLICY.max_containers)
     print(f"\n[fetch] {len(payloads)} file · tối đa {workers} container song song · "
@@ -1366,6 +1404,7 @@ def main(
     max_gb: float = POLICY.max_gb,
     mode: str = "plan",
     concurrency: int = 0,
+    force: bool = False,
 ) -> None:
     """Lên kế hoạch rồi (tuỳ chọn) tải.
 
@@ -1383,6 +1422,7 @@ def main(
         tiers, max_gb,
         do_fetch=mode.strip().lower() in {"fetch", "commit", "yes"},
         concurrency=concurrency,
+        force=force,
     )
 
 
@@ -1617,6 +1657,135 @@ def fetch_one(f: dict) -> dict:
     inline trong container hiện tại thì gọi :func:`_fetch_one_impl`.
     """
     return _fetch_one_impl(f)
+
+
+def _bytes_per_sec(total_bytes: int, seconds: float) -> float:
+    """Băng thông thực (B/s). Trả 0 khi không đo được — không bịa số."""
+    if seconds <= 0 or total_bytes <= 0:
+        return 0.0
+    return total_bytes / seconds
+
+
+def _bench_payloads(files: list[File], k: int) -> list[dict]:
+    """Payload cho một lượt đo: mỗi lượt có thư mục riêng để KHÔNG dính cache.
+
+    Phải tải lại thật thì mới đo được băng thông; trỏ vào ``/raw/.bench/k<k>/``
+    nên lần đo sau không [SKIP] vì file đã có.
+    """
+    return [
+        {"remote": f.remote, "local": f".bench/k{k}/{f.remote}", "expected_size": 0}
+        for f in files
+    ]
+
+
+def _bench_report(rows: list[dict]) -> list[str]:
+    """Bảng so sánh. Tách khỏi I/O để test được mà không cần GPU/Baidu."""
+    out = [
+        "",
+        "=" * 78,
+        "ĐO SONG SONG — bytes/s thực",
+        "=" * 78,
+        f"  {'k':>3} {'file':>5} {'giây':>8} {'MB':>8} {'KB/s':>10} {'KB/s/file':>10}",
+    ]
+    for r in sorted(rows, key=lambda x: x["concurrency"]):
+        out.append(
+            f"  {r['concurrency']:>3} {r['ok']:>5} {r['seconds']:>8.1f} "
+            f"{r['bytes'] / 1024**2:>8.1f} {r['bytes_per_sec'] / 1024:>10.1f} "
+            f"{r['bytes_per_sec'] / 1024 / max(r['concurrency'], 1):>10.1f}"
+        )
+    ok_rows = [r for r in rows if r["bytes_per_sec"] > 0]
+    if len(ok_rows) >= 2:
+        best = max(ok_rows, key=lambda r: r["bytes_per_sec"])
+        slow = min(ok_rows, key=lambda r: r["bytes_per_sec"])
+        out.append("")
+        out.append(
+            f"  → nhanh nhất: k={best['concurrency']} "
+            f"({best['bytes_per_sec'] / 1024:.1f} KB/s)"
+        )
+        if best["concurrency"] != slow["concurrency"]:
+            ratio = best["bytes_per_sec"] / slow["bytes_per_sec"]
+            out.append(f"    so với k={slow['concurrency']}: {ratio:.2f}×")
+            if slow["concurrency"] > best["concurrency"]:
+                out.append(
+                    "    ⚠ nhiều container CHẬM HƠN: Baidu throttle theo số phiên"
+                    " của tài khoản ⇒ hạ max_containers."
+                )
+    out.append("")
+    out.append("  Cách đọc: nếu k=2 không nhanh hơn k=1 thì `max_containers: 2` đang")
+    out.append("  tự làm hại. Đây là con số DUY NHẤT quyết định giá trị đó.")
+    return out
+
+
+@app.function(
+    image=cpu_image,
+    secrets=[baidu_secret],
+    volumes={"/raw": vol_raw},
+    # Mỗi lượt đo có ngân sách riêng; số lượt = len(ks)
+    timeout=ORCHESTRATOR_TIMEOUT_S,
+)
+def bench_concurrency(tiers: str = "e2", limit: int = 2, ks: str = "1,2") -> None:
+    """Đo băng thông thật ở các mức song song khác nhau.
+
+    ``modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2``
+
+    Vì sao cần: ``max_containers: 2`` trong ``tiers.yaml`` được suy ra từ **một**
+    quan sát (67.36 KB/s cho một phiên, và 26 phiên ⇒ 0 B/s). Nhưng Baidu
+    throttle theo **số phiên của tài khoản**, nên hai phiên có thể *chậm hơn*
+    một phiên. Chừng nào chưa đo, giá trị đó là phỏng đoán.
+
+    Mỗi lượt tải lại THẬT vào ``/raw/.bench/k<k>/`` (không dính cache), đo tổng
+    byte nhận được chia cho thời gian, rồi xoá. Chọn ``--limit`` nhỏ: đây là
+    phép đo, không phải việc tải dữ liệu.
+    """
+    _baidu_login()
+    ents = resolve_many(tiers)
+    files, _, _ = expand(ents, lister=lambda d: list(_ls_sizes(d)))
+    picked = files[: max(1, int(limit))]
+    if not picked:
+        raise SystemExit(f"[bench] tier {tiers!r} không có file nào để đo")
+
+    print(f"[bench] {len(picked)} file/lượt · các mức k: {ks}")
+    for f in picked:
+        print(f"        {f.remote}")
+
+    rows: list[dict] = []
+    for k in [max(1, min(int(x), 8)) for x in ks.split(",") if x.strip()]:
+        root = RAW / ".bench" / f"k{k}"
+        shutil.rmtree(root, ignore_errors=True)
+        payloads = _bench_payloads(picked, k)
+        t0 = time.time()
+        res = list(
+            fetch_one.with_options(max_containers=k).map(payloads, order_outputs=False)
+        )
+        dt = time.time() - t0
+        got = [r for r in res if r["status"] in {"ok", "skipped"}]
+        total = sum(int(r.get("size") or 0) for r in got)
+        rows.append(
+            {
+                "concurrency": k,
+                "ok": len(got),
+                "attempted": len(res),
+                "seconds": dt,
+                "bytes": total,
+                "bytes_per_sec": _bytes_per_sec(total, dt),
+            }
+        )
+        shutil.rmtree(root, ignore_errors=True)
+        vol_raw.commit()
+
+    for line in _bench_report(rows):
+        print(line)
+    out = RAW / "_bench_concurrency.json"
+    out.write_text(
+        json.dumps(
+            {"tiers": tiers, "files": [f.remote for f in picked], "rows": rows},
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    vol_raw.commit()
+    print(f"\n[bench] → {out}")
 
 
 @app.function(

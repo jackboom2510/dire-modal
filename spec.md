@@ -252,16 +252,25 @@ một phép so chưa được kiểm.
 
 | Thành phần | Trạng thái | Việc phải làm |
 |---|---|---|
-| `eval.py::eval_one` | `NotImplementedError` | Port: nạp ResNet50 từ `vendor/networks/resnet.py`, dataloader shard, trả metric |
-| `eval.py::main` | có khung `.starmap` | Thêm ghi CSV + `run.json`, gom theo experiment_id |
+| `eval.py::eval_one` | **xong (M1)** | Nạp ResNet50 từ `vendor/networks/resnet.py`, đọc **tar gốc `/raw`**, trả ACC/AP/TPR@5%FPR |
+| `eval.py::main` | **xong (M1)** | Gom theo `branch`+`generator`, ghi CSV + `run.json`, in bảng ra log |
 | `compute_dire.py` | chưa chạy | FR-2 sửa tới khi AC-2.1/2.2 đạt |
 | `aero.py` | **chưa có** | Bọc AEROBLADE: nạp AE, tính khoảng cách, trả điểm thô |
 | `fusion.py` | **chưa có** | Rank-normalise + chọn trọng số trên val |
 | `train.py` | `NotImplementedError` | **Ngoài phạm vi** (N1) — chỉ ghi chú |
-| `vendor/utils/datasets.py` | chưa vendor | FR-1 cần `create_dataloader`; hoặc tự viết loader từ shard |
+| `vendor/utils/datasets.py` | chưa vendor | **Không cần nữa**: `eval.py` tự dựng pipeline 256→224→Normalize và đọc tar trực tiếp |
 
 > Ghi chú: `vendor/utils/eval.py` tính ACC/AP/R_ACC/F_ACC nhưng **không** có
-> TPR@5%FPR. Phải thêm hàm đó (dùng `roc_curve`) để so được với AEROBLADE.
+> TPR@5%FPR. `eval.py` cài đặt metric bằng Python thuần và **đã đối chiếu 500 ca
+> ngẫu nhiên** (kể cả score trùng) với `sklearn`: khớp tuyệt đối cả
+> `average_precision_score` và `roc_curve(drop_intermediate=False)`. Dùng
+> `drop_intermediate=False` là cố ý — mặc định `True` của sklearn bỏ các điểm
+> thẳng hàng, và tại một ngân sách FPR cố định điểm bị bỏ có thể là điểm tốt nhất.
+>
+> Ghi chú 2: eval đọc **tar gốc `/raw`**, không đọc `/shards`, vì `pack_one` bản
+> cũ đặt shard vào `/shards/{split}/{tên tar}` nên ba nhánh khác nhau có
+> `real.tar.gz` ghi vào cùng một thư mục (đã sửa bằng `pack.shard_group`, nhưng
+> eval vẫn không phụ thuộc `pack` để ít bước hơn).
 
 ## 10. Hợp đồng dữ liệu
 
@@ -334,7 +343,7 @@ Test code phải viết **trước** phần lớn nhất của spec: schema CSV 
 | Mốc | Nội dung | Chi phí ước tính | Cổng |
 |---|---|---|---|
 | **M0** | Chép F7/F8 từ 2 PDF vào §5 (số bảng + trang); chốt lại tiêu chí S2/S4 | $0 | — |
-| **M1** | Port `eval.py` + TPR@5%FPR + ghi CSV/run.json → **FR-1, FR-7** | < $1 | S2, S6 |
+| **M1** ✅ | Port `eval.py` + TPR@5%FPR + ghi CSV/run.json → **FR-1, FR-7** | < $1 | S2, S6 — **code xong**, số chưa có (cần chạy `eval::main` trên Modal) |
 | **M2** | `compute_dire` sửa tới khi khớp map tác giả → **FR-2** | ~$1 | S3 |
 | **M3** | Bọc AEROBLADE → **FR-3** | ~$2 | S4 |
 | **M4** | Format bias (FR-4) + fusion (FR-5) | ~$5 | S5 |

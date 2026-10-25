@@ -25,11 +25,12 @@ lời được "cái này tốn bao nhiêu credit".
 | `src/dire_modal/tiers.yaml` | **Nguồn sự thật của policy.** Không phải `configs/tiers.yaml` |
 | `src/dire_modal/compute_dire.py` | DIRE bằng DDIM inversion + guard chi phí GPU |
 | `src/dire_modal/pack.py` | `/raw` → WebDataset shards |
-| `src/dire_modal/train.py`, `eval.py`, `bench.py`, `archive.py` | Stage 3–6 |
+| `src/dire_modal/eval.py` | **Đã port (M1)**: eval 1 checkpoint trên mọi cặp (real, generator), ghi CSV + `run.json`. Đọc **tar gốc trong `/raw`**, không đọc `/shards` (xem `pack.shard_group`) |
+| `src/dire_modal/train.py`, `bench.py`, `archive.py` | Stage 3–6 |
 | `src/dire_modal/common.py` | `app`, image, Volume, Secret — import từ đây |
 | `tools/` | Script thuần stdlib: `free_quota.py`, `storage_cost.py` |
 | `scripts/00..07_*.sh` | Cổng tuần tự; `07_check_imports.sh` là cổng 0 |
-| `tests/` | 80 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
+| `tests/` | 117 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
 | `docs/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
@@ -63,7 +64,7 @@ cách phòng ở [instructions.md](instructions.md).
 Chạy tay từng phần:
 
 ```bash
-python3 -m pytest tests/ -q                     # 80 test (2 skip nếu thiếu modal)
+python3 -m pytest tests/ -q                     # 117 test (2 skip nếu thiếu modal)
 python3 -m pytest tests/test_real_modal_import.py -q   # cần `pip install modal`
 python3 -m pyflakes src/dire_modal/download.py tests/
 bash -n scripts/*.sh

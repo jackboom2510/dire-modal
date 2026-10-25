@@ -27,7 +27,8 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không 
 | PR #9 *(đang mở)* | Staging trong Volume + rename thay vì copy + cache kiểm tra | resume xuyên container; bỏ 6.8 GB đọc lại/lần |
 | PR #9 *(đang mở)* | Bộ tài liệu agent: `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md` | 10 test canh link/entrypoint/đường dẫn trong tài liệu |
 | PR #9 *(đã merge)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
-| PR này | Ngân sách thời gian + watchdog 0B/s + manifest bền từng file | 5 test mới; tái hiện đúng `FunctionTimeoutError` 18 000s từ log thật |
+| PR #10 | Ngân sách thời gian + watchdog 0B/s + manifest bền từng file | 5 test mới; tái hiện đúng `FunctionTimeoutError` 18 000s từ log thật |
+| PR này | Lọc file đã có trước `.map()` · `subprocess_timeout` 5400→1800 · `bench_concurrency` · **port `eval.py` (M1 của SPEC-001)** · sửa `pack` làm mất nhánh | 117 test; AP/TPR khớp sklearn trên 500 ca ngẫu nhiên |
 
 Kết luận dữ liệu quan trọng (chốt bằng `probe_pair` trên dữ liệu thật):
 
@@ -113,20 +114,33 @@ viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu
 **Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
 truy được về một `run.json`.
 
-### 8. Còn lại sau bản vá timeout (từ log 2026-10-25)
+### 8. Chạy phép đo băng thông — mã đã có, SỐ thì chưa
 
-- **Băng thông là nút cổ chai thật.** Log đo được **24.25 KB/s** và **48.49 KB/s**
-  cho một phiên — chậm hơn con số 67.36 KB/s mà `tiers.yaml` dùng để suy ra
-  `max_containers: 2`. Ở 24 KB/s thì `e2,e4` (3.39 GB) cần **~40 giờ** một phiên,
-  ~20 giờ với 2 container. Cần đo lại: `--concurrency 1` có nhanh hơn 2 không
-  (Baidu throttle theo **số phiên của tài khoản**, nên 2 phiên có thể chậm hơn 1).
-- **`subprocess_timeout: 5400` nên hạ.** Nay attempt bị cắt theo ngân sách và
-  watchdog cắt khi treo, nhưng 90 phút vẫn là trần quá dài cho một phiên đã chết:
-  file lớn nhất 692.8 MB cần 2.9 giờ ở 67 KB/s — ở tốc độ đo được thì **không
-  attempt nào tải xong nổi**, nên resume mới là cơ chế chính. Attempt ngắn hơn
-  (1200–1800s) cho nhiều cơ hội đăng nhập lại phiên hơn.
-- **Chưa kiểm `-p N`** (`baidu_parallel`): 0 = để BaiduPCS-Go tự quyết. Chưa đo
-  N nào nhanh nhất.
+`download::bench_concurrency` đã viết xong và test canh phần tính toán, nhưng
+**chưa chạy lần nào trên Modal** (sandbox soạn code không có token). Nghĩa là
+`max_containers: 2` vẫn là **phỏng đoán** từ một quan sát duy nhất.
+
+```bash
+modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2
+```
+
+Đọc kết quả: nếu `k=2` không nhanh hơn `k=1` thì hạ `max_containers` xuống 1.
+Con số log thật cho thấy việc này rất đáng làm: **24.25 KB/s** và **48.49 KB/s**
+cho một phiên, chậm hơn 67.36 KB/s mà policy hiện dựa vào. Ở 24 KB/s thì `e2,e4`
+(3.39 GB) cần **~40 giờ** một phiên, ~20 giờ với 2 container.
+
+Còn treo: **chưa kiểm `-p N`** (`baidu_parallel`); 0 = để BaiduPCS-Go tự quyết.
+
+### 9. M2 của SPEC-001 — chứng minh `compute_dire` khớp map tác giả
+
+M1 (port `eval.py`) đã xong. Việc tiếp theo **không đổi**: `compute_dire.py` vẫn
+chưa từng chạy, và nó là điều kiện CHẶN cho FR-4 (format bias) + FR-6
+(robustness). Phải có `compute_dire::equivalence` trước khi công bố bất kỳ số nào
+từ DIRE map tự tính.
+
+Đường rẻ nhất để có kết quả thật trước M2: chạy `eval::main --tiers e2` trên
+`lsun_adm.pth` vốn đã có trong Volume — chỉ ResNet50 inference, không cần ADM,
+không cần GPU mạnh. Đó là con số đầu tiên chứng minh đường eval đúng.
 
 ## Việc đã quyết là KHÔNG làm
 

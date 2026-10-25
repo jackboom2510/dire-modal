@@ -48,12 +48,10 @@ DOCS = [
 # Mỗi mục phải kèm lý do, và `plan.md` phải đang theo dõi nó.
 KNOWN_MISSING = {
     "tools/iaas_cost.py": "được docs/iaas-options.md nhắc; plan.md mục 1 đang theo dõi",
-    # 5 test dưới đây do spec.md §15 TRUY VẾT yêu cầu — phải viết cùng mốc tương ứng.
-    "tests/test_eval_contract.py": "spec.md FR-1, mốc M1; plan.md đang theo dõi",
+    # test_eval_contract / test_run_json đã có (mốc M1 xong) ⇒ đã xoá khỏi đây.
     "tests/test_dire_equivalence.py": "spec.md FR-2, mốc M2; plan.md đang theo dõi",
     "tests/test_aero_sign.py": "spec.md FR-3, mốc M3; plan.md đang theo dõi",
     "tests/test_fusion_no_leak.py": "spec.md FR-5, mốc M4; plan.md đang theo dõi",
-    "tests/test_run_json.py": "spec.md FR-7, mốc M1; plan.md đang theo dõi",
 }
 
 # Entrypoint được `spec.md` nhắc nhưng CHƯA viết. Mỗi mục phải:

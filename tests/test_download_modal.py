@@ -1173,3 +1173,221 @@ if __name__ == "__main__":
             traceback.print_exc()
     print(f"\n  {ok}/{len(tests)} test đạt")
     sys.exit(0 if ok == len(tests) else 1)
+
+
+# ---------------------------------------------------------------------------
+# 6. Đừng bật container cho file đã có
+#     Trước: payload dựng cho MỌI file rồi mới .map() ⇒ mỗi file đã xong vẫn tốn
+#     một container (cold start + mount Volume) chỉ để in [SKIP].
+# ---------------------------------------------------------------------------
+def _cache_entry(path: Path) -> dict:
+    st = path.stat()
+    return {"size": st.st_size, "mtime_ns": st.st_mtime_ns, "sha256": "x",
+            "fmt": "tar (không nén)", "checked": "2026-10-25T00:00:00+00:00"}
+
+
+def _prepare_execute(dl, present: int, monkeypatch_map=None):
+    """Dựng /raw có `present` file đầu của tier e2 + cache hợp lệ cho chúng."""
+    dl.RAW = Path(tempfile.mkdtemp())
+    dl._ls_sizes = lambda _d: {}          # không gọi Baidu cho phần size
+    from dire_modal.manifest import resolve_many, expand
+
+    files, _, _ = expand(resolve_many("e2"))
+    state = {}
+    for f in files[:present]:
+        p = dl.RAW / f.local
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x" * 128)
+        state[f.local] = _cache_entry(p)
+    (dl.RAW / ".state").mkdir(parents=True, exist_ok=True)
+    (dl.RAW / ".state" / "validated.json").write_text(
+        __import__("json").dumps(state), encoding="utf-8"
+    )
+    return files
+
+
+def test_existing_files_are_filtered_before_map():
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    files = _prepare_execute(dl, present=3)
+
+    seen = []
+    dl.fetch_one.map = lambda items, **k: seen.extend(items) or []
+
+    dl._execute("e2", 25.0, do_fetch=True)
+
+    assert len(seen) == len(files) - 3, (
+        f"{len(seen)} payload tới .map(), cần {len(files) - 3} "
+        "(3 file đã có phải bị lọc, không được bật container)"
+    )
+    present_locals = {f.local for f in files[:3]}
+    assert not (present_locals & {p["local"] for p in seen}), "file đã có vẫn bị giao cho container"
+
+
+def test_all_present_means_no_container_at_all():
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    _prepare_execute(dl, present=len(_all_e2(dl)))   # TẤT CẢ file đều đã có
+
+    def boom(*a, **k):
+        raise AssertionError("không được .map() khi mọi file đã có")
+
+    dl.fetch_one.map = boom
+    dl._execute("e2", 25.0, do_fetch=True)   # không được raise
+
+
+def test_force_bypasses_the_skip_filter():
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    files = _prepare_execute(dl, present=3)
+
+    seen = []
+    dl.fetch_one.map = lambda items, **k: seen.extend(items) or []
+
+    dl._execute("e2", 25.0, do_fetch=True, force=True)
+    assert len(seen) == len(files), f"--force phải tải lại cả {len(files)} file, thấy {len(seen)}"
+
+
+def _all_e2(dl):
+    from dire_modal.manifest import resolve_many, expand
+
+    return expand(resolve_many("e2"))[0]
+
+
+# ---------------------------------------------------------------------------
+# 7. Đo `--concurrency` (item còn treo: max_containers=2 là PHỎNG ĐOÁN)
+# ---------------------------------------------------------------------------
+def test_bench_payloads_use_separate_dirs_per_k():
+    dl, _ = install_stub()
+    f = dl.File(remote="dire/test/a/adm.tar.gz", local="dire/test/a/adm.tar.gz")
+    p1 = dl._bench_payloads([f], 1)[0]
+    p2 = dl._bench_payloads([f], 2)[0]
+    assert p1["local"].startswith(".bench/k1/"), p1
+    assert p2["local"].startswith(".bench/k2/"), p2
+    assert p1["local"] != p2["local"], "hai lượt đo không được ghi cùng chỗ"
+    assert dl._is_internal(p1["local"]), ".bench phải là vùng nội bộ"
+
+
+def test_bench_dir_is_excluded_from_prune_and_verify():
+    dl, _ = install_stub()
+    assert dl._is_internal(".bench/k2/dire/test/a/adm.tar.gz")
+    assert not dl._is_internal("dire/test/a/adm.tar.gz")
+
+
+def test_bench_report_flags_slower_multi_container():
+    """k=2 chậm hơn k=1 ⇒ phải CẢNH BÁO hạ max_containers, không chỉ in số."""
+    dl, _ = install_stub()
+    rows = [
+        {"concurrency": 1, "ok": 2, "seconds": 100.0, "bytes": 5_000_000,
+         "bytes_per_sec": 50_000.0},
+        {"concurrency": 2, "ok": 2, "seconds": 400.0, "bytes": 5_000_000,
+         "bytes_per_sec": 12_500.0},
+    ]
+    text = "\n".join(dl._bench_report(rows))
+    assert "CHẬM HƠN" in text, text
+    assert "nhanh nhất: k=1" in text, text
+
+
+def test_bench_report_never_invents_throughput():
+    dl, _ = install_stub()
+    assert dl._bytes_per_sec(0, 10) == 0.0
+    assert dl._bytes_per_sec(1000, 0) == 0.0
+    assert dl._bytes_per_sec(1000, 2) == 500.0
+
+
+def test_subprocess_timeout_is_short_enough_to_give_resume_a_chance():
+    """5400s ⇒ một phiên bị throttle phải chờ 90 phút mới được thử lại.
+
+    Ở tốc độ đo được (24–48 KB/s) không attempt nào tải xong file 692 MB, nên
+    attempt ngắn = nhiều lần lấy phiên mới hơn. Khoá lại để không ai nâng về 5400
+    mà không có số đo mới.
+    """
+    import re
+
+    dl, _ = install_stub()
+    assert dl.POLICY.subprocess_timeout <= 1800, dl.POLICY.subprocess_timeout
+    assert dl.FETCH_CALL_TIMEOUT_S == (
+        dl.POLICY.fetch_attempts * dl.POLICY.subprocess_timeout + 1800
+    )
+    # `tiers.yaml` là nguồn sự thật, NHƯNG giá trị fallback trong `Policy` cũng
+    # phải khớp — nếu lệch, máy nào thiếu yaml sẽ chạy bằng 5400 mà không ai thấy.
+    yaml_text = (SRC / "dire_modal" / "tiers.yaml").read_text(encoding="utf-8")
+    m = re.search(r"^subprocess_timeout:\s*(\d+)", yaml_text, re.M)
+    assert m, "tiers.yaml phải khai báo subprocess_timeout"
+    assert int(m.group(1)) <= 1800, f"tiers.yaml: subprocess_timeout={m.group(1)}"
+    assert int(m.group(1)) == dl.POLICY.subprocess_timeout, "yaml và Policy phải khớp"
+
+    # Giá trị FALLBACK trong dataclass cũng phải đúng: `load_policy()` dùng nó khi
+    # image không đóng gói được tiers.yaml, và khi đó không ai thấy là đang chạy
+    # bằng 5400.
+    import dataclasses
+
+    import dire_modal.manifest as manifest
+
+    default = next(
+        f.default for f in dataclasses.fields(manifest.Policy)
+        if f.name == "subprocess_timeout"
+    )
+    assert default <= 1800, f"Policy.subprocess_timeout mặc định = {default}"
+
+
+# ---------------------------------------------------------------------------
+# 8. `pack` không được làm mất nhánh
+#    Bản cũ: /shards/{split}/{tên tar} ⇒ ba nhánh có `real.tar.gz` ghi vào CÙNG
+#    một thư mục, và `_DONE` của nhánh đầu làm hai nhánh sau bị [SKIP] vĩnh viễn.
+# ---------------------------------------------------------------------------
+def test_pack_groups_keep_branch():
+    dl, _ = install_stub()
+    import importlib
+
+    pack = importlib.import_module("dire_modal.pack")
+    groups = {
+        pack.shard_group(p, "test")
+        for p in (
+            "dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz",
+            "dire/test/lsun_bedroom/imagenet/real.tar.gz",
+            "dire/test/imagenet/lsun_bedroom/real.tar.gz",
+        )
+    }
+    assert len(groups) == 3, f"ba nhánh khác nhau phải ra ba nhóm khác nhau: {groups}"
+    assert groups == {
+        "lsun_bedroom__lsun_bedroom__real",
+        "lsun_bedroom__imagenet__real",
+        "imagenet__lsun_bedroom__real",
+    }, groups
+
+
+def test_pack_one_actually_uses_shard_group():
+    """Test gọi thẳng `shard_group` là CHƯA ĐỦ — `pack_one` phải thật sự dùng nó.
+
+    (`pack_one` là modal.Function nên không gọi được; kiểm bằng AST.)
+    """
+    dl, _ = install_stub()
+    import ast
+
+    tree = ast.parse((SRC / "dire_modal" / "pack.py").read_text(encoding="utf-8"))
+    fn = next(
+        n for n in tree.body
+        if isinstance(n, ast.FunctionDef) and n.name == "pack_one"
+    )
+    called = {
+        n.func.id
+        for n in ast.walk(fn)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+    }
+    assert "shard_group" in called, (
+        "pack_one phải đặt tên shard bằng shard_group(); nếu không, ba nhánh có "
+        "real.tar.gz lại ghi vào cùng /shards/{split}/real/"
+    )
+
+
+def test_pack_groups_are_stable_for_single_level_branch():
+    dl, _ = install_stub()
+    import importlib
+
+    pack = importlib.import_module("dire_modal.pack")
+    assert pack.shard_group("dire/test/celebahq/stargan.tar.gz", "test") == "celebahq__stargan"
+    assert pack.shard_group("dire/train/lsun_bedroom/adm.tar.gz", "train") == "lsun_bedroom__adm"
