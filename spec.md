@@ -107,9 +107,12 @@ Ký hiệu tiêu chí: **Given / When / Then**.
 Hệ thống phải eval được `lsun_adm.pth` trên 16 generator của
 `dire/test/lsun_bedroom/lsun_bedroom/` và xuất bảng ACC/AP từng generator.
 
-- **Given** `/raw` đã có tier `e2` và `/ckpt/pretrained/lsun_adm.pth`
-  **When** chạy lệnh eval
-  **Then** in bảng 16 dòng + dòng tổng, ghi CSV theo §10.
+- **Given** `/raw` đã có tier `e2,ckpts`
+  **When** chạy `bash scripts/01_repro.sh --stage eval`
+  **Then** in bảng 16 dòng + dòng tổng cho từng detector, ghi CSV theo §10.
+- **Ghi chú:** ckpt được tìm ở `/raw/checkpoints/<name>.pth` trước
+  `/ckpt/pretrained/<name>.pth` (`eval::resolve_ckpt`) — không cần copy tay giữa
+  Volume. `lsun_adm.pth` là **detector**, không phải weight diffusion ADM.
 - **Ràng buộc tiền xử lý:** resize 256 → CenterCrop 224 → ToTensor → chuẩn hoá
   `mean=[0.485,0.456,0.406] std=[0.229,0.224,0.225]`. Sai một bước là lệch số.
 - **AC-1.1** ACC trên generator `adm` ≥ **0.99** (khớp CỔNG 8 trong runbook).
@@ -235,16 +238,47 @@ gốc) nhưng phải **cùng ảnh nguồn** — đó là AC-3.1.
 ### 9.2 Vì sao FR-1 rẻ
 
 `dire/` chứa **DIRE map đã tính sẵn** bởi tác giả. Nên tái tạo bảng của họ chỉ
-cần ResNet50 inference: 16 generator × ~2000 ảnh = ~32k ảnh ở 224² → **< 10 phút
-CPU** (không cần GPU), gần như miễn phí. Không cần ADM, không cần diffusion,
-**không train**.
+cần ResNet50 inference, ở 224², trên CPU: **< 10 phút**, gần như miễn phí. Không
+cần ADM, không cần diffusion, **không train**.
+
+**Số ảnh phải đọc là ~17k, không phải 32k** (bản trước ghi sai gấp đôi). Theo
+paper §3.1: mỗi cột generator dùng **chung một bộ 1k ảnh real** (`real.tar.gz`,
+26.6 MB) + 1k ảnh của generator đó. Nhánh `e2` có 16 generator ⇒ 1k real + 16k
+generated ≈ **17k ảnh**, cộng dồn qua 4 detector thì mới là ~68k lượt forward.
+Con số "2000 ảnh/generator" là real+fake của **một** cột, không phải 2000 ảnh
+riêng cho mỗi generator.
+
+**`lsun_adm.pth` (269.4 MB) là DETECTOR ResNet-50, không phải weight diffusion
+ADM.** Weight ADM thật là `lsun_bedroom.pt` (2.5 GB) và **không có trong cây
+Baidu** — vì thế nó nằm trong `NEVER`. Chỉ FR-2/FR-4/FR-6 (tự tính DIRE) mới cần
+weight đó; FR-1/FR-3/FR-5 thì không. Nhầm hai thứ này từng là lỗi trong
+`compute_dire.py`.
 
 Chuỗi lệnh tối thiểu để có con số đầu tiên:
 
 ```bash
-modal run -m dire_modal.download::main --tiers e2min --mode fetch   # 3 file, ~400 MB
-modal run -m dire_modal.eval::main --tiers e2min                    # in CỔNG S2
+bash scripts/01_repro.sh --quick    # e2min → eval → cổng S2
+bash scripts/01_repro.sh            # e2,ckpts → cả 32 ô của Table 2 (mặc định)
 ```
+
+### 9.2b Tier nào phủ bảng nào của paper
+
+| tiers | file / GB | ~giờ @76.6 KiB/s | phủ |
+|---|---|---|---|
+| `e2min` | 3 / 0.40 | 1.5 | 1 ô — cổng S2 |
+| `e2` | 17 / 1.94 | 7.4 | **hàng ADM** (8 cột của Table 2) |
+| **`e2,ckpts`** | **22 / 3.25** | **12.4** | **32 ô của Table 2** (4 detector × 8 generator) |
+| `+ 3 file qua `--paths`` | +0.14 | +0.5 | Table 3 (cross-dataset ImageNet) |
+| Table 4/5/6, hàng baseline `CNNDet*`/`Patchfor*`/`F3Net*` | — | — | ❌ cần **train lại** ⇒ ngoài phạm vi (N1) |
+
+Số tham chiếu của Table 2 nằm ở `src/dire_modal/paper_table2.tsv` (kèm nguồn:
+arXiv:2303.09295v1, Table 2, trang 7). `eval::report` in Δ từng ô và đếm số ô
+khớp — không có bảng tham chiếu thì "tái lập" chỉ là một lời khẳng định.
+
+⚠ Nhánh `e2` có **16 generator**, nhưng Table 2 chỉ có **8 cột** (adm, ddpm,
+iddpm, pndm, sdv1, sdv2, ldm, vqdiffusion). 8 generator còn lại (stylegan,
+projectedgan, diff-projectedgan, diff-stylegan, dalle2, if, midjouney… ) là phần
+**mở rộng của dự án** — không có số paper, không được cộng vào "tái lập paper".
 
 `tiers.yaml` có `max_containers: 1` vì đã đo: trần tải Baidu (~77 KiB/s) là của
 **tài khoản**, không phải của số container (k=1: 76.6, k=2: 75.0 KiB/s).
@@ -316,18 +350,26 @@ experiment_id,detector,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fp
 
 ### 10.3 Lệnh
 
+Mỗi yêu cầu ứng với **một stage** của hai quy trình trong `scripts/`:
+
+| FR | Lệnh |
+|---|---|
+| FR-1 | `bash scripts/01_repro.sh --stage eval` · `bash scripts/02_improve.sh --stage baseline` |
+| FR-2 | `bash scripts/02_improve.sh --stage equivalence` |
+| FR-3 | `bash scripts/02_improve.sh --stage aero` |
+| FR-4 | `bash scripts/02_improve.sh --stage bias` |
+| FR-5 | `bash scripts/02_improve.sh --stage fusion` |
+| FR-6 | `bash scripts/02_improve.sh --stage robustness` |
+| FR-7 | tự động: mỗi lần `eval::main` ghi `run.json`; `eval::report` gộp lại |
+
+Gọi trực tiếp entrypoint cũng được:
+
 ```bash
-# FR-1
-modal run -m dire_modal.eval::main --tiers e2 --exp-id spec001_fr1
-
-# FR-2 (chặn)
-modal run -m dire_modal.compute_dire::equivalence --n 100 --exp-id spec001_fr2
-
-# FR-3
-modal run -m dire_modal.aero::main --tiers e4 --exp-id spec001_fr3
-
-# FR-5
-modal run -m dire_modal.fusion::fit --val-tier e5 --exp-id spec001_fr5
+modal run -m dire_modal.eval::main --tiers e2 --ckpt /raw/checkpoints/lsun_adm.pth --exp-id fr1
+modal run -m dire_modal.eval::report                      # Δ so với Table 2
+modal run -m dire_modal.compute_dire::equivalence --n 100 --exp-id fr2
+modal run -m dire_modal.aero::main --tiers e4 --exp-id fr3
+modal run -m dire_modal.fusion::fit --val-tier e5 --exp-id fr5
 ```
 
 > Các entrypoint `equivalence`, `aero::main`, `fusion::*` **chưa tồn tại** — đó
@@ -345,6 +387,7 @@ modal run -m dire_modal.fusion::fit --val-tier e5 --exp-id spec001_fr5
 | **S4** | FR-3 dấu điểm đúng | AP trên sdv1* | ≥ 0.90 |
 | **S5** | FR-5 không rò test | test: trọng số chỉ phụ thuộc val | pass |
 | **S6** | FR-7 tái lập | chạy lại 1 eval → cùng CSV | diff = 0 |
+| **S7** | Tái lập Table 2 | `bash scripts/01_repro.sh --stage report` → 32 ô có Δ | \|ΔACC\| ≤ 0.5 điểm ở mọi ô |
 
 Test code phải viết **trước** phần lớn nhất của spec: schema CSV (§10.1) và hợp
 đồng CLI (§10.3) kiểm được mà chưa cần GPU.
@@ -359,6 +402,7 @@ Test code phải viết **trước** phần lớn nhất của spec: schema CSV 
 | **M3** | Bọc AEROBLADE → **FR-3** | ~$2 | S4 |
 | **M4** | Format bias (FR-4) + fusion (FR-5) | ~$5 | S5 |
 | **M5** | Robustness (FR-6) + báo cáo tổng | ~$8 | — |
+| Tái lập | Table 2 (4 detector × 8 generator) — **không nằm trong M0–M5**, chỉ là FR-1 chạy 4 lần | ~$0.2 (CPU) | **S2, S7** |
 | **Tổng** | | **≈ $17** | < C5 ($30) |
 
 Thứ tự **không đổi được**: M1 trước M2 (cần eval để đo), M2 trước M4 (FR-2 chặn
@@ -390,7 +434,7 @@ FR-4), M1+M3 trước M4 (fusion cần hai điểm).
 
 | Yêu cầu | Code | Test | Cổng |
 |---|---|---|---|
-| FR-1 | `eval.py` | `tests/test_eval_contract.py` (mới) | S2 |
+| FR-1 | `eval.py` + `scripts/01_repro.sh` | `tests/test_eval_contract.py`, `tests/test_paper_table.py` | S2, S7 |
 | FR-2 | `compute_dire.py::equivalence` | `tests/test_dire_equivalence.py` (mới) | S3 |
 | FR-3 | `aero.py` | `tests/test_aero_sign.py` (mới) | S4 |
 | FR-4 | `compute_dire.py` + `eval.py` | — | S3 |

@@ -7,7 +7,7 @@
 
 ```
 đọc plan.md → chọn 1 việc → viết test trước (hoặc cùng lúc)
-→ code → ./scripts/07_check_imports.sh → commit → PR
+→ code → bash scripts/check.sh → commit → PR
 ```
 
 Không gộp nhiều việc không liên quan vào một PR. Repo này đã merge 8 PR; mỗi PR
@@ -22,7 +22,7 @@ bash -n scripts/*.sh          # nếu có sửa shell
 ```
 
 Nếu sửa chỗ chạm `modal.parameter`, `@app.cls` hoặc import: chạy thêm
-`./scripts/07_check_imports.sh` (hoặc `pytest tests/test_real_modal_import.py`).
+`bash scripts/check.sh` (hoặc `pytest tests/test_real_modal_import.py`).
 
 ## 2. Test phải "cắn"
 

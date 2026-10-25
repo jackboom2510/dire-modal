@@ -127,7 +127,7 @@ Sinh lại số bằng: `python3 tools/storage_cost.py --size-gb 3.39`
 
 ```bash
 # Volume vs R2 qua CloudBucketMount: throughput tuần tự + latency small-file
-./scripts/bench_storage.sh
+bash tools/bench_storage.sh
 
 # Chi phí + điểm hoà vốn, tự đọc manifests/*.tsv nếu có size thật
 python3 tools/storage_cost.py --size-gb 150 --months 12

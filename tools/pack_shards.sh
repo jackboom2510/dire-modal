@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# TIỆN ÍCH — không phải quy trình thực nghiệm (pack shards chỉ cần khi TRAIN,
+# mà dự án không train lại — spec.md N1). Giữ để đo/đóng gói kho.
 set -euo pipefail
 # Pack /raw → /shards (WebDataset) và ĐO benchmark storage + compute.
 # (Bản cũ gọi `dire_modal.bench::throughput` — hàm không tồn tại. Đã sửa.)
@@ -16,7 +18,7 @@ SHARD="${1:-}"
 if [[ -n "$SHARD" ]]; then
   modal run -m dire_modal.bench::main -- --shard-path "$SHARD"
 else
-  echo "[i] không truyền shard path → bỏ qua đo đọc tuần tự (dùng: ./scripts/03_pack_shards.sh /shards/train/lsun_bedroom/adm/shard-000000.tar)"
+  echo "[i] không truyền shard path → bỏ qua đo đọc tuần tự (dùng: bash tools/pack_shards.sh /shards/train/lsun_bedroom/adm/shard-000000.tar)"
   modal run -m dire_modal.bench::main
 fi
 

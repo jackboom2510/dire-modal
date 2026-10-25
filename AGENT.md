@@ -14,8 +14,8 @@ diffusion model sinh ra, chạy trên **Modal**, dữ liệu tải từ **Baidu 
 Đường chạy đã chốt: **eval checkpoint `lsun_adm.pth` của tác giả, KHÔNG train
 lại ResNet50** (`modal run -m dire_modal.download::main --tiers e2min --mode fetch`
 → `modal run -m dire_modal.eval::main --tiers e2min`). Mọi hướng dẫn trong repo
-phải bám theo đường này; `train.py` + `scripts/05_train_repro.sh` là tham chiếu,
-không phải đường chính.
+phải bám theo đường này; `train.py` + `train.py` là tham chiếu,
+không phải đường chính — `scripts/` cố ý **không** có script train.
 
 Ràng buộc chi phối mọi quyết định: **ngân sách compute 0đ, chỉ free tier**.
 Máy local là máy nhẹ — chỉ điều khiển và verify, **không** train, **không** giữ
@@ -31,11 +31,11 @@ lời được "cái này tốn bao nhiêu credit".
 | `src/dire_modal/tiers.yaml` | **Nguồn sự thật của policy.** Không phải `configs/tiers.yaml` |
 | `src/dire_modal/compute_dire.py` | DIRE bằng DDIM inversion + guard chi phí GPU |
 | `src/dire_modal/pack.py` | `/raw` → WebDataset shards |
-| `src/dire_modal/eval.py` | **Đã port (M1)**: eval checkpoint trên mọi cặp (real, generator), ghi CSV + `run.json`, in **CỔNG S2** (`ACC(adm) ≥ 0.99`). `main(ckpt="")` tự tìm `/raw/checkpoints/<name>` rồi `/ckpt/pretrained/<name>`. Đọc **tar gốc trong `/raw`**, không đọc `/shards` (xem `pack.shard_group`) |
+| `src/dire_modal/eval.py` | **Đã port (M1)**: eval checkpoint trên mọi cặp (real, generator), ghi CSV + `run.json`, in **CỔNG S2** (`ACC(adm) ≥ 0.99`). `main(ckpt="")` tự tìm `/raw/checkpoints/<name>` rồi `/ckpt/pretrained/<name>`. Đọc **tar gốc trong `/raw`**, không đọc `/shards` (xem `pack.shard_group`). `eval::report` gộp nhiều lần eval và in Δ so với Table 2 của paper |
 | `src/dire_modal/train.py`, `bench.py`, `archive.py` | Stage 3–6 |
 | `src/dire_modal/common.py` | `app`, image, Volume, Secret — import từ đây |
-| `tools/` | Script thuần stdlib: `free_quota.py`, `storage_cost.py` |
-| `scripts/00..09_*.sh` | Cổng tuần tự; `07_check_imports.sh` là cổng 0. `08_repro_minimal.sh` = chuỗi tái lập pre-trained; `09_bench_mode.sh` = đo `--mode` BaiduPCS-Go |
+| `tools/` | `free_quota.py`, `storage_cost.py` (thuần stdlib) + tiện ích `.sh`: `tree.sh`, `bench_storage.sh`, `bench_baidu_mode.sh`, `measure_dire.sh`, `pack_shards.sh` — **không phải quy trình thực nghiệm** |
+| `scripts/` | **ĐÚNG 2 quy trình**: `01_repro.sh` (tái lập Table 2) · `02_improve.sh` (cải thiện). Kèm `setup.sh` (secret), `check.sh` (CỔNG 0), `lib.sh`. Chi tiết: `scripts/README.md`. Thêm bước ⇒ thêm **stage**, không thêm file thứ ba |
 | `tests/` | 117 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
@@ -78,7 +78,7 @@ cách phòng ở [instructions.md](instructions.md).
 ## Xác minh trước khi nói "xong"
 
 ```bash
-./scripts/07_check_imports.sh     # cổng 0: modal THẬT + toàn bộ test, 0 credit
+bash scripts/check.sh              # cổng 0: modal THẬT + toàn bộ test, 0 credit
 ```
 
 Chạy tay từng phần:
@@ -101,6 +101,7 @@ python3 -m venv /tmp/venv && /tmp/venv/bin/pip install -r requirements-dev.txt
 | Thứ | Ở đâu |
 |---|---|
 | Policy tải + guard GPU | `src/dire_modal/tiers.yaml` (code đọc file **trong package**) |
+| Số tham chiếu của paper (Table 2) | `src/dire_modal/paper_table2.tsv` — **số của tác giả**, không phải của mình; `tests/test_paper_table.py` canh từng ô |
 | Danh sách file của từng tier | `src/dire_modal/manifest.py` (`TIERS`) |
 | Quy ước bí mật / env | `.env.example` |
 | Quyết định kiến trúc | `docs/adr-000*.md` |

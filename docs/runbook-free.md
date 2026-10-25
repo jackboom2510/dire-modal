@@ -22,7 +22,7 @@
 > (3 file ≈ 400 MB) → `eval::main --tiers e2min` (< 2 phút CPU). Đó là toàn bộ
 > "tái lập" theo nghĩa của dự án này: **nạp checkpoint tác giả rồi đo**, không train.
 
-> **Đo trước khi cam kết:** `./scripts/06_measure_dire.sh` cho biết số giờ GPU thật của stage-2.
+> **Đo trước khi cam kết:** `bash tools/measure_dire.sh` cho biết số giờ GPU thật của stage-2.
 > Nếu ước lượng > 30 A100-giờ → **không làm stage-2 toàn bộ**; chỉ làm 2–5k ảnh.
 
 ---
@@ -43,7 +43,7 @@ modal token new
 #   HF_TOKEN                  — https://huggingface.co/settings/tokens (write)
 #   KAGGLE_USERNAME/KAGGLE_KEY— https://www.kaggle.com/settings → Create New Token
 
-./scripts/00_setup_secrets.sh
+bash scripts/setup.sh
 modal secret list                     # ✅ CỔNG 1: thấy baidu-cred, r2-cred, hf-cred, kaggle-cred
 ```
 
@@ -54,7 +54,7 @@ modal secret list                     # ✅ CỔNG 1: thấy baidu-cred, r2-cred
 Chạy **trước** mọi lệnh `modal run`:
 
 ```bash
-./scripts/07_check_imports.sh
+bash scripts/check.sh
 ```
 
 Script tạo `.venv`, cài `modal` **thật** (không stub) từ `requirements-dev.txt`,
@@ -109,17 +109,16 @@ modal run -m dire_modal.download::ls_remote --path /apps
 modal run -m dire_modal.download::audit
 
 # (d) Kế hoạch + SIZE THẬT từ Baidu — KHÔNG tải gì
-modal run -m dire_modal.download::plan --tiers e2,e4
+modal run -m dire_modal.download::plan --tiers e2,ckpts
 
 # (e) Tải thật (mặc định của `main` là dry-run, phải nói rõ --mode fetch)
-./scripts/01_fetch_baidu.sh            # gộp (a)→(d), hỏi xác nhận, rồi tải
-# hoặc:
-modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
+#     Gói (a)→(f): bash scripts/01_repro.sh --stage data
+modal run -m dire_modal.download::main --tiers e2,ckpts --mode fetch
 # đường ngắn nhất tới con số đầu tiên (3 file / ~400 MB / ~1.5 h):
 modal run -m dire_modal.download::main --tiers e2min --mode fetch
 
 # (f) Verify toàn bộ
-./scripts/02_verify.sh                 # ✅ CỔNG 2: "All OK."
+modal run -m dire_modal.download::verify    # ✅ CỔNG 2: "All OK."
 ```
 
 **Phải chạy (c) và (d) trước khi tải.** Hai bước đó gần như miễn phí, và đã
@@ -204,7 +203,7 @@ thành `-p 1`. Upstream BaiduPCS-Go nói rõ: tài khoản miễn phí phải đ
 `max_parallel=1`; tăng lên chỉ nhanh trong vài phút rồi bị throttle, có thể về
 gần 0 tốc độ trên **mọi** client trong nhiều giờ tới nhiều ngày. `--mode` của
 client (`locate|pcs|stream`) đặt được qua `baidu_mode` trong `tiers.yaml`; đo
-bằng `bash scripts/09_bench_mode.sh` (chưa đo).
+bằng `bash tools/bench_baidu_mode.sh` (chưa đo).
 
 **6. Một lần gọi tự chạy nhiều vòng (ngân sách 20 h).**
 
@@ -365,7 +364,7 @@ Giữ file này trong git. Mọi bản sao (HF, Kaggle, R2) sẽ được đối
 ## 4. Pack WebDataset shards (~$1–2)
 
 ```bash
-./scripts/03_pack_shards.sh
+bash tools/pack_shards.sh
 # ✅ CỔNG 4: pack::stats in số ảnh từng generator, tổng khớp với manifest
 ```
 
@@ -454,10 +453,9 @@ modal run -m dire_modal.download::main --tiers e2min --mode fetch
 ## 8. Eval 16 generator (~$0 compute, chỉ CPU)
 
 ```bash
-bash scripts/08_repro_minimal.sh          # e2min: 3 file → eval → in CỔNG S2
-# hoặc đầy đủ 16 generator:
-modal run -m dire_modal.download::main --tiers e2 --mode fetch
-modal run -m dire_modal.eval::main --tiers e2
+bash scripts/01_repro.sh --quick          # e2min: 3 file → eval → in CỔNG S2
+# hoặc đầy đủ 32 ô của Table 2 (4 detector × 8 generator):
+bash scripts/01_repro.sh                  # e2,ckpts → eval → report Δ so với paper
 # ✅ CỔNG 8: bảng ACC cho 16 generator; so với paper (~99% trên ADM-LSUN)
 ```
 
@@ -466,9 +464,25 @@ modal run -m dire_modal.eval::main --tiers e2
 ĐẠT thì đừng đọc bảng AP — kiểm đúng file ckpt, `n_real`/`n_fake`, và tiền xử lý
 (trường `preproc` trong `run.json`).
 
-ResNet50 inference trên CPU: 16 generator × ~2000 ảnh ≈ 32k ảnh ở 224² → dưới 10
-phút, không cần GPU. Chạy song song bằng `.map()` — mỗi cặp 1 container,
-scale-to-zero khi xong.
+ResNet50 inference trên CPU: **~17k ảnh** ở 224² (1k real dùng chung + 16 generator
+× 1k) → dưới 10 phút, không cần GPU. Chạy song song bằng `.map()` — mỗi cặp 1
+container, scale-to-zero khi xong.
+
+### Tier nào phủ bảng nào của paper
+
+| tiers | file / GB | ~giờ @76.6 KiB/s | phủ |
+|---|---|---|---|
+| `e2min` | 3 / 0.40 | 1.5 | 1 ô — cổng S2 |
+| `e2` | 17 / 1.94 | 7.4 | hàng ADM (8 cột của Table 2) |
+| **`e2,ckpts`** | **22 / 3.25** | **12.4** | **32 ô của Table 2** (4 detector × 8 generator) |
+| `+ 3 file qua --paths` | +0.14 | +0.5 | Table 3 (cross-dataset) |
+| Table 4/5/6 + baseline `CNNDet*`/`Patchfor*`/`F3Net*` | — | — | cần **train lại** ⇒ ngoài phạm vi |
+
+Số tham chiếu: `src/dire_modal/paper_table2.tsv` (arXiv:2303.09295v1, Table 2,
+trang 7) — `eval::report` in Δ từng ô và đếm số ô khớp.
+
+⚠ `checkpoints/lsun_adm.pth` là **detector ResNet-50**, KHÔNG phải weight
+diffusion ADM (`lsun_bedroom.pt`, 2.5 GB, trong `NEVER`).
 
 ---
 
@@ -570,4 +584,4 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv       # lưu tr�
 3. ❌ Dựng pipeline phụ thuộc Kaggle (không SSH, mất máy khi hết phiên).
 4. ❌ Coi Modal Volume là backup (không versioning; xoá là mất; vẫn tính phí 4 ngày).
 5. ❌ Đẩy >10 GB lên R2 mà không kiểm tra (`push_r2` sẽ cảnh báo).
-6. ❌ Cam kết stage-2 khi chưa chạy `06_measure_dire.sh` (con số 30–60 A100-h mới là ước lượng).
+6. ❌ Cam kết stage-2 khi chưa chạy `tools/measure_dire.sh` (con số 30–60 A100-h mới là ước lượng).

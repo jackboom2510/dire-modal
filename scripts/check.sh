@@ -15,8 +15,8 @@ set -euo pipefail
 # (stub cũ trả thẳng default, không kiểm annotation), nên phải có bước này.
 #
 # Dùng:
-#   ./scripts/07_check_imports.sh              # tạo .venv lần đầu, rồi chạy
-#   ./scripts/07_check_imports.sh --recreate   # xoá .venv và cài lại
+#   bash scripts/check.sh              # tạo .venv lần đầu, rồi chạy
+#   bash scripts/check.sh --recreate   # xoá .venv và cài lại
 #
 # Không gọi cloud, không cần token, không tốn credit: chỉ import module.
 
@@ -52,4 +52,5 @@ echo "[3/3] pyflakes trên code đã sửa"
 
 echo
 echo "✅ CỔNG 0 đạt — repo import được bằng Modal thật, test xanh."
-echo "   Bước tiếp: modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run"
+echo "   Quy trình 1 (tái lập paper):  bash scripts/01_repro.sh --quick"
+echo "   Quy trình 2 (cải thiện):      bash scripts/02_improve.sh --stage plan"

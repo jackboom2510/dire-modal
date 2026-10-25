@@ -74,7 +74,7 @@ def detect(image: Image.Image | None):
             {"Chưa có model": 1.0},
             "⚠ Model chưa sẵn sàng.\n\n"
             f"Chi tiết: {_state['error']}\n\n"
-            "Cách khắc phục: train detector trên Modal (`./scripts/05_train_repro.sh`), "
+            "Cách khắc phục: dùng checkpoint tác giả (`bash scripts/01_repro.sh --quick`), "
             "rồi upload `dire_resnet50.pth` lên HF Hub và đặt `DIRE_MODEL_REPO` trong Space Settings.",
         )
 

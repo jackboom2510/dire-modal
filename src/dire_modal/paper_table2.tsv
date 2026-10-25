@@ -1,0 +1,70 @@
+# ============================================================================
+# SỐ THAM CHIẾU — Table 2 của paper DIRE, CHỈ khối "DIRE (ours)"
+# ============================================================================
+# Nguồn: Wang et al., "DIRE for Diffusion-Generated Image Detection",
+#        ICCV 2023 (arXiv:2303.09295v1), Table 2 — trang 7.
+#
+# Đây KHÔNG phải số của chúng ta. Nó là số của tác giả, chép nguyên để
+# `eval::report` in được Δ (chênh lệch) và trả lời câu "chúng ta tái lập được
+# chưa". Trộn hai loại số này vào một bảng mà không ghi nguồn là đúng kiểu lỗi
+# mà repo này đã gặp vài lần.
+#
+# Vì sao 4 hàng: mỗi hàng là một DETECTOR khác nhau (train trên subset sinh bởi
+# generator ghi ở cột `ckpt`). Mapping sang cây Baidu của repo:
+#
+#     paper "Training Generation model"   →   checkpoints/lsun_<x>.pth
+#     ADM                                 →   lsun_adm.pth      (detector headline)
+#     PNDM                                →   lsun_pndm.pth
+#     iDDPM                               →   lsun_iddpm.pth
+#     StyleGAN                            →   lsun_stylegan.pth
+#
+# Vì sao 8 cột: Table 2 có đúng 8 generator cho khối DIRE. Nhánh `e2` của repo
+# tải 16 generator (thêm projectedgan, diff-projectedgan, diff-stylegan, dalle2,
+# if, midjouney, stylegan…); những cái ngoài 8 cột này là phần MỞ RỘNG của dự
+# án, không có số paper để so.
+#
+# ⚠ `lsun_adm.pth` là DETECTOR ResNet-50, KHÔNG phải weight diffusion ADM
+#   (`lsun_bedroom.pt`, 2.5 GB, nằm trong `NEVER`). Nhầm hai thứ này là lỗi
+#   từng có trong `compute_dire.py`.
+#
+# Cột: ckpt, generator, acc (%), ap (%). Đơn vị phần trăm như paper in.
+# Hàng có cột `generator` = "avg" là trung bình 8 cột — paper in sẵn (99.9,
+# 98.7, 98.6, 97.9) và `tests/test_paper_table.py` kiểm lại từ 8 ô, nên không
+# thể chép sai một ô mà vẫn khớp avg.
+ckpt	generator	acc	ap
+lsun_adm	adm	100.0	100.0
+lsun_adm	ddpm	100.0	100.0
+lsun_adm	iddpm	100.0	100.0
+lsun_adm	pndm	99.7	100.0
+lsun_adm	sdv1	99.7	100.0
+lsun_adm	sdv2	100.0	100.0
+lsun_adm	ldm	100.0	100.0
+lsun_adm	vqdiffusion	100.0	100.0
+lsun_adm	avg	99.9	100.0
+lsun_pndm	adm	100.0	100.0
+lsun_pndm	ddpm	100.0	100.0
+lsun_pndm	iddpm	100.0	100.0
+lsun_pndm	pndm	100.0	100.0
+lsun_pndm	sdv1	89.4	99.9
+lsun_pndm	sdv2	100.0	100.0
+lsun_pndm	ldm	100.0	100.0
+lsun_pndm	vqdiffusion	100.0	100.0
+lsun_pndm	avg	98.7	100.0
+lsun_iddpm	adm	99.6	100.0
+lsun_iddpm	ddpm	100.0	100.0
+lsun_iddpm	iddpm	100.0	100.0
+lsun_iddpm	pndm	89.7	99.8
+lsun_iddpm	sdv1	99.7	100.0
+lsun_iddpm	sdv2	100.0	100.0
+lsun_iddpm	ldm	99.9	100.0
+lsun_iddpm	vqdiffusion	99.9	100.0
+lsun_iddpm	avg	98.6	100.0
+lsun_stylegan	adm	98.8	100.0
+lsun_stylegan	ddpm	99.8	100.0
+lsun_stylegan	iddpm	99.9	100.0
+lsun_stylegan	pndm	89.6	100.0
+lsun_stylegan	sdv1	95.2	100.0
+lsun_stylegan	sdv2	100.0	100.0
+lsun_stylegan	ldm	100.0	100.0
+lsun_stylegan	vqdiffusion	100.0	100.0
+lsun_stylegan	avg	97.9	100.0

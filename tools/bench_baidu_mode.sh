@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
+# TIỆN ÍCH — đo `--mode` của BaiduPCS-Go, không phải quy trình thực nghiệm.
 # Đo `--mode` của BaiduPCS-Go trên MỘT file nhỏ: locate | pcs | stream.
 #
-#   bash scripts/09_bench_mode.sh
-#   FILE=dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz bash scripts/09_bench_mode.sh
+#   bash tools/bench_baidu_mode.sh
+#   FILE=dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz bash tools/bench_baidu_mode.sh
 #
 # Vì sao: ba mode là BA API khác nhau của Baidu với lịch sử throttle khác nhau.
 # Nếu `pcs` nhanh gấp đôi `locate` thì cả bài toán đổi. Mỗi lần đo ~6 phút với

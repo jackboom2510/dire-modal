@@ -199,7 +199,7 @@ Tuần 4  HF/Kaggle:    mirror dữ liệu + manifest                   (0)
 | **Tự tính DIRE (DDIM-20) cho 200k ảnh** | **30–60 A100-h ≈ $75–150** | ❌ → làm mẫu 2–5k ảnh |
 | Train lại ADM từ đầu | hàng nghìn GPU-h | ❌ (không cần: dùng checkpoint tác giả) |
 
-> **Con số 30–60 h cần được ĐO, không đoán.** Chạy `scripts/06_measure_dire.sh` (xem §7)
+> **Con số 30–60 h cần được ĐO, không đoán.** Chạy `tools/measure_dire.sh` (xem §7)
 > để lấy ảnh/giây thật trên A100, rồi nhân với 200k ảnh.
 
 ### 4.4 Phao cứu sinh khi hết credit
@@ -257,8 +257,8 @@ Sandbox soạn tài liệu **không có modal CLI/đăng nhập** → các số 
 # 1) Đo throughput DIRE (ảnh/giây) trên A100 → suy ra tổng giờ cho stage-2
 modal run -m dire_modal.bench::dire_throughput --n 100 --steps 20
 
-# 2) Đo storage (Volume vs R2 mount) — xem scripts/bench_storage.sh
-./scripts/bench_storage.sh
+# 2) Đo storage (Volume vs R2 mount) — xem tools/bench_storage.sh
+bash tools/bench_storage.sh
 
 # 3) Sổ quota free — nhập giờ đã dùng, in còn lại
 python3 tools/free_quota.py --used modal=8.0 --used kaggle=6.0

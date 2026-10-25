@@ -46,7 +46,7 @@ Chưa có checkpoint/gallery → app **hiện hướng dẫn**, không trả k�
 
 | Thành phần | Trạng thái |
 |---|---|
-| Detector | ⏳ chờ checkpoint từ `./scripts/05_train_repro.sh` |
+| Detector | ⏳ chờ checkpoint tác giả — tải bằng `bash scripts/01_repro.sh --quick` |
 | DIRE viz gallery | ⏳ chờ `modal run -m dire_modal.compute_dire::make_gallery` |
 
 ## Lưu ý về độ chính xác

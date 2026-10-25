@@ -2050,7 +2050,7 @@ def bench_concurrency(tiers: str = "e2", limit: int = 2, ks: str = "1,2",
     đặt ``max_containers: 1``. Chạy lại hàm này chỉ để kiểm khi đổi tài khoản
     (SVIP) hoặc đổi ``baidu_mode``.
 
-    ``--paths`` để đo trên **một file cụ thể** (dùng cho ``scripts/09_bench_mode.sh``):
+    ``--paths`` để đo trên **một file cụ thể** (dùng cho ``tools/bench_baidu_mode.sh``):
     file nhỏ nhất trong cây là 26.57 MB, tức ~6 phút/mức k ở 76.6 KiB/s.
 
     Mỗi lượt tải lại THẬT vào ``/raw/.bench/k<k>/`` (không dính cache), đo tổng

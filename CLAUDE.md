@@ -46,6 +46,8 @@ nhiêu credit". **Không train ResNet50**: nạp `lsun_adm.pth` của tác giả
 - Policy nằm ở `src/dire_modal/tiers.yaml`. `configs/tiers.yaml` chỉ là bảng
   tra cứu, **code không đọc**.
 - Số liệu phải là số đo, hoặc ghi rõ "ước lượng". Không bịa.
+- `scripts/` chỉ có **2 quy trình** (`01_repro.sh`, `02_improve.sh`). Đừng thêm
+  file thứ ba cho một bước: thêm **stage** vào quy trình đã có.
 - Stub Modal phải mô phỏng **hành vi gây lỗi**, không được dễ dãi hơn thật.
 - Không raise ra khỏi `.map()`; trả `{"status": ...}` và retry bên trong.
 - Không xoá `.staging` (đó là tiến độ tải) hay bất cứ gì trong `/raw`.
@@ -53,7 +55,7 @@ nhiêu credit". **Không train ResNet50**: nạp `lsun_adm.pth` của tác giả
 ## Lệnh kiểm trước khi báo "xong"
 
 ```bash
-./scripts/07_check_imports.sh          # cổng 0, 0 credit
+bash scripts/check.sh                  # cổng 0, 0 credit
 python3 -m pytest tests/ -q            # 117 test (2 skip nếu thiếu modal)
 python3 -m pyflakes src/dire_modal/*.py tests/
 ```

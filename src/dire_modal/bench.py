@@ -1,6 +1,6 @@
 """Benchmark thật cho dự án DIRE: STORAGE (Volume vs R2) và COMPUTE (DIRE proxy).
 
-Trước đây file này trùng hoàn toàn `pack.py` và `scripts/03_pack_shards.sh`
+Trước đây file này trùng hoàn toàn `pack.py` và `tools/pack_shards.sh`
 gọi `bench::throughput` — một hàm KHÔNG tồn tại. Đã sửa: mỗi benchmark là một
 function riêng, in kết quả JSON, và `main()` chạy những cái nào môi trường cho phép.
 
@@ -42,7 +42,7 @@ from .common import (
 
 # ---------------------------------------------------------------------------
 # R2 mount — cấu hình đọc từ ENV Ở MÁY LOCAL lúc `modal run`.
-# `scripts/bench_storage.sh` export R2_ACCOUNT_ID/R2_BUCKET từ .env trước khi chạy.
+# `tools/bench_storage.sh` export R2_ACCOUNT_ID/R2_BUCKET từ .env trước khi chạy.
 # Credentials vẫn lấy từ Modal Secret `r2-cred` lúc runtime (không nhúng vào code).
 # ---------------------------------------------------------------------------
 _R2_ACCOUNT = os.environ.get("R2_ACCOUNT_ID", "")
@@ -205,7 +205,7 @@ def r2_mount_seq_read(key: str = "diffusion-forensics/v1/dire/train/lsun_bedroom
     if r2_mount is None:
         raise RuntimeError(
             "Chưa cấu hình R2: export R2_ACCOUNT_ID=<account id> trước khi `modal run` "
-            "(scripts/bench_storage.sh tự đọc từ .env)."
+            "(tools/bench_storage.sh tự đọc từ .env)."
         )
     p = Path(R2_MOUNT_PATH) / key
     if not p.exists():

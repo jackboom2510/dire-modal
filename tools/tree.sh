@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
+# TIỆN ÍCH — xem Volume, không phải quy trình thực nghiệm.
 # Liệt kê TOÀN BỘ nội dung một Volume dưới dạng cây (hoặc danh sách phẳng).
 #
-#   bash scripts/10_tree.sh                          # /raw của dire-raw
-#   PATH_IN_VOL=/raw/checkpoints bash scripts/10_tree.sh
-#   FLAT=1 SAVE=1 bash scripts/10_tree.sh            # <size>\t<path>, lưu ra file
-#   bash scripts/10_tree.sh --depth 2                # giới hạn độ sâu
+#   bash tools/tree.sh                          # /raw của dire-raw
+#   PATH_IN_VOL=/raw/checkpoints bash tools/tree.sh
+#   FLAT=1 SAVE=1 bash tools/tree.sh            # <size>\t<path>, lưu ra file
+#   bash tools/tree.sh --depth 2                # giới hạn độ sâu
 #
 # Vì sao cần script này: `modal volume ls` CHỈ đọc một tầng (không có --recursive)
 # và khi stdout không phải TTY thì chỉ in đường dẫn, mất cột size. Nên không thể

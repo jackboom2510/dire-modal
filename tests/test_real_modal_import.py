@@ -30,7 +30,7 @@ Cài modal thật rồi chạy::
     pip install modal pyyaml pytest
     python3 -m pytest tests/test_real_modal_import.py -q
 
-Hoặc ``./scripts/07_check_imports.sh`` (tự tạo venv + cài + chạy cả bộ test).
+Hoặc ``bash scripts/check.sh`` (tự tạo venv + cài + chạy cả bộ test).
 Không có ``modal`` trong môi trường ⇒ test SKIP, không FAIL: phần còn lại của bộ
 test vẫn chạy được ở nơi không cài Modal.
 """

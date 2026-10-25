@@ -53,7 +53,7 @@ Sự thật định lượng (xem `docs/iaas-options.md` §1): **$30 credit ≈ 
 **Việc phải làm kèm theo**
 - `train.py` **phải** lưu `last.pt` mỗi epoch + `vol_ckpt.commit()` (điều kiện để resume ở nơi khác).
 - Trước khi chạy job lớn: `python3 tools/free_quota.py --used modal=<đã dùng>`.
-- Sau khi port `compute_dire.py`: chạy `./scripts/06_measure_dire.sh` và **cập nhật §4.3 của `iaas-options.md`** bằng số thật.
+- Sau khi port `compute_dire.py`: chạy `bash tools/measure_dire.sh` và **cập nhật §4.3 của `iaas-options.md`** bằng số thật.
 
 ## Phương án đã cân nhắc & loại
 

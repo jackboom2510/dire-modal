@@ -327,7 +327,7 @@ def make_gallery(n: int = 12, steps: int = 20,
         raise SystemExit(
             f"[!] Không thấy ADM checkpoint tại {ckpt}.\n"
             "    Cần: modal volume cp /raw/checkpoints/lsun_adm.pth dire-ckpt:/pretrained/lsun_adm.pth\n"
-            "    (xem scripts/04_eval_pretrained.sh)"
+            "    (xem scripts/01_repro.sh — eval dùng detector, KHÔNG cần weight ADM)"
         )
     reals = sorted(glob.glob(src_glob))[: n // 2 + 1]
     fakes = sorted(glob.glob(src_glob_fake))[: n // 2 + 1]
