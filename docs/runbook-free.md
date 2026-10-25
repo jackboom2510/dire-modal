@@ -577,6 +577,45 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv       # lưu tr�
 | Cần TPU miễn phí | **TRC**: apply, phải open-source nghiên cứu, hàng đợi có thể dài |
 | Chỉ có thời gian, không có tiền | Kaggle 30 h/tuần + Colab (tương tác) + Lightning → đủ để dev, **không** đủ cho stage-2 |
 
+## Sự cố 2026-10-25 — "tải dở dang" trên file đã tải đủ
+
+Ba file `iddpm.tar.gz`, `pndm.tar.gz`, `ldm.tar.gz` tải xong 100 % rồi bị loại,
+lặp lại rồi bị xoá. Nguyên nhân **không** phải mạng, cũng không phải Baidu:
+
+```
+[RETRY 1/3] .../iddpm.tar.gz: size 125015131 ≠ remote 125011230 → tải dở dang
+```
+
+`ls -l` của BaiduPCS-Go in size **đã làm tròn 2 chữ số thập phân MB**
+(`119.22MB`). Code cũ quy đổi ngược: `119.22 × 2²⁰ = 125 011 230`, rồi đòi khớp
+từng byte với file thật `125 015 131`. Số "remote" trong log chính là
+`119.22MiB` — sai 3 901 B, tức 0.003 %.
+
+Sau đó: retry → Baidu thấy file đã có nên in `文件已经存在 … 跳过` (0 byte) →
+code cũ gọi đó là "hai lần cho ra byte GIỐNG HỆT ⇒ lỗi tất định" → **`unlink()`**
+→ mất 119 MB và lần sau tải lại từ 0 B.
+
+Đã sửa (`download.py`):
+
+| Trước | Sau |
+|---|---|
+| `int(float("119.22") × 2²⁰)` rồi đòi khớp tuyệt đối | `SizeEst(bytes, slack)` mang theo sai số làm tròn (±5 244 B cho `x.xxMB`) |
+| kiểm size TRƯỚC | `gzip -t`/tar (bằng chứng nội dung) kiểm TRƯỚC size |
+| nghi ngờ ⇒ kết luận hỏng | nghi ngờ ⇒ hỏi `meta` (size chính xác + md5) trước khi kết luận |
+| file không qua kiểm ⇒ `unlink()` | `_hold()` → `/raw/.staging/_held/`, **không xoá byte nào** |
+| Baidu bỏ qua vì file đã có ⇒ "lỗi tất định" | nhận diện riêng, tải lại từ 0 B đúng **một** lần |
+
+Đọc kết quả:
+
+```bash
+modal volume ls dire-raw / .staging/_held     # file bị giữ lại (nếu có)
+modal volume rm dire-raw /raw/.staging/_held -r   # xoá khi đã kiểm tay xong
+```
+
+Nếu `_held` có file: nó **không** bị xoá vì code cho là hỏng, mà vì code chưa
+chứng minh được nó tốt. Kiểm tay bằng `gzip -t`; nếu qua thì chép về đúng đường
+dẫn trong `/raw/` và chạy `::verify`.
+
 ## Những việc **không** làm (để không mất tài khoản / mất dữ liệu)
 
 1. ❌ Dùng nhiều tài khoản Kaggle/Colab để lấy thêm quota (vi phạm ToS → ban).

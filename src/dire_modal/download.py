@@ -28,6 +28,14 @@ Sáu lỗi đã vá so với bản đầu (đều thấy trong log chạy thật
    raise ra khỏi ``fetch_one``; retry thủ công bên trong và trả status dict.
 6. ``subprocess.run`` không có ``timeout`` ⇒ phiên treo 0B/s ngồi đó tới 6 giờ.
    → ``timeout=POLICY.subprocess_timeout`` mỗi lệnh.
+7. Size remote lấy từ ``ls -l`` **đã bị làm tròn** (2 chữ số thập phân MB), mà
+   phép kiểm lại đòi khớp từng byte. Lần chạy 2026-10-25: ``iddpm.tar.gz`` tải
+   đủ 125 015 131 B, ``ls -l`` in ``119.22MB`` → quy đổi ngược 125 011 230 B
+   → báo "tải dở dang"; retry thì Baidu thấy file đã có nên bỏ qua, và code cũ
+   gọi đó là "lỗi tất định" rồi **xoá**. Ba file × 26 phút bị vứt.
+   → :class:`SizeEst` mang theo sai số; gzip -t/tar (bằng chứng nội dung) được
+   xét TRƯỚC size; khi vẫn nghi ngờ thì hỏi ``meta`` (size chính xác + md5);
+   file không qua kiểm được ``_hold()`` **chứ không xoá**.
 """
 
 from __future__ import annotations
@@ -180,6 +188,15 @@ AUDIT_DIRS = [
 # ============================================================================
 def _sha256(path: Path, buf: int = 1 << 20) -> str:
     h = hashlib.sha256()
+    with path.open("rb") as f:
+        while chunk := f.read(buf):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _md5(path: Path, buf: int = 1 << 20) -> str:
+    """md5 của file — chỉ dùng làm ý kiến thứ hai khi ``ls -l`` không đủ tin."""
+    h = hashlib.md5()  # noqa: S324 — không phải bảo mật, chỉ đối chiếu nguồn
     with path.open("rb") as f:
         while chunk := f.read(buf):
             h.update(chunk)
@@ -429,15 +446,48 @@ def _abs(remote_rel: str) -> str:
     return f"{BAIDU_ROOT.rstrip('/')}/{remote_rel.lstrip('/')}"
 
 
-def _parse_ls_long(text: str) -> dict[str, int]:
-    """Parse ``BaiduPCS-Go ls -l`` → ``{basename: size_bytes}``.
+class SizeEst(NamedTuple):
+    """Size đọc từ ``ls -l`` + SAI SỐ của nó.
+
+    ``ls -l`` của BaiduPCS-Go in size người-đọc-được, làm tròn 2 chữ số thập
+    phân: ``119.22MB``. Quy đổi ngược ra byte được ``125011230``, còn file thật
+    là ``125015131`` — lệch 3 901 B, tức 0.003 % nhưng **không bằng nhau**.
+
+    Đòi khớp từng byte với con số đó là bắt mọi file tải ĐÚNG phải báo "tải dở
+    dang": đúng thứ xảy ra trong lần chạy thật 2026-10-25 (iddpm, pndm, ldm
+    tải xong 100 % rồi bị loại). Vì vậy size từ ``ls -l`` chỉ là **ước lượng
+    có sai số**, không bao giờ là bằng chứng về nội dung.
+    """
+
+    nbytes: int
+    slack: int = 0
+
+
+def _bytes_of(v: "SizeEst | int | None") -> int:
+    """Bytes của một ước lượng (chấp nhận cả ``int`` trần cho code/test cũ)."""
+    if v is None:
+        return 0
+    return v.nbytes if isinstance(v, SizeEst) else int(v)
+
+
+def _slack_of(v: "SizeEst | int | None") -> int:
+    """Sai số cho phép; ``int`` trần ⇒ 0 (khớp tuyệt đối, như trước)."""
+    return v.slack if isinstance(v, SizeEst) else 0
+
+
+def _parse_ls_estimates(text: str) -> dict[str, SizeEst]:
+    """Parse ``BaiduPCS-Go ls -l`` → ``{basename: SizeEst}``.
 
     Tolerant có chủ đích: output của BaiduPCS-Go trộn tiếng Trung, cột có thể
     xê dịch theo phiên bản. Chỉ nhận dòng vừa có token kích thước vừa có token
     cuối trông như đường dẫn file đã biết đuôi; dòng lạ thì bỏ qua chứ không
     đoán bừa. Size không parse được ⇒ "unknown", không phải 0.
+
+    Sai số = nửa đơn vị của chữ số thập phân cuối (làm tròn ⇒ ±0.5 ulp):
+    ``119.22MB`` ⇒ ±0.005 MB = ±5 243 B. Token không có phần thập phân
+    (``125011230B``) ⇒ sai số 0: đó là số nguyên chính xác.
     """
-    out: dict[str, int] = {}
+    out: dict[str, SizeEst] = {}
     for line in text.splitlines():
         m = _SIZE_RE.search(line)
         if not m:
@@ -448,13 +498,33 @@ def _parse_ls_long(text: str) -> dict[str, int]:
         base = toks[-1].rstrip("/").rsplit("/", 1)[-1]
         if not base.endswith(_KNOWN_SUFFIX):
             continue
-        size = int(float(m.group(1)) * _UNITS[m.group(2).upper()])
-        out[base] = max(out.get(base, 0), size)
+        num, unit = m.group(1), m.group(2).upper()
+        mult = _UNITS[unit]
+        dec = len(num.split(".", 1)[1]) if "." in num else 0
+        slack = 0 if dec == 0 else int(round(0.5 * 10 ** (-dec) * mult)) + 1
+        est = SizeEst(int(float(num) * mult), slack)
+        prev = out.get(base)
+        if prev is None or est.nbytes > prev.nbytes:
+            out[base] = est
     return out
 
 
+def _parse_ls_long(text: str) -> dict[str, int]:
+    """``{basename: size_bytes}`` — bản chỉ-lấy-số, cho chỗ chỉ cần in/liệt kê.
+
+    KHÔNG dùng hàm này để kiểm tính toàn vẹn: nó đã ném mất sai số. Dùng
+    :func:`_parse_ls_estimates` ở mọi chỗ so size.
+    """
+    return {k: v.nbytes for k, v in _parse_ls_estimates(text).items()}
+
+
 def _ls_sizes(remote_dir_rel: str, timeout: int = 300) -> dict[str, int]:
-    """``ls -l`` MỘT thư mục. Trả {} nếu thư mục không tồn tại / lỗi."""
+    """``ls -l`` MỘT thư mục → bytes (KHÔNG kèm sai số). In/liệt kê thì dùng."""
+    return {k: v.nbytes for k, v in _ls_estimates(remote_dir_rel, timeout).items()}
+
+
+def _ls_estimates(remote_dir_rel: str, timeout: int = 300) -> dict[str, SizeEst]:
+    """``ls -l`` MỘT thư mục → ``SizeEst`` (bytes + sai số làm tròn)."""
     try:
         cp = _baidu(["ls", "-l", _abs(remote_dir_rel)], timeout=timeout)
     except (subprocess.SubprocessError, OSError) as exc:
@@ -462,10 +532,10 @@ def _ls_sizes(remote_dir_rel: str, timeout: int = 300) -> dict[str, int]:
         return {}
     if cp.returncode != 0:
         return {}
-    return _parse_ls_long(cp.stdout)
+    return _parse_ls_estimates(cp.stdout)
 
 
-def _size_map(files: list[File]) -> dict[str, int | None]:
+def _size_map(files: list[File]) -> dict[str, SizeEst | None]:
     """Size remote cho từng file, hỏi Baidu **một lần mỗi thư mục** (không phải
     mỗi file) để không nhân số phiên lên — chính số phiên đồng thời là thứ làm
     Baidu throttle."""
@@ -473,12 +543,87 @@ def _size_map(files: list[File]) -> dict[str, int | None]:
     for f in files:
         by_dir.setdefault(str(Path(f.remote).parent), []).append(f)
 
-    sizes: dict[str, int | None] = {}
+    sizes: dict[str, SizeEst | None] = {}
     for d, group in sorted(by_dir.items()):
-        listing = _ls_sizes(d)
+        listing = _ls_estimates(d)
         for f in group:
             sizes[f.remote] = listing.get(Path(f.remote).name)
     return sizes
+
+
+# ---------------------------------------------------------------------------
+# `meta`: nguồn DUY NHẤT cho size chính xác + md5
+# ---------------------------------------------------------------------------
+# `ls -l` chỉ in size đã làm tròn 2 chữ số thập phân MB (xem `SizeEst`), nên nó
+# không đủ tư cách để kết luận "file hỏng". `meta` in đúng khối thông tin mà
+# `d` in trước khi tải:
+#
+#     文件大小          125015131, 119.223720MB
+#     md5 (截图请打码)  5a6fb52a2bf9a4c1abf0d50bf30955d4
+#
+# Chỉ gọi khi kiểm tra đã thất bại (đường bình thường không tốn thêm phiên).
+_META_SIZE_RE = re.compile(r"(\d{4,})\s*,\s*[\d.]+\s*(?:B|KB|MB|GB|TB)", re.I)
+_META_MD5_RE = re.compile(r"\b([0-9a-fA-F]{32})\b")
+
+
+def _parse_meta(text: str) -> tuple[int | None, str]:
+    """``(size_bytes, md5)`` từ output ``BaiduPCS-Go meta``; thiếu thì ``None``/``""``."""
+    size: int | None = None
+    m = _META_SIZE_RE.search(text)
+    if m:
+        size = int(m.group(1))
+    md5 = ""
+    for line in text.splitlines():
+        if "md5" in line.lower():
+            h = _META_MD5_RE.search(line)
+            if h:
+                md5 = h.group(1).lower()
+                break
+    return size, md5
+
+
+def _remote_meta(remote_rel: str, timeout: int = 120) -> tuple[int | None, str]:
+    """Hỏi ``meta`` một file. Lỗi/không parse được ⇒ ``(None, "")``, không raise."""
+    try:
+        cp = _baidu(["meta", _abs(remote_rel)], timeout=timeout)
+    except (subprocess.SubprocessError, OSError) as exc:
+        print(f"[warn] meta {remote_rel} thất bại: {exc!r}")
+        return None, ""
+    if cp.returncode != 0:
+        print(f"[warn] meta {remote_rel} exit {cp.returncode}")
+        return None, ""
+    return _parse_meta(cp.stdout or "")
+
+
+def _second_opinion(remote_rel: str, path: Path, v: "Verdict") -> "Verdict":
+    """Khi ``ls -l`` nói lệch: hỏi ``meta`` trước khi kết luận file hỏng.
+
+    Vì sao cần: lần chạy 2026-10-25 ba file đã tải ĐỦ 100 % (Baidu in
+    "下载结束 … 119.223720MB") rồi bị loại chỉ vì `ls -l` in size đã làm tròn.
+    Sai số làm tròn đã được xử lý trong :func:`_parse_ls_estimates`, nhưng nếu
+    vẫn lệch thì phải có bằng chứng độc lập mới được phép tuyên bố hỏng —
+    `meta` cho size chính xác tới từng byte, và md5 để đối chiếu nội dung.
+    """
+    size, md5 = _remote_meta(remote_rel)
+    local = path.stat().st_size if path.exists() else 0
+    if size and size == local:
+        return Verdict(True,
+                       f"ok — `meta` xác nhận đúng {size} B (ls -l in size làm tròn)",
+                       fmt=v.fmt)
+    if md5:
+        local_md5 = _md5(path) if path.exists() else ""
+        if local_md5 and local_md5 == md5:
+            return Verdict(True, f"ok — md5 khớp `meta` ({md5[:12]}…)", fmt=v.fmt)
+        return Verdict(False,
+                       f"{v.reason}; `meta` nói {size or '?'} B / md5 {md5[:12]}…, "
+                       f"file là {local} B / md5 {local_md5[:12] or '?'}…",
+                       retryable=v.retryable, fmt=v.fmt)
+    if size:
+        return Verdict(False,
+                       f"{v.reason}; `meta` nói {size} B, file là {local} B "
+                       f"(lệch {local - size:+d})",
+                       retryable=v.retryable, fmt=v.fmt)
+    return v
 
 
 # Định dạng nhận ra qua magic bytes. Dùng khi file KHÔNG phải gzip để nói rõ
@@ -551,15 +696,23 @@ class Verdict(NamedTuple):
 
 
 def _validate_ex(
-    path: Path, expected: int = 0, expect_archive: bool = True
+    path: Path, expected: int = 0, expect_archive: bool = True, slack: int = 0
 ) -> Verdict:
     """Kiểm tra file đã tải, trả về cả chẩn đoán và khả năng thử lại.
 
     Args:
+        expected: size remote — nhưng là ước lượng từ ``ls -l``, tức ĐÃ LÀM
+            TRÒN (xem :class:`SizeEst`).
+        slack: sai số cho phép của ``expected``. Size lệch trong khoảng này là
+            chuyện của phép làm tròn, không phải của lần tải.
         expect_archive: ``False`` ⇒ chỉ kiểm tra tồn tại/size, KHÔNG đòi phải là
             gzip/tar. Dùng cho ``probe_pair``: mục đích chính của nó là so
             **sha256** giữa hai file, việc đó đúng trên mọi chuỗi byte. Chặn nó
             lại chỉ vì file không giải nén được là bỏ mất câu trả lời đang cần.
+
+    Thứ tự kiểm là có chủ đích: **bằng chứng về nội dung (gzip -t/tar) đứng
+    trước** con số size đã làm tròn. Bản trước kiểm size trước, nên một file
+    tải đủ 119 MB, gzip -t qua, vẫn bị loại và bị tải lại từ 0 B.
     """
     if not path.exists():
         return Verdict(False, "file không tồn tại")
@@ -569,16 +722,32 @@ def _validate_ex(
             False,
             "0 byte — BaiduPCS-Go exit 0 nhưng không tải gì (throttle/BDUSS hết hạn)",
         )
-    if expected and size != expected:
-        # Lệch size là lỗi mạng/throttle ⇒ thử lại có ý nghĩa.
-        return Verdict(
-            False, f"size {size} ≠ remote {expected} → tải dở dang", retryable=True
+    tol = max(0, int(slack))
+    size_bad = bool(expected) and abs(size - expected) > tol
+    size_note = ""
+    if size_bad:
+        size_note = (
+            f"size {size} ≠ ls -l {expected}"
+            + (f" (sai số cho phép ±{tol} B)" if tol else "")
+            + f", lệch {size - expected:+d} B"
         )
+
     if not expect_archive or not path.name.endswith((".tar.gz", ".tgz")):
+        if size_bad:
+            return Verdict(False, f"{size_note} → tải dở dang", retryable=True)
         return Verdict(True, "ok (không kiểm tra định dạng)")
 
     chk = subprocess.run(["gzip", "-t", str(path)], capture_output=True)
     if chk.returncode == 0:
+        if size_bad:
+            # gzip -t đọc HẾT file và kiểm CRC + độ dài trailer, nên nó là
+            # bằng chứng mạnh hơn hẳn một con số in ra từ `ls -l`.
+            return Verdict(
+                True,
+                f"ok — gzip -t qua toàn bộ file dù {size_note} "
+                "(ls -l chỉ in size làm tròn; tin gzip)",
+                fmt="gzip",
+            )
         return Verdict(True, "ok", fmt="gzip")
 
     # --- gzip fail: chẩn đoán thay vì chỉ nói "hỏng" -----------------------
@@ -605,7 +774,8 @@ def _validate_ex(
     if fmt in _KNOWN_ARCHIVES:
         return Verdict(
             False,
-            f"KHÔNG phải gzip mà là **{fmt}** (size đúng {size} B, khớp remote) "
+            f"KHÔNG phải gzip mà là **{fmt}** (size {size} B"
+            f"{'' if size_bad else ', khớp remote'}) "
             f"⇒ file nguồn sai định dạng hoặc đặt sai tên. Tải lại vô ích.",
             retryable=False,
             fmt=fmt,
@@ -621,7 +791,8 @@ def _validate_ex(
     return Verdict(
         False,
         f"gzip -t FAIL — {fmt}; gzip nói: {detail or 'không rõ'}"
-        " ⇒ nội dung không ổn định, thử lại có thể hữu ích.",
+        " ⇒ nội dung không ổn định, thử lại có thể hữu ích."
+        + (f" [{size_note}]" if size_bad else ""),
         retryable=True,
         fmt=fmt,
     )
@@ -700,6 +871,37 @@ def _publish(got: Path, local: Path) -> None:
     shutil.move(str(got), str(local))
 
 
+def _hold(path: Path) -> Path:
+    """Chuyển một file KHÔNG qua kiểm sang ``<staging>/_held/<tmpdir>/``.
+
+    Vì sao không ``unlink()``: lần chạy 2026-10-25 đã xoá ba file đã tải ĐỦ
+    119 MB sau khi phép kiểm (sai) nói "tải dở dang" — 26 phút × 3 bay mất, và
+    lần sau phải tải lại từ 0 B. Byte đã tải là tài sản; kết luận của code mới
+    là thứ đáng ngờ. Chuyển sang ``_held`` vừa không mất dữ liệu, vừa để thư
+    mục staging trống cho lần tải lại.
+
+    ``_held`` nằm trong ``.staging`` nên `_is_internal()` coi là nội bộ: không
+    hiện trong báo cáo, không bị ``prune`` đề nghị xoá, không bị ``verify`` đem
+    đi ``gzip -t``. Xoá hẳn khi không cần nữa:
+    ``modal volume rm dire-raw /raw/.staging/_held -r``
+    """
+    dest_dir = _staging_root() / "_held" / path.parent.name
+    try:
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        dest = dest_dir / path.name
+        n = 1
+        while dest.exists():
+            dest = dest_dir / f"{path.name}.{n}"
+            n += 1
+        nbytes = path.stat().st_size
+        os.replace(path, dest)
+        print(f"[HOLD] giữ {_human(nbytes)} → {dest} (KHÔNG xoá)")
+        return dest
+    except OSError as exc:
+        print(f"[warn] không chuyển được {path} sang _held: {exc}")
+        return path
+
+
 def _tmpdir_for(remote_rel: str) -> Path:
     """Thư mục staging RIÊNG cho mỗi đường dẫn remote (sửa lỗi #4).
 
@@ -756,7 +958,14 @@ def _record_valid(rel: str, path: Path, digest: str, fmt: str) -> None:
 
 
 def _cached_valid(rel: str | None, path: Path, expected: int = 0) -> Verdict | None:
-    """Trả ``Verdict`` từ cache nếu (size, mtime_ns) khớp, ngược lại ``None``."""
+    """Trả ``Verdict`` từ cache nếu (size, mtime_ns) khớp, ngược lại ``None``.
+
+    ``expected`` chỉ giữ cho tương thích chữ ký và **không** được dùng để từ
+    chối cache: nó là size từ ``ls -l``, đã làm tròn (xem :class:`SizeEst`).
+    Dùng nó ở đây thì một file đã kiểm tốt sẽ bị coi là "phải tải lại" mỗi lần
+    chạy — và ở đường ``fetch_one`` là bị **xoá** rồi tải lại từ 0 B. Cache chỉ
+    được ghi sau khi kiểm THÀNH CÔNG, nên (size, mtime_ns) khớp là đủ.
+    """
     if not rel:
         return None
     rec = _load_state().get(rel)
@@ -768,19 +977,17 @@ def _cached_valid(rel: str | None, path: Path, expected: int = 0) -> Verdict | N
         return None
     if st.st_size != rec.get("size") or st.st_mtime_ns != rec.get("mtime_ns"):
         return None  # file đã bị ghi đè/sửa ⇒ không tin cache
-    if expected and st.st_size != expected:
-        return None
     return Verdict(True, f"ok (cache, kiểm lúc {rec.get('checked', '?')})",
                    fmt=str(rec.get("fmt") or ""))
 
 
 def _validate_cached(rel: str | None, path: Path, expected: int = 0,
-                     expect_archive: bool = True) -> Verdict:
+                     expect_archive: bool = True, slack: int = 0) -> Verdict:
     """``_validate_ex`` + dùng cache khi có. Ghi cache khi kiểm thành công."""
     hit = _cached_valid(rel, path, expected)
     if hit is not None:
         return hit
-    v = _validate_ex(path, expected, expect_archive=expect_archive)
+    v = _validate_ex(path, expected, expect_archive=expect_archive, slack=slack)
     if v.ok and rel:
         try:
             _record_valid(rel, path, _sha256(path), v.fmt)
@@ -1001,7 +1208,7 @@ def _all_expected() -> dict[str, list[str]]:
 
 def _report(
     files: list[File],
-    sizes: dict[str, int | None],
+    sizes: dict[str, "SizeEst | int | None"],
     blocked: list[tuple[File, str]],
     unresolved: list[DirSpec],
 ) -> tuple[int, int, int]:
@@ -1016,11 +1223,12 @@ def _report(
     unknown = 0
     largest = 0
     for f in files:
-        s = sizes.get(f.remote)
-        if s is None:
+        est = sizes.get(f.remote)
+        if est is None:
             unknown += 1
             cell = "? (ls -l không thấy)"
         else:
+            s = _bytes_of(est)
             known += s
             largest = max(largest, s)
             cell = _human(s)
@@ -1089,7 +1297,7 @@ def _files_from_paths(spec: str) -> list[File]:
 
 
 def _split_present(
-    files: list[File], sizes: dict[str, int | None], force: bool
+    files: list[File], sizes: dict[str, "SizeEst | int | None"], force: bool
 ) -> tuple[list[File], list[File]]:
     """``(cần tải, đã có & hợp lệ)`` — dùng CHUNG cho lọc đầu và cho mỗi vòng.
 
@@ -1102,7 +1310,7 @@ def _split_present(
     have: list[File] = []
     for f in files:
         p_local = RAW / f.local
-        exp = sizes.get(f.remote) or 0
+        exp = _bytes_of(sizes.get(f.remote))
         if force:
             todo.append(f)
             continue
@@ -1234,7 +1442,10 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
         wave += 1
         payloads = [
             {"remote": f.remote, "local": f.local,
-             "expected_size": sizes.get(f.remote) or 0}
+             "expected_size": _bytes_of(sizes.get(f.remote)),
+             # Sai số của `ls -l`: phép kiểm PHẢI biết, nếu không mọi file tải
+             # đúng đều bị báo "tải dở dang" (sự cố 2026-10-25).
+             "expect_slack": _slack_of(sizes.get(f.remote))}
             for f in todo
         ]
         left = ORCHESTRATOR_BUDGET_S - (time.time() - t0)
@@ -1474,9 +1685,14 @@ def probe_pair(
     """
     # Hỏi size thật trước: có nó thì mới nói được câu quyết định "đủ đúng số
     # byte mà vẫn không giải nén được ⇒ lỗi nguồn". Không có thì chỉ biết "hỏng".
-    want = {p: _ls_sizes(str(Path(p).parent)).get(Path(p).name, 0) for p in (a, b)}
-    for p, sz in want.items():
-        print(f"[probe] remote {p} = {_human(sz) if sz else '? (ls không thấy)'}")
+    # `_ls_estimates` chứ KHÔNG phải `_ls_sizes`: `probe_pair` so sha256 giữa
+    # hai file, mà `expected_size` lấy từ `ls -l` là số ĐÃ LÀM TRÒN. Dùng bản
+    # mất sai số thì probe tự loại đúng file nó vừa tải xong.
+    est = {p: _ls_estimates(str(Path(p).parent)).get(Path(p).name) for p in (a, b)}
+    for p, e in est.items():
+        sz = _bytes_of(e)
+        print(f"[probe] remote {p} = {_human(sz) if sz else '? (ls không thấy)'}"
+              + (f" ±{e.slack} B (ls -l làm tròn)" if e and e.slack else ""))
 
     res: dict[str, dict] = {}
     for p in (a, b):
@@ -1492,7 +1708,8 @@ def probe_pair(
             {
                 "remote": p,
                 "local": p,
-                "expected_size": want[p],
+                "expected_size": _bytes_of(est[p]),
+                "expect_slack": _slack_of(est[p]),
                 "expect_archive": False,
             }
         )
@@ -1663,12 +1880,16 @@ def _fetch_one_impl(f: dict) -> dict:
     remote = _abs(remote_rel)
     local = RAW / f["local"]
     expected = int(f.get("expected_size") or 0)
+    # Sai số của `expected`: `ls -l` in size đã làm tròn 2 chữ số thập phân MB
+    # (xem `SizeEst`), nên đòi khớp từng byte là SAI. Không có tham số này thì
+    # mọi file tải đúng đều bị loại — đúng sự cố 2026-10-25.
+    slack = int(f.get("expect_slack") or 0)
 
     # --- đã có & hợp lệ → skip (idempotent, chạy lại bao nhiêu lần cũng được)
     if local.exists() and local.stat().st_size > 0:
         # `_validate_cached` dùng cache (size, mtime_ns) khi có: không phải đọc
         # lại 3.39 GB qua FUSE mỗi lần chạy chỉ để hỏi "file này vẫn tốt chứ".
-        v = _validate_cached(f["local"], local, expected)
+        v = _validate_cached(f["local"], local, expected, slack=slack)
         if v.ok:
             rec = _load_state().get(f["local"]) or {}
             cached_digest = rec.get("sha256")
@@ -1681,14 +1902,18 @@ def _fetch_one_impl(f: dict) -> dict:
                 "sha256": cached_digest or _sha256(local),
                 "format": v.fmt or "gzip",
             }
-        print(f"[REDO] {remote_rel}: {v.reason}")
-        local.unlink(missing_ok=True)
+        # Không xoá: đây là dữ liệu ĐÃ CÔNG BỐ. Nếu kết luận của code sai (đã
+        # xảy ra) thì xoá là mất trắng; `_hold` giữ lại để còn đường kiểm tay.
+        print(f"[REDO] {remote_rel}: {v.reason} → chuyển bản cũ sang _held")
+        _hold(local)
 
     local.parent.mkdir(parents=True, exist_ok=True)
     tmpdir = _tmpdir_for(remote_rel)  # riêng + ổn định ⇒ resume được
     tmpdir.mkdir(parents=True, exist_ok=True)
     last = "chưa thử"
     prev_sha = ""  # sha256 của lần tải trước, để phát hiện lỗi TẤT ĐỊNH
+    held_path: Path | None = None  # bản không qua kiểm đã được giữ lại (nếu có)
+    bytes_before = 0               # byte có sẵn trước attempt hiện tại
     expect_archive = bool(f.get("expect_archive", True))
     started = time.monotonic()   # mốc tính ngân sách của CẢ lần gọi này
     budget_out = False           # dừng vì hết ngân sách (≠ lỗi tải)
@@ -1725,6 +1950,10 @@ def _fetch_one_impl(f: dict) -> dict:
                     args += ["--mode", bmode]
                 args.append(remote)
 
+                # Bao nhiêu byte đã có TRƯỚC attempt này. Dùng để phân biệt
+                # "Baidu tải tiếp" với "Baidu thấy file đã có nên bỏ qua"
+                # (`文件已经存在 … 跳过`): hai ca này cần cách xử lý khác nhau.
+                bytes_before = _dir_bytes(tmpdir)
                 # Commit định kỳ TRONG lúc tải: đây là thứ khiến staging trong
                 # Volume thực sự cho resume xuyên container. Không có nó thì
                 # container chết là mất sạch tiến độ, y như khi dùng /tmp.
@@ -1762,7 +1991,14 @@ def _fetch_one_impl(f: dict) -> dict:
                     # thứ dùng để resume) biến mất. Giữ nó trong staging thì lần
                     # attempt sau, hoặc lần chạy sau ở CONTAINER KHÁC, resume
                     # được từ đúng chỗ đã tải.
-                    v = _validate_ex(got, expected, expect_archive=expect_archive)
+                    v = _validate_ex(got, expected, expect_archive=expect_archive,
+                                     slack=slack)
+                    if not v.ok and v.retryable:
+                        # Trước khi kết luận "file hỏng": hỏi `meta`. `ls -l`
+                        # chỉ in size làm tròn nên nó không đủ tư cách một
+                        # mình kết tội một file 119 MB. Chỉ tốn 1 phiên, và chỉ
+                        # trên đường đang nghi ngờ.
+                        v = _second_opinion(remote_rel, got, v)
                     if v.ok:
                         digest = _sha256(got)
                         size = got.stat().st_size
@@ -1789,33 +2025,63 @@ def _fetch_one_impl(f: dict) -> dict:
 
                     if not v.retryable:
                         # Lỗi TẤT ĐỊNH (nguồn sai định dạng / Baidu trả trang
-                        # lỗi). Tải lại ra đúng chuỗi byte đó ⇒ xoá mảnh dở đi,
-                        # giữ lại chỉ làm lần sau resume vào một file vô dụng.
-                        got.unlink(missing_ok=True)
+                        # lỗi). Tải lại ra đúng chuỗi byte đó nên dừng, NHƯNG
+                        # vẫn không xoá: `_hold` giữ lại để người dùng kiểm tay
+                        # nếu kết luận của code sai.
+                        held = _hold(got)
                         print(f"[STOP] {remote_rel}: {v.reason}")
                         return {
                             "remote": remote_rel, "local": str(local),
                             "status": "error", "error": v.reason,
-                            "size": 0, "attempts": attempt,
+                            "size": 0, "attempts": attempt, "held": str(held),
                             "deterministic": True, "format": v.fmt,
+                        }
+
+                    # Baidu thấy file đã có trong thư mục đích nên BỎ QUA
+                    # ("文件已经存在 … 跳过", 数据总量: 0B) ⇒ thử lại y nguyên là
+                    # vô nghĩa. Chuyển file sang `_held` để attempt sau tải lại
+                    # từ 0 B, và KHÔNG xoá byte nào.
+                    #
+                    # Đây là ca đã đốt 26 phút × 3 trong lần chạy 2026-10-25:
+                    # lần 1 tải đủ, lần 2 Baidu bỏ qua, code cũ gọi đó là "hai
+                    # lần cho ra byte GIỐNG HỆT ⇒ lỗi tất định" rồi xoá sạch.
+                    if size_now <= bytes_before:
+                        if not held_path:
+                            held_path = _hold(got)
+                            last = (
+                                f"Baidu không ghi thêm byte nào (coi file đã có là "
+                                f"xong) mà vẫn không qua kiểm: {v.reason} → giữ ở "
+                                f"{held_path}, attempt sau tải lại từ 0 B"
+                            )
+                            print(f"[HOLD] {remote_rel}: {last}")
+                            _commit_volume("giữ file không qua kiểm")
+                            continue
+                        last = (
+                            f"tải lại từ 0 B vẫn không qua kiểm: {v.reason} "
+                            f"(bản cũ ở {held_path})"
+                        )
+                        print(f"[STOP] {remote_rel}: {last}")
+                        return {
+                            "remote": remote_rel, "local": str(local),
+                            "status": "error", "error": last,
+                            "size": 0, "attempts": attempt, "held": str(held_path),
+                            "deterministic": False, "format": v.fmt,
                         }
 
                     digest = _sha256(got)
                     if digest == prev_sha:
-                        # Với resume, "hai lần cho ra byte GIỐNG HỆT" nghĩa là
-                        # KHÔNG thêm được byte nào ⇒ dừng. Nếu attempt sau resume
-                        # được thì file dài ra và sha sẽ khác, nên điều kiện này
-                        # không chặn nhầm đường resume.
-                        got.unlink(missing_ok=True)
+                        # Byte GIỐNG HỆT qua hai lần tải ⇒ tải lại cũng thế.
+                        held_path = _hold(got)
                         msg = (
                             f"hai lần tải cho ra byte GIỐNG HỆT (sha256={digest[:12]}…, "
                             f"{_human(size_now)}) ⇒ lỗi tất định, dừng thử lại. {v.reason}"
+                            f" — giữ ở {held_path}"
                         )
                         print(f"[STOP] {remote_rel}: {msg}")
                         return {
                             "remote": remote_rel, "local": str(local),
                             "status": "error", "error": msg,
-                            "size": 0, "attempts": attempt,
+                            "size": 0, "attempts": attempt, "held": str(held_path),
                             "deterministic": True, "format": v.fmt,
                         }
                     prev_sha = digest

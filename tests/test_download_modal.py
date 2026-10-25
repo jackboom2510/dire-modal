@@ -594,6 +594,199 @@ def test_validate_size_mismatch_is_retryable():
     assert not v.ok and v.retryable is True, "lệch size là lỗi mạng ⇒ đáng retry"
 
 
+# ---------------------------------------------------------------------------
+# Sự cố THẬT 2026-10-25: size từ `ls -l` đã làm tròn 2 chữ số thập phân MB
+# ---------------------------------------------------------------------------
+# Log:
+#   [RETRY 1/3] .../iddpm.tar.gz: size 125015131 ≠ remote 125011230 → tải dở dang
+#   [STOP] ... hai lần tải cho ra byte GIỐNG HỆT ... ⇒ lỗi tất định
+# File đã tải ĐỦ (Baidu in "下载结束 … 119.223720MB"), nhưng 125011230 chính là
+# int(119.22MB × 2^20) — tức số `ls -l` in ra với 2 chữ số thập phân, quy đổi
+# ngược ra byte. Đòi khớp từng byte với nó là bắt mọi file đúng phải hỏng.
+def test_ls_listing_size_is_rounded_so_slack_must_be_kept():
+    dl, _ = install_stub()
+    text = (" 1 - 2026-09-24 09:17:25 119.22MB \u5df2\u4fdd\u5b58 "
+            "/apps/AirExplorer/dire/test/lsun_bedroom/lsun_bedroom/iddpm.tar.gz\n"
+            " 1 - 2026-09-24 09:17:25 124.64MB \u5df2\u4fdd\u5b58 "
+            "/apps/AirExplorer/dire/test/lsun_bedroom/lsun_bedroom/pndm.tar.gz\n")
+    est = dl._parse_ls_estimates(text)
+
+    iddpm = est["iddpm.tar.gz"]
+    assert iddpm.nbytes == 125_011_230, iddpm            # đúng số trong log
+    assert iddpm.slack >= 3_901, "phải phủ được sai số làm tròn của 119.22MB"
+    pndm = est["pndm.tar.gz"]
+    assert pndm.nbytes == 130_694_512, pndm              # đúng số trong log
+    assert pndm.slack >= 1_617
+
+    # Size nguyên byte (không phần thập phân) thì KHÔNG có sai số.
+    exact = dl._parse_ls_estimates(
+        " 1 - 2026-09-24 09:17:25 125015131B /apps/x/iddpm.tar.gz")
+    assert exact["iddpm.tar.gz"].nbytes == 125_015_131
+    assert exact["iddpm.tar.gz"].slack == 0
+
+
+def test_validate_accepts_complete_file_when_ls_size_is_rounded():
+    """File gzip hợp lệ, lệch `ls -l` trong phạm vi làm tròn ⇒ PHẢI nhận."""
+    import gzip as _gz
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    body = _gz.compress(b"x" * 5000)
+    f = _write(d, "iddpm.tar.gz", body)
+
+    # mô phỏng đúng log: ls -l làm tròn xuống 3901 B so với file thật
+    listed = len(body) - 3901
+    v = dl._validate_ex(f, expected=listed, slack=5244)
+    assert v.ok, v.reason
+    assert "gzip" in v.reason or v.fmt == "gzip", v.reason
+
+
+def test_validate_still_rejects_truncation_beyond_rounding_slack():
+    """Sai số làm tròn KHÔNG được nới thành "tha hết": cụt thật thì vẫn loại."""
+    import gzip as _gz
+    import os as _os
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    full = _gz.compress(_os.urandom(200_000))     # dữ liệu nén được ⇒ gzip dài
+    f = _write(d, "iddpm.tar.gz", full[: len(full) // 2])   # file CỤT
+
+    v = dl._validate_ex(f, expected=len(full), slack=5244)
+    assert not v.ok and v.retryable is True, v.reason
+    assert "gzip -t FAIL" in v.reason or "cụt" in v.reason or "FAIL" in v.reason
+
+
+def test_validate_non_archive_within_slack_is_accepted():
+    """``.pth`` không kiểm được bằng gzip ⇒ size (kèm sai số) là bằng chứng."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "lsun_adm.pth", b"\x00" * 20_000)
+    assert dl._validate_ex(f, expected=20_000 - 3901, slack=5244).ok
+    bad = dl._validate_ex(f, expected=20_000 + 40_000, slack=5244)
+    assert not bad.ok and bad.retryable is True
+
+
+def test_payload_wires_slack_from_ls_into_validation():
+    """Sai số phải đi CẢ đường: `_size_map` → payload → `_validate_ex`.
+
+    Đây chính là chỗ hỏng của lần chạy 2026-10-25: phép kiểm biết size đã làm
+    tròn nhưng payload chỉ mang con số, không mang sai số.
+    """
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "ok"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+
+    seen: list[dict] = []
+    orig = dl._validate_ex
+
+    def capture(path, expected=0, expect_archive=True, slack=0):
+        seen.append({"expected": expected, "slack": slack})
+        return orig(path, expected, expect_archive=expect_archive, slack=slack)
+
+    dl._validate_ex = capture
+    try:
+        r = dl._fetch_one_impl({
+            "remote": "dire/test/a/iddpm.tar.gz",
+            "local": "dire/test/a/iddpm.tar.gz",
+            "expected_size": 125_011_230,
+            "expect_slack": 5244,
+        })
+    finally:
+        dl._validate_ex = orig
+    assert seen and seen[0]["slack"] == 5244, seen
+    assert seen[0]["expected"] == 125_011_230, seen
+    # File nhỏ hơn `expected` rất nhiều nhưng gzip -t qua ⇒ vẫn phải nhận
+    assert r["status"] == "ok", r
+
+
+def test_meta_is_the_second_opinion_when_ls_size_disagrees():
+    """`meta` cho size chính xác + md5 ⇒ cứu được file mà `ls -l` tố sai."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    d = Path(_tf.mkdtemp())
+    f = _write(d, "adm.pth", b"\x00" * 3000)
+    bad = dl.Verdict(False, "size 3000 ≠ ls -l 9999", retryable=True)
+
+    orig = dl._remote_meta
+    try:
+        dl._remote_meta = lambda rel, timeout=120: (3000, "0" * 32)
+        v = dl._second_opinion("x/adm.pth", f, bad)
+        assert v.ok and "meta" in v.reason, v.reason
+
+        # md5 khớp cũng đủ, dù size `meta` nói khác
+        import hashlib
+        dl._remote_meta = lambda rel, timeout=120: (None, hashlib.md5(b"\x00" * 3000).hexdigest())
+        v2 = dl._second_opinion("x/adm.pth", f, bad)
+        assert v2.ok and "md5" in v2.reason, v2.reason
+
+        # Không khớp gì ⇒ giữ nguyên kết luận cũ, và nêu cả hai con số
+        dl._remote_meta = lambda rel, timeout=120: (9999, "f" * 32)
+        v3 = dl._second_opinion("x/adm.pth", f, bad)
+        assert not v3.ok and "9999" in v3.reason and "3000" in v3.reason, v3.reason
+    finally:
+        dl._remote_meta = orig
+
+
+def test_parse_meta_reads_size_and_md5_from_real_header():
+    dl, _ = install_stub()
+    text = """[1] ----
+  类型              文件
+  文件路径          /apps/AirExplorer/dire/test/lsun_bedroom/lsun_bedroom/iddpm.tar.gz
+  文件名称          iddpm.tar.gz
+  文件大小          125015131, 119.223720MB
+  md5 (截图请打码)  5a6fb52a2bf9a4c1abf0d50bf30955d4
+"""
+    size, md5 = dl._parse_meta(text)
+    assert size == 125_015_131, size
+    assert md5 == "5a6fb52a2bf9a4c1abf0d50bf30955d4"
+
+
+def test_hold_never_deletes_bytes():
+    """`_hold` phải CHUYỂN file, không xoá — bài học từ 3 × 119 MB bị xoá."""
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    dl.RAW = Path(_tf.mkdtemp())
+    src = dl._tmpdir_for("dire/test/a/real.tar.gz")
+    src.mkdir(parents=True, exist_ok=True)
+    f = src / "real.tar.gz"
+    f.write_bytes(b"z" * 1234)
+
+    dest = dl._hold(f)
+    assert not f.exists(), "đã chuyển đi thì không còn ở staging"
+    assert dest.exists() and dest.stat().st_size == 1234
+    assert "_held" in str(dest)
+    # Chuyển lần hai cùng tên ⇒ không ghi đè bản cũ
+    f.write_bytes(b"y" * 99)
+    dest2 = dl._hold(f)
+    assert dest2 != dest and dest.exists() and dest2.exists()
+
+
+def test_cached_valid_not_invalidated_by_rounded_remote_size():
+    """Cache ghi sau khi kiểm THÀNH CÔNG ⇒ size làm tròn không được đánh trượt.
+
+    Nếu đánh trượt, đường `fetch_one` sẽ `_hold` bản đã công bố rồi tải lại
+    đúng file đó từ 0 B — mỗi lần chạy.
+    """
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    dl.RAW = Path(_tf.mkdtemp())
+    (dl.RAW / "z").mkdir(parents=True, exist_ok=True)
+    f = _write(dl.RAW, "z/a.tar.gz", b"q" * 777)
+    dl._record_valid("z/a.tar.gz", f, "0" * 64, "gzip")
+    assert dl._cached_valid("z/a.tar.gz", f, 777 - 5) is not None
+
+
 def test_validate_expect_archive_false_skips_gzip():
     """probe_pair cần so sha256 — đòi gzip sẽ chặn đúng câu trả lời cần."""
     import tempfile as _tf
@@ -633,7 +826,13 @@ def test_deterministic_error_stops_after_one_attempt():
 
 
 def test_identical_bytes_stop_retries():
-    """Byte giống hệt qua 2 lần tải ⇒ tải lại cũng thế, dừng."""
+    """Byte giống hệt sau khi tải lại TỪ 0 B ⇒ tải lại cũng thế, dừng.
+
+    Số attempt đổi 2 → 3 khi thêm luật "Baidu bỏ qua vì file đã có": lần 2
+    Baidu không ghi thêm byte nào nên file được `_hold` rồi lần 3 tải lại từ
+    đầu. Chỉ sau khi tải lại từ 0 B mà vẫn ra đúng chuỗi byte đó mới được kết
+    luận "tất định" — và kể cả lúc đó cũng KHÔNG xoá file.
+    """
     import tempfile as _tf
 
     dl, _ = install_stub()
@@ -643,7 +842,7 @@ def test_identical_bytes_stop_retries():
     dl.RAW = Path(_tf.mkdtemp())
     # giả lập nội dung không đổi + validate luôn fail
     orig = dl._validate_ex
-    dl._validate_ex = lambda p, e=0, expect_archive=True: dl.Verdict(
+    dl._validate_ex = lambda p, e=0, expect_archive=True, slack=0: dl.Verdict(
         False, "hỏng giả lập", retryable=True
     )
     counter = Path(_tf.mkdtemp()) / "n.txt"
@@ -657,7 +856,11 @@ def test_identical_bytes_stop_retries():
         os.environ.pop("COUNTER", None)
     assert r["status"] == "error"
     assert r.get("deterministic") is True, r
-    assert r["attempts"] == 2, f"dừng ở attempt 2, đã chạy {r['attempts']}"
+    assert r["attempts"] == 3, f"phải tải lại từ 0 B một lần, đã chạy {r['attempts']}"
+    # Byte bị loại KHÔNG được xoá: `_hold` giữ lại (sự cố 2026-10-25 đã xoá
+    # 3 × 119 MB của những file thực ra đúng).
+    held = Path(r.get("held") or "")
+    assert held.exists(), f"file bị loại phải còn trong _held, đang là {held}"
 
 
 # ---------------------------------------------------------------------------
@@ -876,7 +1079,10 @@ def _probe_env(dl, src_a: bytes, src_b: bytes):
     os.environ["SRC_FILE_B"] = str(pb)
     os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
     dl.RAW = Path(_tf.mkdtemp())
+    # Patch CẢ HAI: `probe_pair` hỏi `_ls_estimates` (bản giữ sai số làm tròn),
+    # còn `_ls_sizes` chỉ là wrapper của nó cho chỗ chỉ cần in số.
     dl._ls_sizes = lambda *a, **k: {}
+    dl._ls_estimates = lambda *a, **k: {}
     return d
 
 
@@ -894,12 +1100,13 @@ def _probe_cleanup(dl, orig_ls):
     os.environ["MODE"] = "ok"
     for k in ("SRC_FILE_A", "SRC_FILE_B"):
         os.environ.pop(k, None)
-    dl._ls_sizes = orig_ls
+    dl._ls_sizes = orig_ls[0]
+    dl._ls_estimates = orig_ls[1]
 
 
 def test_probe_says_same_images_when_only_mtime_differs():
     dl, _ = install_stub()
-    orig_ls = dl._ls_sizes
+    orig_ls = (dl._ls_sizes, dl._ls_estimates)
     _probe_env(dl, _make_tar(_LSUN, mtime=1), _make_tar(_LSUN, mtime=999_999))
     try:
         out = _probe_output(dl)
@@ -913,7 +1120,7 @@ def test_probe_says_same_images_when_only_mtime_differs():
 
 def test_probe_counts_images_and_says_disjoint():
     dl, _ = install_stub()
-    orig_ls = dl._ls_sizes
+    orig_ls = (dl._ls_sizes, dl._ls_estimates)
     _probe_env(dl, _make_tar(_LSUN), _make_tar(_IMNET))
     try:
         out = _probe_output(dl)
