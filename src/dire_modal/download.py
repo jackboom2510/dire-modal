@@ -49,7 +49,7 @@ from typing import NamedTuple
 
 import modal
 
-from .common import app, baidu_secret, cpu_image, vol_raw
+from .common import app, baidu_secret, cpu_image, vol_ckpt, vol_raw, vol_shards
 from .manifest import (
     BAIDU_ROOT,
     NEVER,
@@ -192,6 +192,90 @@ def _human(n: float) -> str:
             return f"{n:.1f}{unit}" if unit != "B" else f"{int(n)}B"
         n /= 1024
     return f"{n:.1f}TB"
+
+
+# ============================================================================
+# Liệt kê Volume dưới dạng CÂY — `modal volume ls` chỉ đọc được MỘT tầng
+# ============================================================================
+# Vì sao phải có hàm riêng: CLI của Modal không có `--recursive`
+# (`modal volume ls [OPTIONS] VOLUME_NAME [PATH]` chỉ nhận --json/-e/--profile),
+# nên muốn ra cây thì phải tự đệ quy. Gọi CLI trong vòng lặp bash được, nhưng mỗi
+# lần là một round-trip gRPC (~1 s) — cây `dire-raw` có hơn trăm thư mục.
+# Chạy một container đọc mount FUSE thì rẻ hơn nhiều và đúng thứ tự.
+#
+# ⚠ `modal volume ls` còn một cái bẫy: khi stdout không phải TTY nó CHỈ in đường
+# dẫn (legacy behavior trong `modal/cli/volume.py`), mất hết cột size. Đó là lý do
+# hàm này tự in size thay vì để người dùng `| head`.
+
+
+def _tree_lines(
+    root: Path,
+    max_depth: int = 0,
+    show_hidden: bool = True,
+) -> tuple[list[str], int, int, int]:
+    """Dựng cây kiểu ``tree(1)``. Trả ``(dòng, n_dir, n_file, tổng_byte)``.
+
+    Tách khỏi Modal để test được trên thư mục tạm.
+
+    Thứ tự: **thư mục trước, file sau, mỗi loại theo alphabet** — để hai lần chạy
+    cho cùng kết quả (``scandir`` không bảo đảm thứ tự). ``max_depth=0`` = vô hạn.
+    """
+    lines: list[str] = []
+    counts = {"dir": 0, "file": 0, "bytes": 0}
+
+    def walk(d: Path, prefix: str, level: int) -> None:
+        try:
+            entries = list(os.scandir(d))
+        except OSError as exc:  # FUSE lỗi / mất quyền: in ra, đừng làm sập cả cây
+            lines.append(f"{prefix}└── [!] {d.name}: {type(exc).__name__}")
+            return
+        if not show_hidden:
+            entries = [e for e in entries if not e.name.startswith(".")]
+        items = sorted(
+            entries, key=lambda e: (not e.is_dir(follow_symlinks=False), e.name)
+        )
+        for i, e in enumerate(items):
+            last = i == len(items) - 1
+            branch = "└── " if last else "├── "
+            is_dir = e.is_dir(follow_symlinks=False)
+            if is_dir:
+                lines.append(f"{prefix}{branch}{e.name}/")
+                counts["dir"] += 1
+                if max_depth and level + 1 >= max_depth:
+                    continue
+                walk(Path(e.path), prefix + ("    " if last else "│   "), level + 1)
+            else:
+                try:
+                    size = e.stat(follow_symlinks=False).st_size
+                except OSError:
+                    size = 0
+                lines.append(f"{prefix}{branch}{e.name}  {_human(size)}")
+                counts["file"] += 1
+                counts["bytes"] += size
+
+    head = root.as_posix().rstrip("/") or "/"
+    lines.append(head + "/")
+    if root.is_dir():
+        walk(root, "", 0)
+    return lines, counts["dir"], counts["file"], counts["bytes"]
+
+
+def _flat_lines(root: Path, show_hidden: bool = True) -> list[tuple[int, str]]:
+    """Danh sách phẳng ``[(size, đường_dẫn)]`` — để sort, grep, đối chiếu manifest."""
+    out: list[tuple[int, str]] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        if not show_hidden:
+            dirnames[:] = [d for d in dirnames if not d.startswith(".")]
+        for fn in filenames:
+            if not show_hidden and fn.startswith("."):
+                continue
+            fp = Path(dirpath) / fn
+            try:
+                size = fp.stat().st_size
+            except OSError:
+                size = 0
+            out.append((size, fp.as_posix()))
+    return sorted(out, key=lambda t: t[1])
 
 
 def _baidu_login() -> None:
@@ -2145,6 +2229,103 @@ def verify() -> None:
             )
         raise SystemExit(1)
     print("All OK.")
+
+
+# Ba volume của repo, mount cùng lúc để `tree` soi được bất kỳ volume nào bằng
+# đường dẫn tuyệt đối (/raw/..., /ckpt/..., /shards/...). Mount thêm volume
+# KHÔNG tốn credit — chỉ là bind mount vào container đang chạy.
+ALL_VOLUMES = {"/raw": vol_raw, "/ckpt": vol_ckpt, "/shards": vol_shards}
+
+
+@app.function(image=cpu_image, volumes=ALL_VOLUMES, timeout=1800)
+def tree(
+    path: str = "/raw",
+    depth: int = 0,
+    flat: bool = False,
+    hidden: bool = True,
+    out: str = "",
+) -> dict:
+    """Liệt kê **toàn bộ** file dưới ``path`` dưới dạng cây (hoặc danh sách phẳng).
+
+    ``modal run -m dire_modal.download::tree``
+    ``modal run -m dire_modal.download::tree --path /raw/checkpoints``
+    ``modal run -m dire_modal.download::tree --flat --out /raw/_tree_dire-raw.txt``
+
+    Vì sao cần: ``modal volume ls`` **chỉ đọc một tầng** (không có ``--recursive``),
+    nên không thể ra cây bằng CLI. Và khi stdout không phải TTY nó chỉ in đường
+    dẫn — mất hết size. Hàm này đi một lần bằng ``os.scandir`` trên mount FUSE,
+    rẻ hơn nhiều so với gọi CLI trong vòng lặp (mỗi lần một round-trip gRPC).
+
+    ``depth=0`` = vô hạn · ``flat=True`` = ``<size>\t<đường_dẫn>`` sort theo path
+    (dùng để grep/đối chiếu manifest) · ``out`` = ghi thêm ra file trong Volume rồi
+    commit, phòng khi log bị cắt.
+    """
+    root = Path(path)
+    if not root.exists():
+        raise SystemExit(
+            f"[!] {path} không tồn tại. Volume mount: {sorted(ALL_VOLUMES)}"
+        )
+    if not root.is_dir():
+        raise SystemExit(f"[!] {path} là file, không phải thư mục")
+
+    if flat:
+        rows = _flat_lines(root, show_hidden=hidden)
+        body = [f"{_human(sz)}\t{pp}" for sz, pp in rows]
+        n_dir = sum(1 for _ in os.walk(root))
+        n_file, total = len(rows), sum(sz for sz, _ in rows)
+        text = "\n".join(body)
+    else:
+        body, n_dir, n_file, total = _tree_lines(root, depth, hidden)
+        text = "\n".join(body)
+
+    # Ẩn file của chính lần chạy này khỏi phần đếm (nếu `out` nằm trong `path`)
+    print("=" * 78)
+    print(f"{'DANH SÁCH' if flat else 'CÂY THƯ MỤC'} — {path}")
+    print("=" * 78)
+    print(text)
+
+    # Tổng theo thư mục con trực tiếp: trả lời ngay "cái gì đang chiếm chỗ"
+    subs: list[tuple[str, int, int]] = []
+    for child in sorted(root.iterdir(), key=lambda c: c.name):
+        if not child.is_dir() or (not hidden and child.name.startswith(".")):
+            continue
+        rows = _flat_lines(child, show_hidden=hidden)
+        subs.append((child.name + "/", len(rows), sum(sz for sz, _ in rows)))
+    subs.sort(key=lambda t: t[2], reverse=True)
+
+    print("\n" + "-" * 78)
+    print(f"  tổng: {n_dir} thư mục · {n_file} file · {_human(total)}")
+    if subs:
+        print("  theo thư mục con:")
+        for name, cnt, sz in subs:
+            print(f"    {_human(sz):>9}  {cnt:>5} file  {name}")
+    print("-" * 78)
+
+    if out:
+        op = Path(out)
+        op.parent.mkdir(parents=True, exist_ok=True)
+        op.write_text(text + "\n", encoding="utf-8")
+        for vol in ALL_VOLUMES.values():
+            try:
+                vol.commit()
+            except Exception:  # noqa: BLE001 — commit lỗi ≠ mất file
+                pass
+        print(f"[tree] đã ghi {out} ({_human(op.stat().st_size)})")
+        for mnt, vol_name in (("/raw", "dire-raw"), ("/ckpt", "dire-ckpt"),
+                              ("/shards", "dire-shards")):
+            if out.startswith(mnt + "/"):
+                print(f"[tree] tải về: modal volume get {vol_name} "
+                      f"{out[len(mnt):]} ./")
+                break
+
+    return {
+        "path": path,
+        "dirs": n_dir,
+        "files": n_file,
+        "bytes": total,
+        "children": [{"name": n, "files": c, "bytes": b} for n, c, b in subs],
+        "out": out,
+    }
 
 
 @app.local_entrypoint()

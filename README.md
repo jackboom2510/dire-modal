@@ -107,6 +107,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `bash scripts/08_repro_minimal.sh` | Chuỗi tái lập gọn: status → plan → fetch → verify → eval pre-trained |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) + (tuỳ chọn) đẩy R2 |
+| `modal run -m dire_modal.download::tree --path /raw` | Cây **toàn bộ** Volume. `--flat` = `<size>\t<path>` sort theo path · `--depth N` · `--out` để lưu ra file. (`modal volume ls` chỉ đọc 1 tầng nên không ra cây được) |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |
 | `bash scripts/08_repro_minimal.sh` | **Đường chính hiện tại**: tải `e2min` → eval checkpoint tác giả (cổng S2: ACC ≥ 0.99 trên ADM-LSUN) |
 | `bash scripts/09_bench_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |

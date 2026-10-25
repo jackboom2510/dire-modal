@@ -416,12 +416,17 @@ def test_fetch_reports_partial_when_budget_runs_out():
     os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
     dl.RAW = Path(tempfile.mkdtemp())
 
-    real = dl._attempt_timeout
     calls = {"n": 0}
 
     def fake(started, now=None):
+        # Attempt 1: một timeout DƯƠNG cố định (900 s) — đừng gọi
+        # `_attempt_timeout` thật ở đây. Bản cũ gọi hàm thật nên kết quả phụ
+        # thuộc đồng hồ; khi máy chậm/ngân sách tính ra <= 0 thì nhánh "ngân
+        # sách" chạy ngay từ attempt 1 và test đỏ ngẫu nhiên (~1/16 lần chạy
+        # cả bộ). Thứ test này canh là: attempt 2 thấy 0 ⇒ dừng, KHÔNG chạy
+        # attempt 3.
         calls["n"] += 1
-        return real(started, now) if calls["n"] == 1 else 0.0
+        return 900.0 if calls["n"] == 1 else 0.0
 
     real_timeout = dl._attempt_timeout
     dl._attempt_timeout = fake
