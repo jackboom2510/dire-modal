@@ -12,7 +12,7 @@ Chạy
     modal run -m dire_modal.archive::push_kaggle    --dataset-id <user>/dire-tier-a --src-subdir dire/train/lsun_bedroom
     modal run -m dire_modal.archive::verify_hf      --repo-id <user>/diffusionforensics-dire
 
-Secrets cần có (xem scripts/00_setup_secrets.sh):
+Secrets cần có (xem scripts/setup.sh):
     r2-cred      : R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
     hf-cred      : HF_TOKEN
     kaggle-cred  : KAGGLE_USERNAME, KAGGLE_KEY

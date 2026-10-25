@@ -123,7 +123,7 @@ baidu_parallel: 1
 
 # `--mode` của BaiduPCS-Go: rỗng = không truyền (mặc định `locate` của client).
 # Hợp lệ: locate | pcs | stream — ba API khác nhau của Baidu, lịch sử throttle
-# khác nhau. Chỉ đổi khi đã đo: `scripts/09_bench_mode.sh`.
+# khác nhau. Chỉ đổi khi đã đo: `bash tools/bench_baidu_mode.sh`.
 baidu_mode: ""
 
 # Chu kỳ commit Volume khi đang tải (giây). 0 = chỉ commit sau khi file xong.
@@ -163,7 +163,7 @@ dire_max_images: 500
 # Giá A100 (USD/GPU-giờ). Modal tính theo giây GPU thực dùng.
 dire_usd_per_gpu_hour: 2.5
 
-# Giây/ảnh, BẢO THỦ. Đo thật bằng `scripts/06_measure_dire.sh` rồi cập nhật;
+# Giây/ảnh, BẢO THỦ. Đo thật bằng `tools/measure_dire.sh` rồi cập nhật;
 # preflight dùng số này nên ước tính sẽ sai đúng bằng mức sai của nó.
 dire_sec_per_image: 5.0
 

@@ -36,7 +36,7 @@ import os
 import tarfile
 from pathlib import Path
 
-from .common import app, gpu_image, vol_ckpt, vol_raw
+from .common import app, cpu_image, gpu_image, vol_ckpt, vol_raw
 
 # Định danh pipeline tiền xử lý — ghi vào CSV + run.json để so sánh được.
 PREPROC = "resize256_centercrop224_normalize"
@@ -67,6 +67,11 @@ CKPT_CANDIDATES = (
     "/raw/checkpoints/lsun_adm.pth",
     "/ckpt/pretrained/lsun_adm.pth",
 )
+
+# Đường dẫn tới bảng số THAM CHIẾU của tác giả (Table 2, khối DIRE). Nằm trong
+# package chứ không ở `manifests/` vì Modal chỉ đóng gói thư mục module — cùng
+# lý do `tiers.yaml` nằm trong package.
+PAPER_TABLE = Path(__file__).with_name("paper_table2.tsv")
 
 
 def resolve_ckpt(explicit: str = "", name: str = "lsun_adm.pth") -> str:
@@ -415,6 +420,243 @@ def score_pair(
 # ============================================================================
 # Modal functions
 # ============================================================================
+# ============================================================================
+# Báo cáo: gộp nhiều lần eval thành bảng so với paper
+# ============================================================================
+# Quy trình tái lập cần một câu trả lời dạng "chúng ta được 100/100, paper 100/100"
+# cho 4 detector × 8 generator — đúng khối DIRE của Table 2. Làm việc gộp này
+# trong Python (không phải bash) vì phải đọc CSV + run.json và tính Δ.
+
+
+def load_paper_table(path: Path | str | None = None) -> dict[str, dict[str, dict[str, float]]]:
+    """Đọc `paper_table2.tsv` → ``{ckpt: {generator: {"acc": %, "ap": %}}}``.
+
+    Đơn vị là **phần trăm** như paper in. Hàng `avg` được giữ nguyên (paper in
+    sẵn) và `tests/test_paper_table.py` kiểm nó khớp trung bình 8 ô.
+    """
+    p = Path(path) if path else PAPER_TABLE
+    out: dict[str, dict[str, dict[str, float]]] = {}
+    with p.open(encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#") or line.startswith("ckpt\t"):
+                continue
+            parts = line.split("\t")
+            if len(parts) != 4:
+                raise ValueError(f"dòng hỏng trong {p.name}: {line!r}")
+            ckpt, gen, acc, ap = parts
+            out.setdefault(ckpt, {})[gen] = {"acc": float(acc), "ap": float(ap)}
+    return out
+
+
+def ckpt_stem(ckpt: str | Path) -> str:
+    """``/raw/checkpoints/lsun_adm.pth`` → ``lsun_adm`` (khoá để so với paper)."""
+    return Path(str(ckpt)).name.rsplit(".", 1)[0]
+
+
+def _pct(v) -> float | None:
+    """CSV lưu 0..1; paper in %. Trả ``None`` khi ô trống (NFR-6: không bịa số)."""
+    try:
+        if v is None or str(v).strip() == "":
+            return None
+        return round(float(v) * 100.0, 4)
+    except (TypeError, ValueError):
+        return None
+
+
+def collect_results(results_root: Path | str, exp_ids: list[str] | None = None
+                    ) -> dict[str, dict[str, dict[str, float | None]]]:
+    """Gom mọi ``results/<exp>/dire.csv`` → ``{ckpt: {generator: {acc, ap}}}``.
+
+    Nhóm theo **stem của checkpoint** đọc từ ``run.json → extra.ckpt``, không
+    theo tên thư mục: tên thư mục do người dùng đặt (`--exp-id spec001_fr1`),
+    còn ckpt mới là thứ paper phân biệt (4 hàng = 4 detector).
+    """
+    root = Path(results_root)
+    if exp_ids:
+        dirs = [root / e for e in exp_ids]
+    else:
+        dirs = sorted(d for d in root.iterdir() if (d / "dire.csv").exists()) if root.is_dir() else []
+
+    out: dict[str, dict[str, dict[str, float | None]]] = {}
+    for d in dirs:
+        csv_path = d / "dire.csv"
+        if not csv_path.exists():
+            print(f"[skip] {d.name}: không có dire.csv")
+            continue
+        ckpt = d.name
+        meta = d / "run.json"
+        if meta.exists():
+            try:
+                info = json.loads(meta.read_text(encoding="utf-8"))
+                ckpt = ckpt_stem(
+                    (info.get("extra") or {}).get("ckpt")
+                    or (info.get("data") or {}).get("ckpt")
+                    or ckpt
+                )
+            except Exception:  # noqa: BLE001 — run.json hỏng thì dùng tên thư mục
+                pass
+        with csv_path.open(encoding="utf-8", newline="") as fh:
+            for row in csv.DictReader(fh):
+                if (row.get("split") or "test") != "test":
+                    continue
+                # Chỉ nhánh test của LSUN-Bedroom có 8 cột paper. Nhánh
+                # `imagenet__*` là cross-dataset (Table 3) — vẫn hiện, nhưng
+                # không so Δ với Table 2.
+                out.setdefault(ckpt, {})[row.get("generator") or "?"] = {
+                    "acc": _pct(row.get("acc")),
+                    "ap": _pct(row.get("ap")),
+                    "branch": row.get("branch") or "",
+                    "n_fake": row.get("n_fake") or "",
+                }
+    return out
+
+
+def compare_to_paper(
+    ours: dict, paper: dict, tol: float = 0.5
+) -> dict:
+    """So từng ô có ở cả hai bên. Trả ``cells`` / ``missing`` / ``worst``.
+
+    ``tol`` = dung sai tuyệt đối (điểm %) để coi là "khớp". 0.5 điểm là hợp lý:
+    paper in 1 chữ số thập phân, còn lệch thật sự giữa hai lần chạy phải là 0
+    (eval tất định, AC-1.4).
+    """
+    cells: list[dict] = []
+    missing: list[dict] = []
+    for ckpt, gens in paper.items():
+        for gen, ref in gens.items():
+            if gen == "avg":
+                continue
+            got = (ours.get(ckpt) or {}).get(gen)
+            if got is None or got.get("acc") is None:
+                missing.append({"ckpt": ckpt, "generator": gen})
+                continue
+            d_acc = round(float(got["acc"]) - ref["acc"], 4)
+            d_ap = (round(float(got["ap"]) - ref["ap"], 4)
+                    if got.get("ap") is not None else None)
+            cells.append({
+                "ckpt": ckpt, "generator": gen,
+                "acc": got["acc"], "acc_paper": ref["acc"], "d_acc": d_acc,
+                "ap": got.get("ap"), "ap_paper": ref["ap"], "d_ap": d_ap,
+                "ok": abs(d_acc) <= tol and (d_ap is None or abs(d_ap) <= tol),
+            })
+    worst = max(cells, key=lambda c: abs(c["d_acc"]), default=None)
+    return {
+        "cells": cells,
+        "missing": missing,
+        "worst": worst,
+        "n_cells": len(cells),
+        "n_ok": sum(1 for c in cells if c["ok"]),
+    }
+
+
+def _delta(ours: float | None, paper: float | None, width: int = 7) -> str:
+    """Chuỗi ΔACC/ΔAP. Làm tròn về 0.0 để không in ``-0.0`` (gây hiểu nhầm âm)."""
+    if ours is None or paper is None:
+        return " " * width + "-"
+    d = round(float(ours) - float(paper), 1)
+    if abs(d) < 0.05:
+        d = 0.0
+    return f"{d:+{width}.1f}"
+
+
+def render_report(
+    ours: dict, paper: dict | None = None, tol: float = 0.5
+) -> list[str]:
+    """Render bảng so sánh. Tách khỏi I/O để test được không cần Modal."""
+    lines: list[str] = []
+    order = ["adm", "ddpm", "iddpm", "pndm", "sdv1", "sdv2", "ldm", "vqdiffusion"]
+    for ckpt in sorted(ours):
+        gens = ours[ckpt]
+        paper_row = (paper or {}).get(ckpt) or {}
+        # Chỉ in 8 cột paper trước, rồi các generator mở rộng sau — để bảng đọc
+        # được như Table 2 và phần mở rộng không chen vào giữa.
+        known = [g for g in order if g in gens]
+        extra = sorted(g for g in gens if g not in order)
+        lines.append("")
+        lines.append("=" * 78)
+        lines.append(f"detector: {ckpt}   (ckpt của tác giả, KHÔNG train lại)")
+        lines.append("=" * 78)
+        lines.append(f"  {'generator':<14} {'ACC':>7} {'paper':>7} {'Δ':>7} "
+                     f"{'AP':>7} {'paper':>7} {'Δ':>7}   n_fake")
+        for gen in [*known, *extra]:
+            g = gens[gen]
+            ref = paper_row.get(gen) or {}
+            pa = ref.get("acc")
+            pap = ref.get("ap")
+            d_acc = _delta(g.get("acc"), pa)
+            d_ap = _delta(g.get("ap"), pap)
+            a = f"{g['acc']:7.1f}" if g.get("acc") is not None else "      -"
+            ap = f"{g['ap']:7.1f}" if g.get("ap") is not None else "      -"
+            pas = f"{pa:7.1f}" if pa is not None else "      -"
+            paps = f"{pap:7.1f}" if pap is not None else "      -"
+            lines.append(f"  {gen:<14} {a} {pas} {d_acc} {ap} {paps} {d_ap}   "
+                         f"{g.get('n_fake') or '-'}")
+        # Trung bình trên 8 cột paper (đúng định nghĩa `Avg.` của Table 2)
+        vals = [gens[g]["acc"] for g in order
+                if g in gens and gens[g].get("acc") is not None]
+        if vals:
+            ref_avg = (paper_row.get("avg") or {}).get("acc")
+            t = f"{sum(vals) / len(vals):7.1f}"
+            r = f"{ref_avg:7.1f}" if ref_avg is not None else "      -"
+            d = _delta(sum(vals) / len(vals), ref_avg)
+            lines.append(f"  {'Avg(8 cột)':<14} {t} {r} {d}")
+        if extra:
+            lines.append(f"  ↳ {len(extra)} generator MỞ RỘNG (ngoài Table 2, "
+                         f"không có số paper): {', '.join(extra)}")
+
+    if paper:
+        cmp = compare_to_paper(ours, paper, tol=tol)
+        lines.append("")
+        lines.append("-" * 78)
+        if cmp["n_cells"] == 0:
+            lines.append("  [i] chưa so được ô nào — xem danh sách thiếu ở dưới.")
+        else:
+            lines.append(f"  so với paper: {cmp['n_ok']}/{cmp['n_cells']} ô "
+                         f"khớp trong ±{tol:g} điểm")
+            if cmp["worst"]:
+                w = cmp["worst"]
+                lines.append(f"  lệch nhiều nhất: {w['ckpt']}/{w['generator']} "
+                             f"ΔACC={w['d_acc']:+.2f}")
+        if cmp["missing"]:
+            from collections import Counter
+            by_ckpt = Counter(m["ckpt"] for m in cmp["missing"])
+            lines.append(f"  thiếu dữ liệu: {len(cmp['missing'])} ô "
+                         f"({', '.join(f'{k}: {v}' for k, v in sorted(by_ckpt.items()))})")
+            lines.append("  → cần `--tiers e2,ckpts` nếu thiếu ckpt; "
+                         "`--tiers e2` nếu thiếu generator.")
+    return lines
+
+
+@app.function(
+    image=cpu_image,
+    volumes={"/ckpt": vol_ckpt, "/raw": vol_raw},
+    timeout=1800,
+)
+def report(exp_ids: str = "", paper: bool = True, tol: float = 0.5) -> dict:
+    """Gộp các lần eval thành bảng so với Table 2 của paper.
+
+    ``modal run -m dire_modal.eval::report``
+    ``modal run -m dire_modal.eval::report --exp-ids eval_20261025_111500,eval_...``
+
+    Đọc ``/ckpt/results/*/dire.csv`` + ``run.json``, nhóm theo **stem của
+    checkpoint**, in 1 khối/detector với cột Δ so với số tác giả. Không chạy
+    model, không cần GPU ⇒ gần 0 credit.
+    """
+    ours = collect_results(
+        RESULTS_ROOT, [e for e in exp_ids.split(",") if e.strip()] or None
+    )
+    if not ours:
+        raise SystemExit(
+            f"[!] Không có kết quả nào trong {RESULTS_ROOT}.\n"
+            "    Chạy trước: bash scripts/01_repro.sh --stage eval"
+        )
+    ref = load_paper_table() if paper else None
+    for line in render_report(ours, ref, tol):
+        print(line)
+    return {"detectors": sorted(ours), "n_cells": sum(len(v) for v in ours.values())}
+
+
 @app.function(
     image=gpu_image,
     volumes={"/raw": vol_raw, "/ckpt": vol_ckpt},

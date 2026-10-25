@@ -14,13 +14,20 @@ DIRE thế nào". Đây là đường chính của dự án.
 **Bước:**
 
 ```bash
-modal run -m dire_modal.download::local_status          # 0 credit, xem policy
-modal run -m dire_modal.download::main --tiers e2min --mode fetch   # 3 file, ~400 MB
-modal run -m dire_modal.download::verify
-modal run -m dire_modal.eval::main --tiers e2min        # in CỔNG S2
+bash scripts/01_repro.sh --quick     # e2min → verify → eval → CỔNG S2
+bash scripts/01_repro.sh             # e2,ckpts → cả 32 ô của Table 2
+DETACH=1 bash scripts/01_repro.sh    # app sống độc lập với máy local
 ```
 
-Gói cả 4 bước: `bash scripts/08_repro_minimal.sh`.
+Từng bước, nếu cần:
+
+```bash
+modal run -m dire_modal.download::local_status                       # 0 credit
+modal run -m dire_modal.download::main --tiers e2min --mode fetch     # 3 file ~400 MB
+modal run -m dire_modal.download::verify
+modal run -m dire_modal.eval::main --tiers e2min                      # in CỔNG S2
+modal run -m dire_modal.eval::report                                  # Δ so với paper
+```
 
 **Vì sao `e2min`:** chỉ cần `lsun_adm.pth` + test `real` + test `adm` để kiểm
 `ACC(adm) ≥ 0.99` (cổng S2 của SPEC-001). 3 file ≈ 400 MB ≈ **1.5 h** ở 76.6
@@ -55,6 +62,9 @@ modal run -m dire_modal.download::main \
 ```
 
 `--paths` vẫn đi qua danh sách `NEVER` và guard dung lượng như mọi đường khác.
+
+**Muốn cải thiện chứ không tái lập:** `bash scripts/02_improve.sh --stage plan`
+(lộ trình FR-2…FR-6, nguồn ý tưởng: AEROBLADE + đề xuất của dự án).
 
 **Kiểm:** `pytest tests/ -q` xanh; `download::plan` in đúng số file/GB của tier.
 
@@ -217,7 +227,7 @@ import module.
 **Bước:**
 
 ```bash
-./scripts/07_check_imports.sh
+bash scripts/check.sh
 ```
 
 Script tạo `.venv`, cài `modal` thật, chạy `tests/test_real_modal_import.py`,

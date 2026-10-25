@@ -16,17 +16,17 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không 
 
 Không train ResNet50. Nạp `lsun_adm.pth` của tác giả rồi eval:
 
+`scripts/` giờ chỉ có **đúng 2 quy trình** (xem `scripts/README.md`):
+
 ```bash
-# tối thiểu: 3 file (~400 MB, ~1.5 h ở 76.6 KiB/s) — đủ cho CỔNG S2
-modal run -m dire_modal.download::main --tiers e2min --mode fetch
-modal run -m dire_modal.eval::main --tiers e2min
+# QUY TRÌNH 1 — tái lập Table 2 (4 detector × 8 generator = 32 ô)
+bash scripts/01_repro.sh --quick   # e2min: 3 file ~0.40 GB ~1.5 h → 1 ô + cổng S2
+bash scripts/01_repro.sh           # e2,ckpts: 22 file ~3.25 GB ~12.4 h → cả 32 ô
+bash scripts/01_repro.sh --stage report   # Δ từng ô so với src/dire_modal/paper_table2.tsv
 
-# đầy đủ: 17 file (1.94 GB, 7.4 h) — bảng 16 generator
-modal run -m dire_modal.download::main --tiers e2 --mode fetch
-modal run -m dire_modal.eval::main --tiers e2
-
-# gói cả hai bước
-bash scripts/08_repro_minimal.sh
+# QUY TRÌNH 2 — cải thiện (training-free; AEROBLADE + đề xuất của dự án)
+bash scripts/02_improve.sh --stage plan       # lộ trình FR-2…FR-6
+bash scripts/02_improve.sh --stage baseline   # điểm DIRE trên val (e5) + test (e2)
 ```
 
 `download::main` **tự lặp vòng** trong một lần gọi (ngân sách `ORCHESTRATOR_BUDGET_S = 20 h`,
@@ -55,7 +55,9 @@ in đúng lệnh cần chạy.
 | PR #9 *(đã merge)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
 | PR #10 | Ngân sách thời gian + watchdog 0B/s + manifest bền từng file | 5 test mới; tái hiện đúng `FunctionTimeoutError` 18 000s từ log thật |
 | PR #11 | Lọc file đã có trước `.map()` · `subprocess_timeout` 5400→1800 · `bench_concurrency` · **port `eval.py` (M1 của SPEC-001)** · sửa `pack` làm mất nhánh | 117 test; AP/TPR khớp sklearn trên 500 ca ngẫu nhiên |
-| PR này | Tái lập pre-trained: tier `e2min` · `--paths` · tự lặp vòng 20 h · `--mode` BaiduPCS-Go · `eval::main` tự tìm ckpt + in CỔNG S2 · `download::from_hf` · `scripts/08_repro_minimal.sh` / `scripts/09_bench_mode.sh` | 117 test vẫn xanh; đo song song: k=1 76.6 KiB/s vs k=2 75.0 KiB/s ⇒ `max_containers: 1` |
+| PR #12 | Tái lập pre-trained: tier `e2min` · `--paths` · tự lặp vòng 20 h · `--mode` BaiduPCS-Go · `eval::main` tự tìm ckpt + in CỔNG S2 · `download::from_hf` · gộp vào `scripts/01_repro.sh` + `tools/bench_baidu_mode.sh` | 117 test vẫn xanh; đo song song: k=1 76.6 KiB/s vs k=2 75.0 KiB/s ⇒ `max_containers: 1` |
+| PR #13 | `download::tree` (cây Volume) + `tools/tree.sh` + sửa test đỏ ngẫu nhiên | 119 test |
+| PR này | Gom `scripts/` về **ĐÚNG 2 quy trình** (`01_repro.sh` / `02_improve.sh`) · bảng tham chiếu `paper_table2.tsv` + `eval::report` in Δ · sửa `~32k` → `~17k` · làm rõ `lsun_adm.pth` = detector ≠ weight ADM · tier↔paper | 138 test |
 
 Kết luận dữ liệu quan trọng (chốt bằng `probe_pair` trên dữ liệu thật):
 
@@ -88,8 +90,9 @@ chạy được (nếu chọn a), hoặc docs không còn nhắc file không t�
 Stage train sẽ fail khi đọc. Cần hoặc điền cấu hình thật (khớp
 `train.py` + checkpoint tác giả), hoặc xoá file và sửa chỗ tham chiếu.
 
-**Lưu ý:** dự án **không train lại**. Nếu chọn xoá, kiểm `scripts/05_train_repro.sh`
-và `README` để không còn trỏ vào file rỗng.
+**Lưu ý:** dự án **không train lại**, và `scripts/` nay không còn script train
+(đã xoá `05_train_repro.sh`). Nếu chọn xoá file thì chỉ cần kiểm `README` +
+`train.py` để không còn trỏ vào file rỗng.
 
 ### 3. Submodule `third_party/DIRE` chưa init
 
@@ -125,9 +128,12 @@ và mặc định là dry-run.
 Spec đã viết xong, **chưa có dòng code nào** của nó. Thứ tự mốc trong spec §12
 là ràng buộc, không phải đề xuất: `M2` (FR-2) chặn `M4` (FR-4).
 
+Mỗi mốc ứng với **một stage** của `scripts/02_improve.sh` — stage đã có gọi code
+thật, stage chưa có **dừng** và in đúng thiếu gì (không giả vờ đã chạy).
+
 | Mốc | Việc | Test phải viết kèm | Entrypoint phải tạo |
 |---|---|---|---|
-| M1 | Port `eval.py`, thêm TPR@5%FPR, ghi CSV + `run.json` | `tests/test_run_json.py`, `tests/test_eval_contract.py` | — (`dire_modal.eval::main` đã có) |
+| M1 ✅ | Port `eval.py`, thêm TPR@5%FPR, ghi CSV + `run.json` | `tests/test_run_json.py`, `tests/test_eval_contract.py` | — (`dire_modal.eval::main` đã có) |
 | M2 | `compute_dire` khớp DIRE map của tác giả (tương quan ≥ 0.90) | `tests/test_dire_equivalence.py` | `dire_modal.compute_dire::equivalence` |
 | M3 | Bọc AEROBLADE | `tests/test_aero_sign.py` | `dire_modal.aero::main` |
 | M4 | Format bias + fusion (chỉ fit trên val) | `tests/test_fusion_no_leak.py` | `dire_modal.fusion::fit` |
@@ -139,6 +145,14 @@ viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu
 
 **Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
 truy được về một `run.json`.
+
+### 7b. Tái lập Table 2 — quy trình đã xong, SỐ thì chưa
+
+`bash scripts/01_repro.sh` (mặc định `e2,ckpts` = 22 file / 3.25 GB / ~12.4 h)
+chạy 4 detector × 8 generator rồi `eval::report` in Δ so với
+`src/dire_modal/paper_table2.tsv`. Cần chạy thật để có cột Δ — đó là cổng **S7**.
+
+**Xong khi:** S7 đạt (|ΔACC| ≤ 0.5 ở mọi ô) và số được ghi vào báo cáo.
 
 ### 8. ✅ Đã đo băng thông tải Baidu (2026-10-25) — chốt `max_containers: 1`
 
@@ -159,7 +173,7 @@ Hệ quả về thời gian (ở 76.6 KiB/s): `e2min` 0.40 GB → **~1.5 h** · 
 **7.4 h** · `e2,e4` 3.39 GB → **12.9 h** · cả cây 61.40 GB → 233.5 h.
 
 **Còn treo:** `--mode locate|pcs|stream` chưa đo. Ba mode là ba API khác nhau của
-Baidu, có thể có lịch sử throttle khác nhau. `bash scripts/09_bench_mode.sh` đo
+Baidu, có thể có lịch sử throttle khác nhau. `bash tools/bench_baidu_mode.sh` đo
 trên một file 26.57 MB (~6 phút/mode). Đo trên tài khoản **đang bình thường**,
 nếu không cả ba mode sẽ cùng cho ≈0 và kết luận sẽ sai.
 
@@ -190,6 +204,6 @@ ADM, không cần GPU mạnh, không train gì. `eval::main` đã tự tìm ckpt
 ## Cách biết một việc đã thật sự xong
 
 1. `pytest tests/ -q` xanh, và test mới **fail trên `main` cũ**.
-2. `./scripts/07_check_imports.sh` xanh (nếu chạm Modal).
+2. `bash scripts/check.sh` xanh (nếu chạm Modal).
 3. Docs/`plan.md` đã cập nhật.
 4. Trong PR có ghi phần **chưa** làm và số đo thật (nếu có).

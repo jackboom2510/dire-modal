@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# TIỆN ÍCH — benchmark storage, không phải quy trình thực nghiệm.
 set -euo pipefail
 # Đo storage: Modal Volume vs R2 (CloudBucketMount + S3 API), và throughput DIRE proxy.
 #
@@ -6,9 +7,9 @@ set -euo pipefail
 # modal.CloudBucketMount được dựng trong tiến trình local (credentials thì lấy từ Secret).
 #
 # Dùng:
-#   ./scripts/bench_storage.sh
-#   ./scripts/bench_storage.sh --shard-path /shards/train/lsun_bedroom/adm/shard-000000.tar
-#   ./scripts/bench_storage.sh --no-gpu
+#   bash tools/bench_storage.sh
+#   bash tools/bench_storage.sh --shard-path /shards/train/lsun_bedroom/adm/shard-000000.tar
+#   bash tools/bench_storage.sh --no-gpu
 
 if [[ -f .env ]]; then
   set -a; source .env; set +a

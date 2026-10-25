@@ -33,6 +33,12 @@
 #  ckpts       6  1.58 GB   toàn bộ checkpoint detector (mỗi file 269.4 MB)
 #
 #  Mặc định e2+e4 = 22 file / 3.39 GB   ·   eval đầy đủ e2..e5 = 57 file / 10.35 GB
+#
+#  TÁI LẬP TABLE 2 CỦA PAPER (4 detector × 8 generator = 32 ô):
+#    e2min      = 1 ô (cổng S2)          · ~0.40 GB · ~1.5 h
+#    e2         = hàng ADM (8 cột)       ·  1.94 GB · ~7.4 h
+#    e2 + ckpts = CẢ 32 ô                ·  3.25 GB · ~12.4 h  ← mức của 01_repro.sh
+#  Số tham chiếu: src/dire_modal/paper_table2.tsv (arXiv:2303.09295v1)
 #  Toàn cây đã audit = 104 file / 61.40 GB, trong đó 47.00 GB (77%) là TRAIN.
 #  Con số "Tier A ≈ 40–70 GB" trong docs cũ là của CẢ CÂY, sai 5.4–9.4 lần.
 #
@@ -44,7 +50,7 @@
 #  baidu_parallel      1           số kết nối/file (-p). BẮT BUỘC = 1 với user free:
 #                                  tăng lên bị throttle về ~0 tốc độ nhiều giờ–nhiều ngày
 #  baidu_mode          ""          --mode của BaiduPCS-Go: locate|pcs|stream
-#                                  ("" = mặc định client). Đo: scripts/09_bench_mode.sh
+#                                  ("" = mặc định client). Đo: bash tools/bench_baidu_mode.sh
 #  max_containers      1           SỐ ĐO 2026-10-25: k=1 76.6 KiB/s vs k=2 75.0 KiB/s
 #                                  ⇒ trần là của TÀI KHOẢN, thêm container không nhanh hơn
 #  --paths             (cờ CLI)    tải đúng danh sách file, không cần tier
@@ -61,7 +67,7 @@
 #  dire_max_usd           5.0      preflight từ chối nếu vượt
 #  dire_max_images        500      chặn trước cả khi tính tiền
 #  dire_usd_per_gpu_hour  2.5      A100
-#  dire_sec_per_image     5.0      bảo thủ — đo thật bằng scripts/06_measure_dire.sh
+#  dire_sec_per_image     5.0      bảo thủ — đo thật bằng tools/measure_dire.sh
 #
 #  Trần xấu nhất: 4 × 0.5 h × $2.50 = $5  (bản cũ: 40 × 24 h ≈ $2 400)
 
@@ -73,7 +79,7 @@
 #
 # ---- luồng chạy -------------------------------------------------------------
 #
-#  ./scripts/01_fetch_baidu.sh          # audit → plan → hỏi → fetch → verify
+#  bash scripts/01_repro.sh --stage data   # plan → fetch → verify (quy trình 1)
 #
 #  hoặc từng bước:
 #    modal run -m dire_modal.download::local_status          # local, 0 credit
@@ -86,7 +92,7 @@
 #  Tái lập bằng checkpoint PRE-TRAINED (không train lại — spec.md N1):
 #    modal run -m dire_modal.download::main --tiers e2min --mode fetch
 #    modal run -m dire_modal.eval::main --tiers e2min        # in CỔNG S2
-#    bash scripts/08_repro_minimal.sh                        # gói cả hai
+#    bash scripts/01_repro.sh                                # gói cả hai
 #
 #  Khi đã có mirror HF (nhanh hơn Baidu 1–2 bậc):
 #    modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2

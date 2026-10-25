@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
+# TIỆN ÍCH — đo throughput, không phải quy trình thực nghiệm.
 set -euo pipefail
 # Đo throughput DIRE (ảnh/giây) trên A100 để quy ra tổng giờ GPU cho stage-2.
 # Đây là số ĐO ĐƯỢC nhưng là PROXY (~UNet 552M ~ ADM 256×256), không phải ADM thật.
 #
 # Dùng:
-#   ./scripts/06_measure_dire.sh                # 100 ảnh, 20 bước DDIM
-#   ./scripts/06_measure_dire.sh 300 20         # 300 ảnh, 20 bước
-#   ./scripts/06_measure_dire.sh 100 20 --no-storage
+#   bash tools/measure_dire.sh                # 100 ảnh, 20 bước DDIM
+#   bash tools/measure_dire.sh 300 20         # 300 ảnh, 20 bước
+#   bash tools/measure_dire.sh 100 20 --no-storage
 
 N="${1:-100}"
 STEPS="${2:-20}"
