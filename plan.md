@@ -26,7 +26,8 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không 
 | PR #8 | PEP 563 làm `compute_dire` không import được | 51 test; cổng 0 bằng modal thật |
 | PR #9 *(đang mở)* | Staging trong Volume + rename thay vì copy + cache kiểm tra | resume xuyên container; bỏ 6.8 GB đọc lại/lần |
 | PR #9 *(đang mở)* | Bộ tài liệu agent: `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md` | 10 test canh link/entrypoint/đường dẫn trong tài liệu |
-| PR #9 *(đang mở)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
+| PR #9 *(đã merge)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
+| PR này | Ngân sách thời gian + watchdog 0B/s + manifest bền từng file | 5 test mới; tái hiện đúng `FunctionTimeoutError` 18 000s từ log thật |
 
 Kết luận dữ liệu quan trọng (chốt bằng `probe_pair` trên dữ liệu thật):
 
@@ -111,6 +112,21 @@ viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu
 
 **Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
 truy được về một `run.json`.
+
+### 8. Còn lại sau bản vá timeout (từ log 2026-10-25)
+
+- **Băng thông là nút cổ chai thật.** Log đo được **24.25 KB/s** và **48.49 KB/s**
+  cho một phiên — chậm hơn con số 67.36 KB/s mà `tiers.yaml` dùng để suy ra
+  `max_containers: 2`. Ở 24 KB/s thì `e2,e4` (3.39 GB) cần **~40 giờ** một phiên,
+  ~20 giờ với 2 container. Cần đo lại: `--concurrency 1` có nhanh hơn 2 không
+  (Baidu throttle theo **số phiên của tài khoản**, nên 2 phiên có thể chậm hơn 1).
+- **`subprocess_timeout: 5400` nên hạ.** Nay attempt bị cắt theo ngân sách và
+  watchdog cắt khi treo, nhưng 90 phút vẫn là trần quá dài cho một phiên đã chết:
+  file lớn nhất 692.8 MB cần 2.9 giờ ở 67 KB/s — ở tốc độ đo được thì **không
+  attempt nào tải xong nổi**, nên resume mới là cơ chế chính. Attempt ngắn hơn
+  (1200–1800s) cho nhiều cơ hội đăng nhập lại phiên hơn.
+- **Chưa kiểm `-p N`** (`baidu_parallel`): 0 = để BaiduPCS-Go tự quyết. Chưa đo
+  N nào nhanh nhất.
 
 ## Việc đã quyết là KHÔNG làm
 

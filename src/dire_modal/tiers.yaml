@@ -59,11 +59,26 @@ fetch_attempts: 3
 # Timeout cho MỘT lệnh BaiduPCS-Go (giây) = 90 phút.
 # Code cũ không đặt timeout ⇒ một phiên treo ở 0B/s có thể ngồi đó tới timeout
 # của function (6 giờ) mà không bị giết.
+#
+# ⚠ Giá trị này KHÔNG còn là timeout hiệu lực: `_attempt_timeout()` cắt nó theo
+# ngân sách còn lại của lần gọi (xem `download.FETCH_CALL_TIMEOUT_S`), và
+# `stall_timeout_s` cắt sớm hơn nếu phiên treo hẳn. Nó là TRẦN cho một attempt.
 # 5400s là cần thiết, không phải dư: tar lớn nhất đo được là 692.8 MB
 # (dire/test/imagenet/lsun_bedroom/adm.tar.gz), ở 67 KB/s thì cần ~2.9 giờ —
 # nghĩa là file đó CÓ THỂ cần nhiều hơn 1 attempt. Thư mục tmp ổn định theo
 # hash đường dẫn remote nên attempt sau resume được mảnh dở, không tải lại.
 subprocess_timeout: 5400
+
+# Giết BaiduPCS-Go nếu file trong staging không lớn thêm trong N giây.
+#
+# Vì sao cần: log thật 2026-10-25 cho thấy Baidu cắt băng thông giữa chừng và
+# BaiduPCS-Go KHÔNG tự bỏ cuộc — nó in `↓ 153.69MB/154.19MB 0B/s in 42m48s` rồi
+# ngồi đó tới hết `subprocess_timeout` (90 phút). Ba attempt như vậy = 4.5 giờ
+# đốt vào 0 byte, và đó là một trong hai lý do lần chạy đó chết ở 18 000s.
+#
+# 600s: một file 154 MB ở 24 KB/s vẫn ghi được vài MB mỗi phút, nên 10 phút
+# không lớn thêm nghĩa là phiên đã chết chứ không phải chỉ chậm. 0 = tắt.
+stall_timeout_s: 600
 
 # --- Tải: tốc độ + resume xuyên container -----------------------------------
 #

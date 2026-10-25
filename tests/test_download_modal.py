@@ -159,6 +159,10 @@ case "$cmd" in
     elif [ "${MODE:-ok}" = "partial" ]; then
       # Tải dở: có file, đúng vài trăm byte, exit 0 — BaiduPCS-Go thật làm vậy
       head -c 300 /dev/urandom > "$saveto/$base"
+    elif [ "${MODE:-ok}" = "stall" ]; then
+      # Treo đúng như log thật 2026-10-25: in progress bar 0B/s, KHÔNG ghi byte
+      # nào, và không tự bỏ cuộc — chỉ watchdog mới giết được.
+      sleep "${STALL_S:-30}"
     elif [ "${MODE:-ok}" = "html" ]; then
       printf '<!DOCTYPE html><html><body>BDUSS expired</body></html>' > "$saveto/$base"
     elif [ "${MODE:-ok}" = "copy" ]; then
@@ -338,13 +342,159 @@ def test_zero_byte_is_error_not_silent_success():
 # 3. Timeout: probe_pair tải 2 file ⇒ gấp đôi timeout của một file
 # ---------------------------------------------------------------------------
 def test_probe_pair_timeout_covers_two_files():
+    """`probe_pair` gọi `_fetch_one_impl` HAI lần ⇒ cần 2 ngân sách, không phải 1.
+
+    Công thức cũ (`2×attempts×subprocess + 1800`) chỉ chừa 1800s cho *cả hai*
+    lần gọi, trong khi mỗi lần đã có 1800s riêng cho cold start + validate +
+    commit. Đó chính là kiểu tính thiếu đã làm task thật chết ở 18 000s
+    (2026-10-25): 3×5400 = 16 200 dành cho attempt, chỉ còn 1 800 cho mọi thứ
+    khác. Nay mỗi lần gọi tự cắt attempt theo ngân sách của nó
+    (`download._attempt_timeout`), nên trần của `probe_pair` phải phủ 2 lần.
+    """
     dl, _ = install_stub()
-    p = dl.POLICY
-    one = p.fetch_attempts * p.subprocess_timeout + 1800
-    want = 2 * p.fetch_attempts * p.subprocess_timeout + 1800
+    one = dl.FETCH_CALL_TIMEOUT_S
     got = dl.probe_pair._kw["timeout"]
-    assert got == want, f"timeout probe_pair = {got}, cần {want} (=2×{one})"
+    assert got == 2 * one + 600, f"timeout probe_pair = {got}, cần {2 * one + 600}"
+    assert got > 2 * dl.POLICY.fetch_attempts * dl.POLICY.subprocess_timeout, (
+        "phải lớn hơn 2×attempts×subprocess, nếu không hai lần gọi không đủ chỗ"
+    )
     assert dl.fetch_one._kw["timeout"] == one, "fetch_one chỉ tải 1 file nên giữ 1×"
+
+
+# ---------------------------------------------------------------------------
+# 3b. Ngân sách thời gian — lần chạy thật 2026-10-25 chết ở 18 000s
+#     Log: "Task's current input ... hit its timeout of 18000s", sau khi 3 attempt
+#     đốt 3×5400 = 16 200s, chỉ còn 1 800s cho cold start + login + validate +
+#     commit ⇒ `FunctionTimeoutError`, mà lỗi này KHÔNG bắt được trong hàm.
+# ---------------------------------------------------------------------------
+def test_attempt_timeout_shrinks_to_fit_remaining_budget():
+    dl, _ = install_stub()
+    total = dl.FETCH_CALL_TIMEOUT_S
+    # Đầu lần gọi: đủ một attempt đầy đủ.
+    first = dl._attempt_timeout(0.0, now=0.0)
+    assert first == min(dl.POLICY.subprocess_timeout, total - dl._FETCH_RESERVE_S)
+    # Gần hết ngân sách: attempt phải NGẮN LẠI, không được vượt.
+    short = dl._attempt_timeout(0.0, now=total - dl._FETCH_RESERVE_S - 1000)
+    assert short == 1000, short
+    # Hết ngân sách: trả 0 để caller dừng sạch.
+    assert dl._attempt_timeout(0.0, now=total) == 0.0
+    assert dl._attempt_timeout(0.0, now=total - dl._FETCH_RESERVE_S - 10) == 0.0
+
+
+def test_sum_of_attempt_timeouts_fits_inside_call_budget():
+    """Bất biến của bản vá: tổng các attempt + phần chừa ≤ ngân sách một lần gọi.
+
+    Đây đúng là thứ đã thiếu: 3 × 5400 = 16 200s dành cho attempt trong khi
+    ngân sách 18 000s chỉ còn 1 800s cho mọi thứ khác.
+    """
+    dl, _ = install_stub()
+    budget = dl.FETCH_CALL_TIMEOUT_S
+    spent, n = 0.0, 0
+    while True:
+        t = dl._attempt_timeout(0.0, now=spent)
+        if t <= 0:
+            break
+        spent += t
+        n += 1
+        assert n < 50, "vòng lặp không hội tụ"
+    assert spent <= budget - dl._FETCH_RESERVE_S, (spent, budget)
+    assert n >= 1, "phải cho ít nhất một attempt"
+    # Và ngân sách phải cho ĐỦ số attempt đã cấu hình — nếu không thì bản vá
+    # biến "3 lần thử" thành "1 lần thử" một cách âm thầm.
+    assert n >= dl.POLICY.fetch_attempts, n
+
+
+def test_fetch_reports_partial_when_budget_runs_out():
+    """Hết ngân sách ⇒ `partial`, KHÔNG phải `error`.
+
+    `error` nghĩa là phải sửa gì đó; `partial` nghĩa là chỉ cần chạy lại. Gộp
+    hai thứ này làm báo cáo sai.
+    """
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "partial"   # tải dở, sha khác nhau mỗi lần → retryable
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(tempfile.mkdtemp())
+
+    real = dl._attempt_timeout
+    calls = {"n": 0}
+
+    def fake(started, now=None):
+        calls["n"] += 1
+        return real(started, now) if calls["n"] == 1 else 0.0
+
+    real_timeout = dl._attempt_timeout
+    dl._attempt_timeout = fake
+    try:
+        r = dl._fetch_one_impl(
+            {"remote": "p/a.tar.gz", "local": "p/a.tar.gz", "expected_size": 0}
+        )
+    finally:
+        dl._attempt_timeout = real_timeout   # KHÔNG để rò sang test khác
+        os.environ["MODE"] = "ok"
+    assert r["status"] == "partial", r
+    assert "ngân sách" in r["error"], r["error"]
+    assert calls["n"] == 2, "phải dừng ngay attempt kế tiếp, không chạy hết 3"
+
+
+def test_stall_watchdog_kills_hung_download():
+    """`0B/s in 42m48s`: BaiduPCS-Go không tự bỏ cuộc ⇒ phải có watchdog giết.
+
+    Không có nó, một phiên treo ngồi hết `subprocess_timeout` (90 phút) và đốt
+    sạch ngân sách của lần chạy — đúng thứ đã xảy ra.
+    """
+    import dataclasses
+
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["MODE"] = "stall"
+    os.environ["STALL_S"] = "30"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(tempfile.mkdtemp())
+    old_policy = dl.POLICY
+    dl.POLICY = dataclasses.replace(dl.POLICY, stall_timeout_s=0.15)
+    old_poll = dl._POLL_S
+    dl._POLL_S = 0.02
+    try:
+        t0 = time.monotonic()
+        r = dl._fetch_one_impl(
+            {"remote": "s/a.tar.gz", "local": "s/a.tar.gz", "expected_size": 0}
+        )
+        dt = time.monotonic() - t0
+    finally:
+        dl._POLL_S = old_poll
+        dl.POLICY = old_policy
+        os.environ["MODE"] = "ok"
+    assert r["status"] == "error", r
+    assert "cắt băng thông" in r["error"], r["error"]
+    assert dt < 10, f"watchdog không giết kịp ({dt:.1f}s)"
+
+
+def test_map_failure_keeps_results_already_written():
+    """Container orchestrator bị giết ⇒ kết quả của file ĐÃ XONG vẫn phải còn.
+
+    `list(fn.map(...))` chỉ trả về khi mọi task xong; một task chạm trần thời
+    gian làm cả lời gọi raise và vứt sạch kết quả, dù dữ liệu đã nằm trong
+    Volume. Đây là nửa còn lại của lần chạy hỏng 2026-10-25.
+    """
+    dl, _ = install_stub()
+    os.environ["BDUSS"] = "fake"
+    os.environ["PATH"] = _fake_baidu_path() + ":" + os.environ.get("PATH", "")
+    dl.RAW = Path(tempfile.mkdtemp())
+
+    made = {"remote": "a/x.tar.gz", "local": "a/x.tar.gz", "status": "ok",
+            "size": 10, "sha256": "abc"}
+
+    def boom(items, **kw):
+        yield made
+        raise RuntimeError("Task hit its timeout of 18000s")
+
+    dl.fetch_one.map = boom
+    dl._execute("e2", 25.0, do_fetch=True)  # KHÔNG được raise
+
+    text = (dl.RAW / "_manifest.tsv").read_text(encoding="utf-8")
+    assert "a/x.tar.gz" in text, "file đã xong bị mất khỏi manifest"
+    assert "ok" in text
 
 
 def test_fetch_one_keeps_safety_kwargs():

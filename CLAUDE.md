@@ -45,7 +45,7 @@ nhiêu credit".
 
 ```bash
 ./scripts/07_check_imports.sh          # cổng 0, 0 credit
-python3 -m pytest tests/ -q            # 77 test (2 skip nếu thiếu modal)
+python3 -m pytest tests/ -q            # 80 test (2 skip nếu thiếu modal)
 python3 -m pyflakes src/dire_modal/*.py tests/
 ```
 
