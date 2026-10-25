@@ -577,6 +577,46 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv       # lưu tr�
 | Cần TPU miễn phí | **TRC**: apply, phải open-source nghiên cứu, hàng đợi có thể dài |
 | Chỉ có thời gian, không có tiền | Kaggle 30 h/tuần + Colab (tương tác) + Lightning → đủ để dev, **không** đủ cho stage-2 |
 
+## Dừng giữa chừng mà không mất dữ liệu
+
+Không cần "tạm dừng" riêng: **staging trong Volume đã được commit định kỳ**
+(`staging_commit_s: 45` trong `configs/tiers.yaml`), nên mọi cách dừng đều chỉ
+mất tối đa một nhịp commit — không bao giờ mất cả file.
+
+| Cách dừng | Chuyện xảy ra | Mất |
+|---|---|---|
+| `Ctrl+C` ở máy local | client thoát → app ephemeral bị dọn → container nhận **SIGTERM** | ≤ 45 s |
+| `modal app stop -y <app-id>` | SIGTERM tới từng container worker | ≤ 45 s |
+| `DETACH=1` rồi `Ctrl+C` | app **không** bị dọn, vẫn tải trên cloud; xem bằng `modal app logs` | 0 |
+| SIGKILL / `FunctionTimeoutError` | không chặn được | ≤ 45 s |
+
+**SIGTERM giờ là "dừng êm"** (`_request_stop` trong `download.py`): giết tiến
+trình `BaiduPCS-Go` con, `commit()` Volume, trả `status="partial"` và in
+
+```
+[stop] nhận tín hiệu dừng (15) → ngừng tải, commit Volume, giữ nguyên phần đã tải trong staging
+⏸  3 file dừng giữa chừng theo yêu cầu (SIGTERM/SIGINT).
+   Phần đã tải nằm trong /raw/.staging và đã được commit — chạy lại đúng lệnh là resume.
+```
+
+Trước đây SIGTERM làm Python chết ngay, **không chạy `finally`**, nên chỉ còn
+lớp bảo hiểm 45 s. Muốn chắc hơn nữa (ví dụ mạng chập chờn): hạ
+`staging_commit_s` xuống `15` — đổi lại là nhiều lệnh commit hơn.
+
+**Resume:** chạy lại **đúng lệnh cũ**. File đã xong → `[SKIP]`; file dở →
+BaiduPCS-Go thấy file `.BaiduPCS-Go-downloading` trong staging và tải tiếp từ
+đúng byte đã có, không phải từ 0.
+
+```bash
+modal volume ls dire-raw /.staging          # còn gì trong staging
+modal app list                              # app còn chạy?
+modal app stop -y <app-id>                  # dừng êm
+DETACH=1 bash scripts/01_repro.sh --quick   # chạy không phụ thuộc terminal
+```
+
+⛔ **Đừng xoá `/raw/.staging`** — đó không phải rác, đó là tiến độ. Chỉ
+`/raw/.staging/_held` (file không qua kiểm) và `/raw/.bench` mới là thứ xoá được.
+
 ## Sự cố 2026-10-25 — "tải dở dang" trên file đã tải đủ
 
 Ba file `iddpm.tar.gz`, `pndm.tar.gz`, `ldm.tar.gz` tải xong 100 % rồi bị loại,

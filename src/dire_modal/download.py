@@ -48,6 +48,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import threading
 import time
@@ -336,6 +337,55 @@ class _Stalled(RuntimeError):
 _POLL_S = 10.0
 
 
+class _StopRequested(RuntimeError):
+    """Có yêu cầu dừng (SIGTERM/SIGINT) — dừng sạch, không phải lỗi tải."""
+
+
+# ---------------------------------------------------------------------------
+# Dừng êm: SIGTERM (modal app stop / client mất kết nối) không được làm mất byte
+# ---------------------------------------------------------------------------
+# Ba đường dừng, ba hậu quả khác nhau:
+#
+#   Ctrl+C trong container  → ``KeyboardInterrupt`` (BaseException) ⇒ ``finally``
+#                             của ``_fetch_one_impl`` CHẠY ⇒ có commit.
+#   SIGTERM                 → mặc định Python **chết ngay**, ``finally`` KHÔNG
+#                             chạy. Trước đây chỉ còn lớp bảo hiểm 45 s của
+#                             ``_PeriodicCommit``.
+#   SIGKILL                 → không chặn được; vẫn chỉ mất tối đa
+#                             ``staging_commit_s`` (45 s) nhờ commit định kỳ.
+#
+# Handler dưới đây biến SIGTERM thành ca thứ nhất: giết BaiduPCS-Go con, commit
+# Volume, trả ``status="partial"`` (chạy lại là resume). Không đặt handler cho
+# orchestrator: nó đang chờ ``.map()``, chặn SIGTERM ở đó chỉ làm chậm tắt máy.
+_STOP = threading.Event()
+_STOP_HANDLERS: set[int] = set()
+
+
+def _request_stop(signum=None, frame=None) -> None:
+    """Ghi nhận yêu cầu dừng. Idempotent; gọi được từ test."""
+    if not _STOP.is_set():
+        _STOP.set()
+        print(f"[stop] nhận tín hiệu dừng ({signum}) → ngừng tải, commit Volume, "
+              "giữ nguyên phần đã tải trong staging")
+
+
+def _install_stop_handlers() -> None:
+    """Cài handler cho SIGTERM/SIGINT — chỉ trong worker, chỉ một lần."""
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        if sig in _STOP_HANDLERS:
+            continue
+        try:
+            prev = signal.getsignal(sig)
+            signal.signal(sig, _request_stop)
+        except (ValueError, OSError):
+            # Không phải main thread (hoặc nền tảng không cho) ⇒ bỏ qua: vẫn
+            # còn `_PeriodicCommit` làm lưới an toàn.
+            continue
+        _STOP_HANDLERS.add(sig)
+        if prev is signal.SIG_DFL or prev is None:
+            print(f"[stop] đã cài handler dừng êm cho {sig.name}")
+
+
 def _dir_bytes(d: Path) -> int:
     """Tổng byte trong thư mục staging (lỗi đọc ⇒ 0, không được giết việc tải)."""
     try:
@@ -357,6 +407,9 @@ def _baidu_download(args: list[str], timeout: float, stall_s: float, watch: Path
     last_change = t0
     try:
         while True:
+            # Kiểm TRƯỚC `wait`: dừng ngay, không phải đợi hết nhịp poll 10 s.
+            if _STOP.is_set():
+                raise _StopRequested("có yêu cầu dừng")
             try:
                 return proc.wait(timeout=_POLL_S)
             except subprocess.TimeoutExpired:
@@ -1505,6 +1558,11 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
     print(f"  error   : {len(errs)}")
     print(f"  còn thiếu: {len(still_todo)} / {len(files)} file"
           + ("  ✅ ĐỦ" if not still_todo else ""))
+    n_stopped = len([r for r in partial if r.get("stopped")])
+    if n_stopped:
+        print(f"\n  ⏸  {n_stopped} file dừng giữa chừng theo yêu cầu (SIGTERM/SIGINT)."
+              "\n     Phần đã tải nằm trong /raw/.staging và đã được commit —"
+              " chạy lại đúng lệnh là resume.")
     for r in partial:
         print(f"      {r['remote']}\n          → {r['error']}")
     for r in errs:
@@ -1876,6 +1934,7 @@ def _fetch_one_impl(f: dict) -> dict:
 
     Tải MỘT file. Resumable, tự retry, và **không bao giờ raise**.
     """
+    _install_stop_handlers()
     remote_rel = f["remote"]
     remote = _abs(remote_rel)
     local = RAW / f["local"]
@@ -1917,6 +1976,7 @@ def _fetch_one_impl(f: dict) -> dict:
     expect_archive = bool(f.get("expect_archive", True))
     started = time.monotonic()   # mốc tính ngân sách của CẢ lần gọi này
     budget_out = False           # dừng vì hết ngân sách (≠ lỗi tải)
+    stopped = False              # dừng vì SIGTERM/SIGINT — cũng ≠ lỗi tải
     kept_bytes = 0
 
     try:
@@ -2097,6 +2157,15 @@ def _fetch_one_impl(f: dict) -> dict:
             except Exception as exc:  # kể cả OSError/EXDEV nếu còn sót đường nào
                 last = f"{type(exc).__name__}: {exc}"
 
+            if _STOP.is_set():
+                stopped = True
+                last = (
+                    f"dừng theo yêu cầu ({last}) — giữ "
+                    f"{_human(_dir_bytes(tmpdir))} trong staging để resume"
+                )
+                print(f"[stop] {remote_rel}: {last}")
+                break
+
             print(f"[RETRY {attempt}/{POLICY.fetch_attempts}] {remote_rel}: {last}")
             if attempt < POLICY.fetch_attempts:
                 _sleep(30 * attempt)
@@ -2116,6 +2185,11 @@ def _fetch_one_impl(f: dict) -> dict:
     # `partial` KHÁC `error`: file chỉ dở vì hết ngân sách thời gian, không phải
     # vì nguồn hỏng. Gộp hai thứ này làm báo cáo sai — người đọc tưởng phải sửa
     # gì đó, trong khi việc cần làm chỉ là chạy lại.
+    if stopped:
+        # `partial` (không phải `error`): việc cần làm chỉ là chạy lại.
+        return {"remote": remote_rel, "local": str(local), "status": "partial",
+                "error": last, "size": 0, "kept_bytes": kept_bytes,
+                "stopped": True}
     if budget_out:
         return {"remote": remote_rel, "local": str(local), "status": "partial",
                 "error": last, "size": 0, "kept_bytes": kept_bytes}

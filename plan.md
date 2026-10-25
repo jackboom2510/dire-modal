@@ -169,6 +169,11 @@ Chi tiết: `docs/runbook-free.md` § "Sự cố 2026-10-25".
 **Xong khi:** lần chạy `e2` kế tiếp cho `ok` ngay attempt 1 cho cả 16 generator.
 (Chưa chạy lại thật — test đã tái hiện đúng hai con số trong log.)
 
+**Dừng giữa chừng:** SIGTERM (Ctrl+C ở local, `modal app stop`) giờ được chặn
+→ giết `BaiduPCS-Go` con, `commit()` Volume, trả `partial`. Không có nó thì
+Python chết ngay, `finally` không chạy, và chỉ còn lớp bảo hiểm
+`staging_commit_s: 45`. Xem `docs/runbook-free.md` § "Dừng giữa chừng".
+
 ### 8. ✅ Đã đo băng thông tải Baidu (2026-10-25) — chốt `max_containers: 1`
 
 ```bash

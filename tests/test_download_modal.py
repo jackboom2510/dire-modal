@@ -595,6 +595,121 @@ def test_validate_size_mismatch_is_retryable():
 
 
 # ---------------------------------------------------------------------------
+# Dừng êm: SIGTERM / Ctrl+C không được làm mất byte đã tải
+# ---------------------------------------------------------------------------
+def test_sigterm_stops_without_retry_and_keeps_staging():
+    """SIGTERM ⇒ `partial` (không phải `error`), không retry, staging còn nguyên.
+
+    Đây là đường ``modal app stop`` và ``modal run`` bị ngắt ở máy local: cả
+    hai đều là SIGTERM, mà mặc định Python chết ngay **không chạy `finally`**.
+    """
+    import os as _os
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    _os.environ["BDUSS"] = "fake"
+    _os.environ["MODE"] = "stall"
+    _os.environ["STALL_S"] = "30"
+    _os.environ["PATH"] = _fake_baidu_path() + ":" + _os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    dl._install_stop_handlers()
+    dl._STOP.set()          # giả lập SIGTERM đến trước khi kịp tải
+    try:
+        t0 = time.time()
+        r = dl._fetch_one_impl({
+            "remote": "dire/test/a/iddpm.tar.gz",
+            "local": "dire/test/a/iddpm.tar.gz",
+            "expected_size": 0,
+        })
+        dt = time.time() - t0
+    finally:
+        dl._STOP.clear()
+        _os.environ["MODE"] = "ok"
+        _os.environ.pop("STALL_S", None)
+    assert r["status"] == "partial", r
+    assert r.get("stopped") is True, r
+    assert dt < 5, f"phải dừng ngay, không đợi hết nhịp poll 10 s (mất {dt:.1f}s)"
+    assert dl._tmpdir_for("dire/test/a/iddpm.tar.gz").exists(), "staging không được xoá"
+
+
+def test_stop_commits_bytes_already_in_staging():
+    """Byte đã có trong staging phải được COMMIT trước khi container chết."""
+    import os as _os
+    import tempfile as _tf
+
+    dl, _vol = install_stub()
+    _os.environ["BDUSS"] = "fake"
+    _os.environ["MODE"] = "stall"
+    _os.environ["STALL_S"] = "30"
+    _os.environ["PATH"] = _fake_baidu_path() + ":" + _os.environ.get("PATH", "")
+    dl.RAW = Path(_tf.mkdtemp())
+    # Mảnh dở của lần chạy trước, đúng thứ dùng để resume
+    tmp = dl._tmpdir_for("dire/test/a/iddpm.tar.gz")
+    tmp.mkdir(parents=True, exist_ok=True)
+    (tmp / "iddpm.tar.gz").write_bytes(b"x" * 4096)
+
+    # Volume trong module được tạo lúc import (lần `install_stub` đầu), nên
+    # đếm trên `dl.vol_raw` chứ không trên object trả về ở lần gọi này.
+    before = dl.vol_raw.commits
+    dl._STOP.set()
+    try:
+        r = dl._fetch_one_impl({
+            "remote": "dire/test/a/iddpm.tar.gz",
+            "local": "dire/test/a/iddpm.tar.gz",
+            "expected_size": 0,
+        })
+    finally:
+        dl._STOP.clear()
+        _os.environ["MODE"] = "ok"
+        _os.environ.pop("STALL_S", None)
+    assert r.get("stopped") is True, r
+    assert r["kept_bytes"] >= 4096, r
+    assert dl.vol_raw.commits > before, (
+        "phải commit trước khi thoát, nếu không container chết là mất byte"
+    )
+
+
+def test_stop_handler_is_registered_for_sigterm():
+    import signal as _sig
+
+    dl, _ = install_stub()
+    dl._install_stop_handlers()
+    assert _sig.getsignal(_sig.SIGTERM) is dl._request_stop, (
+        "SIGTERM phải được chặn: mặc định Python chết ngay, không chạy `finally`"
+    )
+    dl._request_stop(15, None)
+    assert dl._STOP.is_set()
+    dl._STOP.clear()
+
+
+def test_watchdog_bails_out_before_the_poll_tick():
+    """Cờ dừng phải được kiểm TRƯỚC `proc.wait` — nếu không, mất 10 s mỗi lần."""
+    import os as _os
+    import tempfile as _tf
+
+    dl, _ = install_stub()
+    _os.environ["PATH"] = _fake_baidu_path() + ":" + _os.environ.get("PATH", "")
+    _os.environ["MODE"] = "stall"
+    _os.environ["STALL_S"] = "30"
+    d = Path(_tf.mkdtemp())
+    dl._STOP.set()
+    try:
+        t0 = time.time()
+        try:
+            dl._baidu_download(["d", "--saveto", str(d), "/apps/x/a.tar.gz"],
+                               timeout=60, stall_s=0, watch=d)
+            raise AssertionError("phải raise _StopRequested")
+        except dl._StopRequested:
+            pass
+        dt = time.time() - t0
+    finally:
+        dl._STOP.clear()
+        _os.environ["MODE"] = "ok"
+        _os.environ.pop("STALL_S", None)
+    assert dt < 5, f"dừng mất {dt:.1f}s — đang đợi hết nhịp poll"
+
+
+# ---------------------------------------------------------------------------
 # Sự cố THẬT 2026-10-25: size từ `ls -l` đã làm tròn 2 chữ số thập phân MB
 # ---------------------------------------------------------------------------
 # Log:
