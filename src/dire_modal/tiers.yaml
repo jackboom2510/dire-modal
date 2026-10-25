@@ -42,14 +42,21 @@ default_tiers: "e2,e4"
 # đã biết thì guard là cận dưới và sẽ vô hiệu đúng lúc cần nó nhất.
 max_gb: 25.0
 
-# Số container tải song song TỐI ĐA.
-# Báu hiểm ở chỗ này: tài khoản Baidu free bị throttle theo số phiên đồng thời.
-# Code cũ KHÔNG đặt max_containers và tham số --concurrency bị bỏ qua hoàn toàn,
-# nên .map() bung ~26 container một lúc → server cắt băng thông → hàng loạt task
-# đứng ở "0B/s in 10m". Đo thật trong log: 67.36 KB/s cho một phiên đơn lẻ.
-# 2 là giá trị an toàn suy ra từ log đó. Muốn nhanh hơn nữa thì chạy
-# BaiduPCS-Go LOCAL rồi đẩy lên HF Hub, không qua Modal.
-max_containers: 2
+# Số container tải song song TỐI ĐA = 1. Đây là SỐ ĐO, không phải suy đoán.
+#
+# `download::bench_concurrency --tiers e2 --limit 2 --ks 1,2` (2026-10-25,
+# 387.7 MB/lượt):
+#     k=1 : 5 183.8 s → 76.6 KiB/s
+#     k=2 : 5 293.3 s → 75.0 KiB/s   (mỗi file 37.5 KiB/s)
+# ⇒ TRẦN ~77 KiB/s là của TÀI KHOẢN, không phải của container. Thêm container chỉ
+# chia nhỏ miếng bánh: tổng không đổi, mỗi file chậm đi một nửa, và số phiên
+# đồng thời tăng — đúng thứ Baidu dùng để throttle.
+#
+# (Số 67.36 KB/s mà policy cũ dựa vào là một quan sát đơn lẻ; số đo lặp lại được
+#  là 76.6 KiB/s. Chênh giữa hai lần đo là dao động mạng, không phải cấu hình.)
+#
+# Muốn nhanh hơn thì phải ra khỏi Baidu: tải một lần rồi mirror lên HF Hub/Kaggle.
+max_containers: 1
 
 # Số lần thử lại cho MỖI file. Retry nằm BÊN TRONG fetch_one (vòng lặp thủ công)
 # chứ không dựa vào modal.Retries, vì exception lọt ra ngoài .map() sẽ huỷ toàn
@@ -101,10 +108,23 @@ stall_timeout_s: 600
 #     DIRE_STAGING_DIR=/tmp/baidu_staging modal run ...
 dire_staging: ".staging"      # tên thư mục con trong /raw
 
-# Số kết nối song song CHO MỘT FILE (cờ -p của BaiduPCS-Go).
-# 0 = không truyền cờ, giữ mặc định của BaiduPCS-Go. Đo trước khi nâng:
-# log thật cho 67 KB/s cho một phiên đơn, và throttle theo SỐ PHIÊN.
-baidu_parallel: 0
+# Số kết nối song song CHO MỘT FILE (cờ -p của BaiduPCS-Go) = 1, TƯỜNG MINH.
+#
+# Tài liệu của chính BaiduPCS-Go (fork qjfoidnh / BlueSkyXN) nói:
+#   「普通用户请将 max_parallel 和 max_download_load 都设置为 1，调大线程数只会
+#    在短时间内提升下载速度，且极易很快触发限速，导致几小时至几天内账号在各
+#    客户端都接近 0 速。」
+# Tức: user free phải để 1; tăng thread chỉ nhanh một lúc rồi KÍCH THROTTLE làm
+# tài khoản về ~0 tốc độ trong nhiều giờ đến nhiều ngày.
+#
+# `0B/s in 42m48s` của lần chạy 2026-10-25 đúng là chữ ký đó — và nó xảy ra khi
+# max_containers=2 với `-p` do client tự quyết. Đặt 1 ở CẢ HAI tầng.
+baidu_parallel: 1
+
+# `--mode` của BaiduPCS-Go: rỗng = không truyền (mặc định `locate` của client).
+# Hợp lệ: locate | pcs | stream — ba API khác nhau của Baidu, lịch sử throttle
+# khác nhau. Chỉ đổi khi đã đo: `scripts/09_bench_mode.sh`.
+baidu_mode: ""
 
 # Chu kỳ commit Volume khi đang tải (giây). 0 = chỉ commit sau khi file xong.
 # Commit là thứ làm resume xuyên container có tác dụng; đặt quá nhỏ sẽ tốn
@@ -152,6 +172,7 @@ dire_sec_per_image: 5.0
 tiers:
   e0:       "code/tooling/docs — 0 file, không tải gì từ Baidu"
   e1:       "demo AEROBLADE zero-shot — 0 file Baidu; chỉ cần VAE (~1 GB) từ HF Hub"
+  e2min:    "3 file · ~0.40 GB · ĐƯỜNG NGẮN NHẤT: lsun_adm.pth + test real + test adm (cổng S2) ⭐"
   e2:       "17 file · 1.94 GB · eval headline DIRE trên LSUN-Bedroom, 16 generator ⭐"
   e3:       "24 file · 4.85 GB · cross-domain: +10 tar lsun/imagenet, ImageNet, CelebA-HQ"
   e4:       "5 file · 1.45 GB · eval AEROBLADE trên ẢNH GỐC (nhánh images/) ⭐"

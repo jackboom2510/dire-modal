@@ -1,6 +1,6 @@
 # AGENT.md — điểm vào cho mọi agent
 
-> Đọc file này trước, rồi mới mở code. Cập nhật lần cuối: 2026-10-24.
+> Đọc file này trước, rồi mới mở code. Cập nhật lần cuối: 2026-10-25.
 > Các file còn lại: [instructions.md](instructions.md) (cách làm việc) ·
 > [plan.md](plan.md) (đang ở đâu, làm gì tiếp) · [skills.md](skills.md) (công thức
 > cho từng loại việc) · [CLAUDE.md](CLAUDE.md) (ghi chú riêng cho Claude) ·
@@ -11,6 +11,12 @@
 Pipeline tính **DIRE** (Diffusion Reconstruction Error) để phát hiện ảnh do
 diffusion model sinh ra, chạy trên **Modal**, dữ liệu tải từ **Baidu Netdisk**.
 
+Đường chạy đã chốt: **eval checkpoint `lsun_adm.pth` của tác giả, KHÔNG train
+lại ResNet50** (`modal run -m dire_modal.download::main --tiers e2min --mode fetch`
+→ `modal run -m dire_modal.eval::main --tiers e2min`). Mọi hướng dẫn trong repo
+phải bám theo đường này; `train.py` + `scripts/05_train_repro.sh` là tham chiếu,
+không phải đường chính.
+
 Ràng buộc chi phối mọi quyết định: **ngân sách compute 0đ, chỉ free tier**.
 Máy local là máy nhẹ — chỉ điều khiển và verify, **không** train, **không** giữ
 bản dữ liệu gốc. Vì vậy mọi thứ nặng chạy trên Modal, và mọi thiết kế phải trả
@@ -20,21 +26,35 @@ lời được "cái này tốn bao nhiêu credit".
 
 | Đường dẫn | Nội dung |
 |---|---|
-| `src/dire_modal/download.py` | Tải Baidu → Volume `/raw`. Phần lớn nhất, nhiều cạm bẫy nhất |
+| `src/dire_modal/download.py` | Tải Baidu → Volume `/raw`. Phần lớn nhất, nhiều cạm bẫy nhất. Có `--paths` (tải đúng danh sách file), **tự lặp vòng 20 h**, `from_hf` (kéo từ mirror HF) |
 | `src/dire_modal/manifest.py` | Inventory file + `Policy` + `load_policy()` |
 | `src/dire_modal/tiers.yaml` | **Nguồn sự thật của policy.** Không phải `configs/tiers.yaml` |
 | `src/dire_modal/compute_dire.py` | DIRE bằng DDIM inversion + guard chi phí GPU |
 | `src/dire_modal/pack.py` | `/raw` → WebDataset shards |
-| `src/dire_modal/eval.py` | **Đã port (M1)**: eval 1 checkpoint trên mọi cặp (real, generator), ghi CSV + `run.json`. Đọc **tar gốc trong `/raw`**, không đọc `/shards` (xem `pack.shard_group`) |
+| `src/dire_modal/eval.py` | **Đã port (M1)**: eval checkpoint trên mọi cặp (real, generator), ghi CSV + `run.json`, in **CỔNG S2** (`ACC(adm) ≥ 0.99`). `main(ckpt="")` tự tìm `/raw/checkpoints/<name>` rồi `/ckpt/pretrained/<name>`. Đọc **tar gốc trong `/raw`**, không đọc `/shards` (xem `pack.shard_group`) |
 | `src/dire_modal/train.py`, `bench.py`, `archive.py` | Stage 3–6 |
 | `src/dire_modal/common.py` | `app`, image, Volume, Secret — import từ đây |
 | `tools/` | Script thuần stdlib: `free_quota.py`, `storage_cost.py` |
-| `scripts/00..07_*.sh` | Cổng tuần tự; `07_check_imports.sh` là cổng 0 |
+| `scripts/00..09_*.sh` | Cổng tuần tự; `07_check_imports.sh` là cổng 0. `08_repro_minimal.sh` = chuỗi tái lập pre-trained; `09_bench_mode.sh` = đo `--mode` BaiduPCS-Go |
 | `tests/` | 117 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
 | `docs/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
 | `platforms/hf-spaces/` | Demo Gradio trên HF Spaces (CPU free) |
+
+## Ba sự thật về tải Baidu (đã đo, đừng suy lại)
+
+1. **Trần ~77 KiB/s là của TÀI KHOẢN, không phải của cấu hình.** Đo 2026-10-25:
+   `k=1` → 5183.8 s / 76.6 KiB/s; `k=2` → 5293.3 s / 75.0 KiB/s. Thêm container
+   **không** nhanh hơn. `max_containers: 1`, `baidu_parallel: 1`.
+2. **Tăng `-p`/thread là phản tác dụng.** Upstream BaiduPCS-Go: tài khoản miễn phí
+   phải `max_parallel=1`; tăng sẽ bị throttle về ~0 tốc độ trong nhiều giờ tới
+   nhiều ngày. Đừng "tối ưu" bằng cách này.
+3. **Đường thoát duy nhất là đổi NGUỒN, không phải đổi tham số:** mirror một lần
+   (`archive::push_hf`) rồi `download::from_hf` (HF Hub thường vài MB/s).
+
+Hệ quả về thời gian ở 76.6 KiB/s: `e2min` ~1.5 h · `e2` 7.4 h · `e2,e4` 12.9 h ·
+cả cây 233.5 h.
 
 ## Sáu điều dễ làm hỏng nhất
 

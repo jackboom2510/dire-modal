@@ -236,7 +236,18 @@ gốc) nhưng phải **cùng ảnh nguồn** — đó là AC-3.1.
 
 `dire/` chứa **DIRE map đã tính sẵn** bởi tác giả. Nên tái tạo bảng của họ chỉ
 cần ResNet50 inference: 16 generator × ~2000 ảnh = ~32k ảnh ở 224² → **< 10 phút
-L4/L40S**, gần như miễn phí. Không cần ADM, không cần diffusion.
+CPU** (không cần GPU), gần như miễn phí. Không cần ADM, không cần diffusion,
+**không train**.
+
+Chuỗi lệnh tối thiểu để có con số đầu tiên:
+
+```bash
+modal run -m dire_modal.download::main --tiers e2min --mode fetch   # 3 file, ~400 MB
+modal run -m dire_modal.eval::main --tiers e2min                    # in CỔNG S2
+```
+
+`tiers.yaml` có `max_containers: 1` vì đã đo: trần tải Baidu (~77 KiB/s) là của
+**tài khoản**, không phải của số container (k=1: 76.6, k=2: 75.0 KiB/s).
 
 Chỉ FR-2, FR-4, FR-6 cần `compute_dire.py` (ADM inversion) — và đó là lý do
 FR-2 là điều kiện chặn.
@@ -253,7 +264,7 @@ một phép so chưa được kiểm.
 | Thành phần | Trạng thái | Việc phải làm |
 |---|---|---|
 | `eval.py::eval_one` | **xong (M1)** | Nạp ResNet50 từ `vendor/networks/resnet.py`, đọc **tar gốc `/raw`**, trả ACC/AP/TPR@5%FPR |
-| `eval.py::main` | **xong (M1)** | Gom theo `branch`+`generator`, ghi CSV + `run.json`, in bảng ra log |
+| `eval.py::main` | **xong (M1)** | Gom theo `branch`+`generator`, ghi CSV + `run.json`, in bảng + **CỔNG S2** ra log; tự resolve ckpt (`/raw/checkpoints` → `/ckpt/pretrained`) |
 | `compute_dire.py` | chưa chạy | FR-2 sửa tới khi AC-2.1/2.2 đạt |
 | `aero.py` | **chưa có** | Bọc AEROBLADE: nạp AE, tính khoảng cách, trả điểm thô |
 | `fusion.py` | **chưa có** | Rank-normalise + chọn trọng số trên val |

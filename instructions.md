@@ -92,7 +92,12 @@ guard trong code không cứu được ai chạy `modal run` từ thư mục kh�
 - `_manifest_sha256.tsv` được commit vào git vì nó là nguồn sự thật để verify
   mirror. `manifests/*.tsv` khác bị ignore.
 - Không tải file không cần thiết. Ràng buộc dự án là **chỉ cải thiện, không
-  train lại** ⇒ 47 GB dữ liệu train nằm ngoài phạm vi.
+  train lại** ⇒ 47 GB dữ liệu train nằm ngoài phạm vi, và đường chạy là
+  `download --tiers e2min --mode fetch` → `eval::main` trên `lsun_adm.pth` của
+  tác giả. Cần vài file lẻ thì dùng `--paths`, đừng tạo tier mới.
+- **Đừng đề xuất tăng container/`-p` để tải nhanh hơn.** Đo rồi: `k=1` 76.6 KiB/s,
+  `k=2` 75.0 KiB/s ⇒ trần là của tài khoản. Nhanh hơn thật thì phải đổi nguồn
+  (`download::from_hf`).
 
 ## 6. Đọc dữ liệu: ba cái bẫy
 

@@ -10,7 +10,16 @@
 
 Pipeline phát hiện ảnh do diffusion sinh ra bằng **DIRE**, chạy trên Modal, dữ
 liệu từ Baidu, ngân sách **0đ** — mọi quyết định phải trả lời được "tốn bao
-nhiêu credit".
+nhiêu credit". **Không train ResNet50**: nạp `lsun_adm.pth` của tác giả rồi eval
+(`download --tiers e2min --mode fetch` → `eval::main --tiers e2min`).
+
+## Ba con số không được suy lại
+
+- Trần tải Baidu **~77 KiB/s cho cả tài khoản**: `k=1` 76.6, `k=2` 75.0 ⇒
+  `max_containers: 1`. Tăng container/thread **không** nhanh hơn, chỉ tăng rủi ro
+  throttle. Muốn nhanh hơn thì `download::from_hf`.
+- `e2min` = 3 file ≈ 0.40 GB ≈ **1.5 h**; `e2` = 17 file / 1.94 GB ≈ **7.4 h**.
+- `download::main` **tự lặp vòng tới 20 h** — đừng gõ lại lệnh nhiều lần.
 
 ## Năm điều hay bị làm sai nhất ở repo này
 

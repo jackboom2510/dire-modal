@@ -99,6 +99,24 @@ _MIN_ATTEMPT_S = 600
 # như miễn phí (function chỉ ngồi chờ `.map`).
 ORCHESTRATOR_TIMEOUT_S = 24 * 3600
 
+# Ngân sách của MỘT lần `main --mode fetch` khi nó tự chạy nhiều vòng.
+#
+# Vì sao cần vòng lặp: đo 2026-10-25 cho 76.6 KiB/s cho cả tài khoản. `e2` là
+# 1.94 GB ⇒ **7.4 giờ**, `e2,e4` ⇒ 12.9 giờ. Trước đây mỗi lần gọi chỉ tải được
+# `fetch_attempts × subprocess_timeout × 76.6 KiB/s` ≈ 400 MB, tức phải gõ lại
+# lệnh ~9 lần. Vòng lặp biến 9 lần gõ thành 1 lần.
+#
+# 20h < timeout 24h của function: chừa 4h để in tổng kết và commit Volume.
+ORCHESTRATOR_BUDGET_S = 20 * 3600
+
+# Dưới mức này thì mở thêm một vòng không kịp tải xong file nhỏ nhất — dừng
+# sạch, để lần chạy sau resume (staging đã nằm trong Volume).
+_MIN_WAVE_S = 600
+
+# Chặn trên số vòng. Mỗi vòng đã có chốt "không tiến bộ thì dừng", nhưng một
+# chốt cứng thì rẻ và bảo vệ được cả trường hợp logic tiến bộ bị tính sai.
+_MAX_WAVES = 40
+
 
 def _attempt_timeout(started: float, now: float | None = None) -> float:
     """Số giây còn được phép dùng cho MỘT lệnh ``BaiduPCS-Go``.
@@ -957,37 +975,104 @@ def _clamp_concurrency(raw: int) -> int:
     return max(1, min(int(raw or 0), 8))
 
 
+def _files_from_paths(spec: str) -> list[File]:
+    """Dựng danh sách ``File`` từ ``--paths a.tar.gz,b.pth``.
+
+    Vì sao có: tier là đơn vị của *bộ dữ liệu*, nhưng để có **con số đầu tiên**
+    chỉ cần 3 file (~400 MB, 1.5 giờ ở 76.6 KiB/s) thay vì cả `e2` (1.94 GB,
+    7.4 giờ). Bắt người dùng sửa manifest cho một lần chạy là sai: ``--paths``
+    là công tắc, không phải cấu hình.
+
+    Vẫn đi qua kiểm tra ``NEVER`` — không có đường tắt nào cho `recons/` hay
+    `*ddim*`, kể cả khi gõ tay.
+    """
+    out: list[File] = []
+    for raw in spec.replace("\n", ",").split(","):
+        p = raw.strip().lstrip("/")
+        if not p:
+            continue
+        if not p.endswith(_KNOWN_SUFFIX):
+            raise SystemExit(
+                f"[!] --paths chỉ nhận {'/'.join(_KNOWN_SUFFIX)}: {p!r}"
+            )
+        why = is_never(p)
+        if why:
+            raise SystemExit(f"[!] {p} bị NEVER chặn: {why}")
+        out.append(File(remote=p, local=p, note="chọn tay qua --paths"))
+    if not out:
+        raise SystemExit("[!] --paths rỗng")
+    return out
+
+
+def _split_present(
+    files: list[File], sizes: dict[str, int | None], force: bool
+) -> tuple[list[File], list[File]]:
+    """``(cần tải, đã có & hợp lệ)`` — dùng CHUNG cho lọc đầu và cho mỗi vòng.
+
+    Chỉ tin cache (``_cached_valid``), không gọi ``_validate_cached``: bản đầy
+    đủ đọc cả file để ``gzip -t`` + ``sha256``, tức 2 lần đọc toàn bộ dữ liệu
+    ngay trong container orchestrator. Cache trượt thì giao cho worker — nó có
+    đúng phép kiểm đó và sẽ tự ``[SKIP]``.
+    """
+    todo: list[File] = []
+    have: list[File] = []
+    for f in files:
+        p_local = RAW / f.local
+        exp = sizes.get(f.remote) or 0
+        if force:
+            todo.append(f)
+            continue
+        if p_local.exists() and p_local.stat().st_size > 0 and (
+            _cached_valid(f.local, p_local, exp) is not None
+        ):
+            have.append(f)
+        else:
+            todo.append(f)
+    return todo, have
+
+
 def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
-             force: bool = False) -> None:
+             force: bool = False, paths: str = "") -> None:
     """Ruột của cả ``plan`` và ``main`` — tránh hai bản logic lệch nhau.
 
     ``concurrency`` > 0 ghi đè ``max_containers`` trong policy (clamp [1, 8]).
     ``force`` tải lại cả file đã có trong cache — chỉ dùng khi nghi cache sai.
     """
-    ents = resolve_many(tiers)
-    if not ents:
-        if any(t.strip() in {"e0", "e1"} for t in tiers.split(",")):
+    unresolved: list[DirSpec] = []
+    blocked: list[tuple[File, str]] = []
+
+    if paths.strip():
+        # Danh sách tay: bỏ qua tier, nhưng vẫn qua guard dung lượng + NEVER.
+        files = _files_from_paths(paths)
+        print(f"\n[paths] {len(files)} file chọn tay (bỏ qua tier)")
+        _baidu_login()
+        sizes = _size_map(files)
+    else:
+        ents = resolve_many(tiers)
+        if not ents:
+            if any(t.strip() in {"e0", "e1"} for t in tiers.split(",")):
+                raise SystemExit(
+                    f"[plan] tier {tiers!r} cố ý KHÔNG tải gì từ Baidu:\n"
+                    "  e0 = code/tooling/docs · e1 = demo AEROBLADE (VAE ~1 GB kéo từ HF Hub)\n"
+                    "  Không có gì để làm."
+                )
             raise SystemExit(
-                f"[plan] tier {tiers!r} cố ý KHÔNG tải gì từ Baidu:\n"
-                "  e0 = code/tooling/docs · e1 = demo AEROBLADE (VAE ~1 GB kéo từ HF Hub)\n"
-                "  Không có gì để làm."
+                f"[plan] tier {tiers!r} không có file nào. Các tier: {sorted(TIERS)}"
             )
-        raise SystemExit(
-            f"[plan] tier {tiers!r} không có file nào. Các tier: {sorted(TIERS)}"
-        )
 
-    _baidu_login()
-    # DirSpec (tier `gap`) cần hỏi remote để biết tên file thật — không đoán.
-    files, unresolved, blocked = expand(ents, lister=lambda d: list(_ls_sizes(d)))
-    sizes = _size_map(files)
+        _baidu_login()
+        # DirSpec cần hỏi remote để biết tên file thật — không đoán.
+        files, unresolved, blocked = expand(ents, lister=lambda d: list(_ls_sizes(d)))
+        sizes = _size_map(files)
+
+        # Đếm chính xác số file bỏ qua: chỉ File (lister=None để không gọi Baidu
+        # thêm lần nào). Bản đầu đếm cả DirSpec nên báo sai 1 đơn vị.
+        all_files, _, _ = expand(resolve_many(",".join(TIERS)))
+        chosen = {f.remote for f in files}
+        skipped_n = len({f.remote for f in all_files} - chosen)
+        print(f"\n  Bỏ qua {skipped_n} file kê khai trong tier khác → KHÔNG tải.")
+
     known, unknown, largest = _report(files, sizes, blocked, unresolved)
-
-    # Đếm chính xác số file bỏ qua: chỉ File (lister=None để không gọi Baidu
-    # thêm lần nào). Bản đầu đếm cả DirSpec nên báo sai 1 đơn vị.
-    all_files, _, _ = expand(resolve_many(",".join(TIERS)))
-    chosen = {f.remote for f in files}
-    skipped_n = len({f.remote for f in all_files} - chosen)
-    print(f"\n  Bỏ qua {skipped_n} file kê khai trong tier khác → KHÔNG tải.")
 
     # ---- guard dung lượng ----
     # KHÔNG chỉ so `known`: nếu `ls -l` không parse được size thì known là cận
@@ -1021,18 +1106,7 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
     # đầy đủ đọc cả file để `gzip -t` + `sha256`, tức 2 lần đọc 3.39 GB ngay
     # trong container orchestrator. Cache trượt thì giao cho worker — nó có
     # đúng phép kiểm đó và sẽ tự [SKIP].
-    todo, have = [], []
-    for f in files:
-        p_local = RAW / f.local
-        exp = sizes.get(f.remote) or 0
-        if force:
-            todo.append(f)
-        elif p_local.exists() and p_local.stat().st_size > 0 and (
-            _cached_valid(f.local, p_local, exp) is not None
-        ):
-            have.append(f)
-        else:
-            todo.append(f)
+    todo, have = _split_present(files, sizes, force)
 
     if have:
         print(f"\n[skip] {len(have)}/{len(files)} file đã có & hợp lệ (theo cache)"
@@ -1044,17 +1118,17 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
     if force:
         print(f"[force] tải lại cả {len(files)} file, bỏ qua cache kiểm tra")
 
-    payloads = [
-        {"remote": f.remote, "local": f.local, "expected_size": sizes.get(f.remote) or 0}
-        for f in todo
-    ]
     workers = _clamp_concurrency(concurrency or POLICY.max_containers)
-    print(f"\n[fetch] {len(payloads)} file · tối đa {workers} container song song · "
+    print(f"\n[fetch] {len(todo)} file · tối đa {workers} container song song · "
           f"{POLICY.fetch_attempts} attempt/file")
     print(f"[fetch] staging: {_staging_root()} "
           f"(commit mỗi {_commit_interval():g}s — resume sống qua container chết)")
     if POLICY.baidu_parallel:
         print(f"[fetch] -p {POLICY.baidu_parallel} kết nối/file")
+    if (POLICY.baidu_mode or "").strip():
+        print(f"[fetch] --mode {(POLICY.baidu_mode or '').strip()}")
+    print(f"[fetch] tự chạy nhiều vòng tới khi xong hoặc hết ngân sách "
+          f"{ORCHESTRATOR_BUDGET_S / 3600:g}h")
     t0 = time.time()
     fn = fetch_one.with_options(max_containers=workers) if workers != POLICY.max_containers else fetch_one
 
@@ -1065,46 +1139,92 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
     # quả của các file đã tải xong bị vứt, dù dữ liệu vẫn nằm trong Volume.
     # Duyệt từng cái + ghi manifest ngay (kèm commit) thì phần đã xong luôn được
     # ghi lại, kể cả khi container orchestrator bị giết ở giây sau đó.
+    #
+    # VÒNG LẶP: ở 76.6 KiB/s, một lần `.map()` chỉ tải được ~400 MB (3 attempt ×
+    # 1800s). `e2` cần 1.94 GB ⇒ 5 vòng, `e2,e4` ⇒ 9 vòng. Không lặp thì người
+    # dùng phải gõ lại lệnh 9 lần — và mỗi lần là một cold start.
     results: list[dict] = []
     aborted = ""
-    try:
-        for r in fn.map(payloads, order_outputs=False):
-            results.append(r)
-            _write_manifest([r], quiet=True)
-    except Exception as exc:  # noqa: BLE001 — phải in tổng kết dù đợt tải gãy
-        aborted = f"{type(exc).__name__}: {exc}"
-        print(f"\n[warn] đợt tải dừng giữa chừng — {aborted}")
-        print("       Kết quả của các file đã xong VẪN được ghi (xem _manifest.tsv).")
+    wave = 0
+    while wave < _MAX_WAVES:
+        wave += 1
+        payloads = [
+            {"remote": f.remote, "local": f.local,
+             "expected_size": sizes.get(f.remote) or 0}
+            for f in todo
+        ]
+        left = ORCHESTRATOR_BUDGET_S - (time.time() - t0)
+        print(f"\n[vòng {wave}] {len(payloads)} file · đã dùng "
+              f"{(time.time() - t0) / 3600:.2f}h · còn {left / 3600:.2f}h ngân sách")
+        try:
+            for r in fn.map(payloads, order_outputs=False):
+                results.append(r)
+                _write_manifest([r], quiet=True)
+        except Exception as exc:  # noqa: BLE001 — phải in tổng kết dù đợt tải gãy
+            aborted = f"{type(exc).__name__}: {exc}"
+            print(f"\n[warn] vòng {wave} dừng giữa chừng — {aborted}")
+            print("       Kết quả của các file đã xong VẪN được ghi (xem _manifest.tsv).")
+            break
+
+        # Tính lại từ ĐĨA, bằng đúng phép lọc của đầu lần chạy: file vừa xong
+        # rời khỏi danh sách, file dở ở lại và resume từ byte đã có.
+        # `force` thì không lặp: nó nghĩa là "tải lại một lượt", không phải
+        # "tải lại mãi".
+        if force:
+            todo = []
+            break
+        before = len(todo)
+        todo, _have_now = _split_present(files, sizes, force=False)
+        if not todo:
+            break
+        if len(todo) >= before:
+            # Một vòng không mang thêm file nào về đích ⇒ đừng đốt tiếp ngân
+            # sách vào cùng chỗ. Không có chốt này thì BDUSS hết hạn (hoặc
+            # throttle cứng) sẽ quay vòng tới hết 20 giờ mà không ai biết.
+            print(f"\n[stop] vòng {wave} không xong thêm file nào — dừng để không"
+                  f" đốt ngân sách. Còn {len(todo)} file.")
+            print("       Kiểm: BDUSS/STOKEN còn hạn? thử --tiers e2min, hoặc"
+                  " đặt baidu_mode: pcs trong tiers.yaml")
+            break
+        if time.time() - t0 + _MIN_WAVE_S >= ORCHESTRATOR_BUDGET_S:
+            print(f"\n[budget] hết ngân sách {ORCHESTRATOR_BUDGET_S / 3600:g}h — "
+                  f"còn {len(todo)} file. Chạy lại để resume.")
+            break
     dt = time.time() - t0
 
     ok = [r for r in results if r["status"] == "ok"]
     skipped = [r for r in results if r["status"] == "skipped"]
     partial = [r for r in results if r["status"] == "partial"]
     errs = [r for r in results if r["status"] == "error"]
-    missing = len(payloads) - len(results)
+
+    # Đếm "còn thiếu" từ ĐĨA, không từ số payload: qua nhiều vòng thì
+    # `len(payloads)` không còn nghĩa gì.
+    still_todo, have_now = _split_present(files, sizes, force=False)
 
     _write_manifest([])  # in đường dẫn; không thêm dòng nào
 
-    print(f"\n{'='*78}\nKẾT QUẢ  ({dt/60:.1f} phút)\n{'='*78}")
+    print(f"\n{'='*78}\nKẾT QUẢ  ({dt/60:.1f} phút · {wave} vòng)\n{'='*78}")
     print(f"  ok      : {len(ok)}")
     print(f"  skipped : {len(skipped)}  (đã có sẵn & hợp lệ)")
     print(f"  partial : {len(partial)}  (hết ngân sách thời gian — chạy lại để resume)")
     print(f"  error   : {len(errs)}")
-    if missing:
-        print(f"  chưa có kết quả : {missing} file (task bị giết trước khi trả về)")
+    print(f"  còn thiếu: {len(still_todo)} / {len(files)} file"
+          + ("  ✅ ĐỦ" if not still_todo else ""))
     for r in partial:
         print(f"      {r['remote']}\n          → {r['error']}")
     for r in errs:
         print(f"      {r['remote']}\n          → {r['error']}")
+    if still_todo:
+        for f in still_todo:
+            print(f"      [thiếu] {f.remote}")
 
-    if partial or missing:
+    if still_todo:
         print("\nChạy lại đúng lệnh trên: file đã xong sẽ skip, file dở resume từ"
               " đúng byte đã tải (staging nằm trong Volume).")
 
     if errs:
         # KHÔNG raise: để người dùng chạy lại và fetch_one sẽ skip file đã ok.
-        print("\nChạy lại đúng lệnh trên — file đã tải thành công sẽ được skip.")
-        print("Nếu vẫn 0 byte: BDUSS hết hạn, hoặc giảm max_containers xuống 1.")
+        print("\nNếu vẫn 0 byte: BDUSS hết hạn, hoặc giảm max_containers xuống 1.")
 
 
 def _write_manifest(results: list[dict], quiet: bool = False) -> None:
@@ -1381,12 +1501,14 @@ def probe_pair(
     volumes={"/raw": vol_raw},
     timeout=1800,
 )
-def plan(tiers: str = POLICY.default_tiers, max_gb: float = POLICY.max_gb) -> None:
+def plan(tiers: str = POLICY.default_tiers, max_gb: float = POLICY.max_gb,
+         paths: str = "") -> None:
     """In bảng file + size thật từ Baidu. **Không tải gì.**
 
     ``modal run -m dire_modal.download::plan --tiers e2,e4``
+    ``modal run -m dire_modal.download::plan --paths a.tar.gz,b.pth``
     """
-    _execute(tiers, max_gb, do_fetch=False)
+    _execute(tiers, max_gb, do_fetch=False, paths=paths)
 
 
 @app.function(
@@ -1405,8 +1527,9 @@ def main(
     mode: str = "plan",
     concurrency: int = 0,
     force: bool = False,
+    paths: str = "",
 ) -> None:
-    """Lên kế hoạch rồi (tuỳ chọn) tải.
+    """Lên kế hoạch rồi (tuỳ chọn) tải — tự chạy nhiều vòng tới khi xong.
 
     ``mode`` nhận ``plan`` (mặc định — KHÔNG tải) hoặc ``fetch`` / ``commit``
     (tải thật). Dùng chuỗi thay vì bool vì CLI của Modal parse ``--flag`` kiểu
@@ -1414,15 +1537,26 @@ def main(
 
     Ví dụ::
 
-        modal run -m dire_modal.download::main --tiers e2,e4            # dry-run
-        modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
-        modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch --concurrency 4
+        # 1.5 giờ: chỉ 3 file đủ để chạy eval đầu tiên (xem tier `e2min`)
+        modal run -m dire_modal.download::main --tiers e2min --mode fetch
+
+        # 7.4 giờ ở 76.6 KiB/s: toàn bộ bảng eval DIRE (16 generator)
+        modal run -m dire_modal.download::main --tiers e2 --mode fetch
+
+        # file lẻ, bỏ qua tier
+        modal run -m dire_modal.download::main \
+            --paths checkpoints/lsun_adm.pth,dire/test/lsun_bedroom/lsun_bedroom/adm.tar.gz \
+            --mode fetch
+
+        # soát trước khi tiêu tiền (không tải gì)
+        modal run -m dire_modal.download::main --tiers e2
     """
     _execute(
         tiers, max_gb,
         do_fetch=mode.strip().lower() in {"fetch", "commit", "yes"},
         concurrency=concurrency,
         force=force,
+        paths=paths,
     )
 
 
@@ -1500,6 +1634,11 @@ def _fetch_one_impl(f: dict) -> dict:
                 args = ["d", "--saveto", str(tmpdir)]
                 if par > 0:
                     args += ["-p", str(min(par, 32))]
+                # `--mode` chỉ truyền khi có cấu hình: mỗi bản BaiduPCS-Go có
+                # tập giá trị hơi khác nhau, và mặc định của client là an toàn.
+                bmode = (POLICY.baidu_mode or "").strip()
+                if bmode:
+                    args += ["--mode", bmode]
                 args.append(remote)
 
                 # Commit định kỳ TRONG lúc tải: đây là thứ khiến staging trong
@@ -1659,6 +1798,83 @@ def fetch_one(f: dict) -> dict:
     return _fetch_one_impl(f)
 
 
+# ============================================================================
+# Nguồn thay thế: HF Hub (dùng SAU khi đã mirror — nhanh hơn Baidu 1-2 bậc)
+# ============================================================================
+# Đo 2026-10-25: Baidu cho **76.6 KiB/s cho cả tài khoản**, bất kể số container.
+# `e2` = 1.94 GB ⇒ 7.4 giờ; `e2,e4` ⇒ 12.9 giờ. HF Hub thường cho vài MB/s.
+#
+# Đường đi: tải MỘT lần (bằng Baidu hoặc bằng máy nhà, nhanh hơn nhiều) →
+# `archive::push_hf` → từ đó mọi lần chạy đều `download::from_hf`.
+#
+# Đây là lối thoát DUY NHẤT khỏi 77 KiB/s: mọi mẹo trong Baidu (thêm container,
+# `-p N`) đều đã đo và đều không tăng tổng băng thông, chỉ tăng rủi ro throttle.
+@app.function(
+    image=cpu_image,
+    volumes={"/raw": vol_raw},
+    timeout=ORCHESTRATOR_TIMEOUT_S,
+)
+def from_hf(repo_id: str = "", tiers: str = POLICY.default_tiers,
+            prefix: str = "", token: str = "") -> None:
+    """Kéo dữ liệu của tier từ HF **dataset** repo đã mirror.
+
+    ``modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2``
+
+    Không cần secret nếu repo công khai; repo private thì truyền ``--token``
+    hoặc dùng secret ``hf-cred``.
+    """
+    import os as _os
+
+    from huggingface_hub import hf_hub_download
+
+    if not repo_id or "/" not in repo_id:
+        raise SystemExit("[!] cần --repo-id dạng <user>/<repo>")
+
+    ents = resolve_many(tiers)
+    files, unresolved, _ = expand(ents, lister=None)
+    if unresolved:
+        print(f"[warn] {len(unresolved)} DirSpec chưa expand (cần --tiers tĩnh)")
+    if not files:
+        raise SystemExit(f"[!] tier {tiers!r} không có file tĩnh nào")
+
+    tok = token or _os.environ.get("HF_TOKEN") or None
+    print(f"[hf] {repo_id} · {len(files)} file · prefix={prefix!r}")
+    ok = skipped = failed = 0
+    for f in files:
+        dest = RAW / f.local
+        if dest.exists() and dest.stat().st_size > 0:
+            skipped += 1
+            print(f"[SKIP] {f.local}")
+            continue
+        remote_name = f"{prefix.rstrip('/')}/{f.local}" if prefix else f.local
+        try:
+            got = hf_hub_download(
+                repo_id=repo_id, filename=remote_name, repo_type="dataset",
+                token=tok, local_dir=str(RAW),
+            )
+        except Exception as exc:  # noqa: BLE001 — một file hỏng không được giết cả đợt
+            failed += 1
+            print(f"[FAIL] {remote_name}: {type(exc).__name__}: {exc}")
+            continue
+        # `hf_hub_download` với local_dir giữ nguyên cây; nếu nó trả đường dẫn
+        # khác `dest` (do prefix) thì chuyển về đúng chỗ manifest mong đợi.
+        got_p = Path(got)
+        if got_p.exists() and got_p.resolve() != dest.resolve():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if dest.exists():
+                dest.unlink()
+            got_p.replace(dest)
+        ok += 1
+        size = _human(dest.stat().st_size) if dest.exists() else "?"
+        print(f"[OK  ] {f.local}  {size}")
+    _commit_volume("from_hf")
+    print(f"\n[hf] ok={ok} skipped={skipped} failed={failed}")
+    if failed:
+        print("     File lỗi là file chưa có trên HF — mirror bổ sung rồi chạy lại:")
+        print(f"     modal run -m dire_modal.archive::push_hf --repo-id {repo_id}"
+              f" --src /raw")
+
+
 def _bytes_per_sec(total_bytes: int, seconds: float) -> float:
     """Băng thông thực (B/s). Trả 0 khi không đo được — không bịa số."""
     if seconds <= 0 or total_bytes <= 0:
@@ -1705,14 +1921,29 @@ def _bench_report(rows: list[dict]) -> list[str]:
         if best["concurrency"] != slow["concurrency"]:
             ratio = best["bytes_per_sec"] / slow["bytes_per_sec"]
             out.append(f"    so với k={slow['concurrency']}: {ratio:.2f}×")
-            if slow["concurrency"] > best["concurrency"]:
+            # Đo thật 2026-10-25: k=1 → 76.6 KB/s, k=2 → 75.0 KB/s, tỉ lệ 1.02×.
+            # Chênh lệch dưới 10 % là nhiễu, KHÔNG phải "k=1 nhanh hơn" —
+            # và càng không phải "nhiều container chậm hơn". Nói sai ở đây sẽ
+            # đẩy người đọc đi chỉnh một tham số không liên quan.
+            if ratio < 1.1:
                 out.append(
-                    "    ⚠ nhiều container CHẬM HƠN: Baidu throttle theo số phiên"
-                    " của tài khoản ⇒ hạ max_containers."
+                    "    ≈ như nhau (chênh < 10 %, trong nhiễu) ⇒ trần tốc độ là của"
+                    " TÀI KHOẢN,"
                 )
+                out.append(
+                    "      không phải của số container. Đừng chỉnh max_containers;"
+                    " nhanh hơn thì đổi nguồn."
+                )
+            elif slow["concurrency"] > best["concurrency"]:
+                out.append(
+                    f"    ⚠ nhiều container CHẬM HƠN thật ({ratio:.2f}×): Baidu throttle"
+                    " theo số phiên"
+                )
+                out.append("      của tài khoản ⇒ hạ max_containers.")
     out.append("")
-    out.append("  Cách đọc: nếu k=2 không nhanh hơn k=1 thì `max_containers: 2` đang")
-    out.append("  tự làm hại. Đây là con số DUY NHẤT quyết định giá trị đó.")
+    out.append("  Cách đọc: k=2 KHÔNG nhanh hơn k=1 (đo được 75.0 vs 76.6 KB/s) thì")
+    out.append("  `max_containers: 1` là đúng. Muốn nhanh hơn thật thì đổi NGUỒN")
+    out.append("  (`archive::push_hf` + `download::from_hf`), không phải đổi tham số.")
     return out
 
 
@@ -1723,26 +1954,34 @@ def _bench_report(rows: list[dict]) -> list[str]:
     # Mỗi lượt đo có ngân sách riêng; số lượt = len(ks)
     timeout=ORCHESTRATOR_TIMEOUT_S,
 )
-def bench_concurrency(tiers: str = "e2", limit: int = 2, ks: str = "1,2") -> None:
+def bench_concurrency(tiers: str = "e2", limit: int = 2, ks: str = "1,2",
+                      paths: str = "") -> None:
     """Đo băng thông thật ở các mức song song khác nhau.
 
     ``modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2``
+    ``modal run -m dire_modal.download::bench_concurrency --paths <file> --limit 1 --ks 1``
 
-    Vì sao cần: ``max_containers: 2`` trong ``tiers.yaml`` được suy ra từ **một**
-    quan sát (67.36 KB/s cho một phiên, và 26 phiên ⇒ 0 B/s). Nhưng Baidu
-    throttle theo **số phiên của tài khoản**, nên hai phiên có thể *chậm hơn*
-    một phiên. Chừng nào chưa đo, giá trị đó là phỏng đoán.
+    Kết quả đã đo 2026-10-25 (387.7 MB/lượt): ``k=1`` 5183.8 s → **76.6 KiB/s**;
+    ``k=2`` 5293.3 s → **75.0 KiB/s** ⇒ trần là của TÀI KHOẢN, nên ``tiers.yaml``
+    đặt ``max_containers: 1``. Chạy lại hàm này chỉ để kiểm khi đổi tài khoản
+    (SVIP) hoặc đổi ``baidu_mode``.
+
+    ``--paths`` để đo trên **một file cụ thể** (dùng cho ``scripts/09_bench_mode.sh``):
+    file nhỏ nhất trong cây là 26.57 MB, tức ~6 phút/mức k ở 76.6 KiB/s.
 
     Mỗi lượt tải lại THẬT vào ``/raw/.bench/k<k>/`` (không dính cache), đo tổng
     byte nhận được chia cho thời gian, rồi xoá. Chọn ``--limit`` nhỏ: đây là
     phép đo, không phải việc tải dữ liệu.
     """
     _baidu_login()
-    ents = resolve_many(tiers)
-    files, _, _ = expand(ents, lister=lambda d: list(_ls_sizes(d)))
+    if paths.strip():
+        files = _files_from_paths(paths)
+    else:
+        ents = resolve_many(tiers)
+        files, _, _ = expand(ents, lister=lambda d: list(_ls_sizes(d)))
     picked = files[: max(1, int(limit))]
     if not picked:
-        raise SystemExit(f"[bench] tier {tiers!r} không có file nào để đo")
+        raise SystemExit("[bench] không có file nào để đo")
 
     print(f"[bench] {len(picked)} file/lượt · các mức k: {ks}")
     for f in picked:
@@ -1778,7 +2017,13 @@ def bench_concurrency(tiers: str = "e2", limit: int = 2, ks: str = "1,2") -> Non
     out = RAW / "_bench_concurrency.json"
     out.write_text(
         json.dumps(
-            {"tiers": tiers, "files": [f.remote for f in picked], "rows": rows},
+            {
+                "tiers": tiers,
+                "paths": paths,
+                "files": [f.remote for f in picked],
+                "n": len(picked),
+                "rows": rows,
+            },
             ensure_ascii=False,
             indent=2,
         ),
@@ -1916,7 +2161,8 @@ def local_status() -> None:
     print(f"subproc timeout  = {POLICY.subprocess_timeout}s")
     print(f"staging          = {_staging_root()}  (env DIRE_STAGING_DIR ghi đè)")
     print(f"commit định kỳ   = {_commit_interval():g}s khi đang tải")
-    print(f"baidu_parallel   = {POLICY.baidu_parallel}  (0 = để BaiduPCS-Go tự quyết)")
+    print(f"baidu_parallel   = {POLICY.baidu_parallel}  (1 = BẮT BUỘC với user free)")
+    print(f"baidu_mode       = {POLICY.baidu_mode or '(mặc định của client)'}")
     print(f"ngân sách 1 file = {FETCH_CALL_TIMEOUT_S}s/attempt-budget "
           f"(chừa {_FETCH_RESERVE_S}s, tối thiểu {_MIN_ATTEMPT_S}s/attempt)")
     print(f"watchdog treo    = {POLICY.stall_timeout_s}s không lớn thêm → giết (0 = tắt)")
