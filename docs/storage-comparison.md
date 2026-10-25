@@ -10,6 +10,7 @@
 >
 > | | file | size |
 > |---|---|---|
+> | Tối thiểu để có số đầu tiên (`e2min`) | 3 | **~0.40 GB** |
 > | Mặc định mới `e2,e4` | 22 | **3.39 GB** |
 > | Eval đầy đủ không train (`e2,e3,e4,e5`) | 57 | **10.35 GB** |
 > | Tier A cũ (20 file) | 20 | **7.42 GB** |
@@ -20,6 +21,11 @@
 > 61.40 GB là **cận dưới** cho cả cây: `AUDIT_DIRS` mới quét 15 thư mục, các nhánh
 > `recons/train`, `recons/val`, `images/test/imagenet`, `images/test/celebahq` chưa quét.
 > Chi phí bên dưới đã tính lại bằng `tools/storage_cost.py` với số đo mới.
+>
+> **`e2min` (2026-10-25):** đường chạy đã chốt là eval checkpoint tác giả, không
+> train lại ⇒ tập làm việc nhỏ nhất là 3 file: `checkpoints/lsun_adm.pth` (269.4
+> MB) + test `real.tar.gz` (26.57 MB) + test `adm.tar.gz` (~104 MB). Đủ để chạy
+> CỔNG S2 (`ACC(adm) ≥ 0.99`). Đây cũng là thứ nên mirror lên HF **trước tiên**.
 
 ---
 

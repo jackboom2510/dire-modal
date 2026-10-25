@@ -2,13 +2,10 @@
 2000 ảnh/shard → 100k ảnh = 50 inode (so với 100k inode).
 """
 
-import io
 import json
 import re
 import tarfile
 from pathlib import Path
-
-import modal
 
 from .common import app, cpu_image, vol_raw, vol_shards
 

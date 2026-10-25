@@ -59,6 +59,26 @@ FPR_TARGET = 0.05
 
 RESULTS_ROOT = Path("/ckpt/results")
 
+# Chỗ tìm checkpoint. `/raw/checkpoints/...` đứng ĐẦU vì đó là nơi `download`
+# đổ file về — bắt người dùng chạy tay `modal volume cp` sang Volume thứ hai chỉ
+# để eval một checkpoint là một bước thừa dễ quên, và nó từng là lý do
+# `compute_dire` báo "không thấy checkpoint" dù file đã tải xong.
+CKPT_CANDIDATES = (
+    "/raw/checkpoints/lsun_adm.pth",
+    "/ckpt/pretrained/lsun_adm.pth",
+)
+
+
+def resolve_ckpt(explicit: str = "", name: str = "lsun_adm.pth") -> str:
+    """Đường dẫn checkpoint thật, theo thứ tự ưu tiên; ``""`` nếu không có.
+
+    Không bịa đường dẫn: trả rỗng để caller in hướng dẫn cụ thể.
+    """
+    for cand in (explicit, f"/raw/checkpoints/{name}", f"/ckpt/pretrained/{name}"):
+        if cand and Path(cand).exists():
+            return cand
+    return ""
+
 
 # ============================================================================
 # Metric — pure Python, không numpy/sklearn
@@ -438,7 +458,7 @@ def _sysinfo() -> dict:
     timeout=4 * 3600,
 )
 def main(
-    ckpt: str = "/ckpt/pretrained/lsun_adm.pth",
+    ckpt: str = "",
     split: str = "test",
     root: str = "/raw",
     exp_id: str = "",
@@ -446,19 +466,27 @@ def main(
     limit: int = 0,
     batch_size: int = 64,
     only: str = "",
-) -> None:
-    """Eval checkpoint trên MỌI cặp tìm được, ghi CSV + run.json.
+) -> str:
+    """Eval checkpoint PRE-TRAINED trên mọi cặp tìm được, ghi CSV + run.json.
+
+    **Không train gì.** Đây là đường tái lập của dự án: detector ResNet50 lấy
+    nguyên từ checkpoint tác giả (`lsun_adm.pth`), chỉ chạy forward.
+
+    ``ckpt`` rỗng ⇒ tự tìm (`resolve_ckpt`): `/raw/checkpoints/lsun_adm.pth`
+    trước, rồi `/ckpt/pretrained/lsun_adm.pth`.
 
     ``modal run -m dire_modal.eval::main --tiers e2``
-    ``modal run -m dire_modal.eval::main --only lsun_bedroom__lsun_bedroom --limit 50``
+    ``modal run -m dire_modal.eval::main --only lsun_bedroom__lsun_bedroom --limit 100``
     """
-    if not Path(ckpt).exists():
+    found = resolve_ckpt(ckpt)
+    if not found:
         raise SystemExit(
-            f"[!] Không thấy checkpoint tại {ckpt}.\n"
-            "    Cần: modal volume cp /raw/checkpoints/lsun_adm.pth "
-            "dire-ckpt:/pretrained/lsun_adm.pth\n"
-            "    (xem scripts/04_eval_pretrained.sh)"
+            "[!] Không thấy checkpoint. Đã thử:\n"
+            + "".join(f"    - {c}\n" for c in (ckpt, *CKPT_CANDIDATES) if c)
+            + "    Cần: modal run -m dire_modal.download::main --tiers e2min --mode fetch\n"
+            "    (hoặc --paths checkpoints/lsun_adm.pth)"
         )
+    ckpt = found
 
     pairs = pairs_from_raw(Path(root), split)
     if only:
@@ -532,8 +560,17 @@ def main(
         print("\n[!] Cặp có một lớp RỖNG — nhãn hoặc đường dẫn sai, số ở trên vô nghĩa:")
         for d in broken:
             print(f"    {d['branch']}/{d['generator']}: real={d['n_real']} fake={d['n_fake']}")
+    # Cổng S2 của SPEC-001: ACC trên generator `adm` phải ≥ 0.99. In ngay tại
+    # đây để người chạy thấy kết quả mà không phải mở CSV.
+    adm = [d for d in rows if d["generator"] == "adm"]
+    if adm:
+        gate = "ĐẠT" if max(d["acc"] for d in adm) >= 0.99 else "KHÔNG ĐẠT"
+        print(f"\n[CỔNG S2] ACC(adm) = {max(d['acc'] for d in adm):.4f} "
+              f"→ {gate} (ngưỡng 0.99)")
+
     print(f"\n[eval] → {out_dir}/dire.csv · {out_dir}/run.json")
     vol_ckpt.commit()
+    return str(out_dir)
 
 
 @app.local_entrypoint()

@@ -15,7 +15,40 @@ pip install -e .
 python3 tools/free_quota.py     # xem còn bao nhiêu quota miễn phí
 ```
 
-Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$13–30 trong $30 credit/tháng).
+Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **không train lại**, bỏ hẳn khoản $8–20 của A100).
+
+## Tái lập thử nghiệm bằng checkpoint có sẵn (KHÔNG train lại)
+
+Ràng buộc dự án: *chỉ cải thiện, không train lại*. Nên "tái lập" ở đây nghĩa là
+**nạp `lsun_adm.pth` của tác giả rồi eval** — không đụng tới ResNet50 training.
+
+```bash
+# 1) tải 3 file tối thiểu (ckpt + real + adm của test LSUN-Bedroom) ≈ 400 MB
+modal run -m dire_modal.download::main --tiers e2min --mode fetch
+
+# 2) eval — eval::main tự tìm /raw/checkpoints/lsun_adm.pth, in CỔNG S2
+modal run -m dire_modal.eval::main --tiers e2
+```
+
+Hoặc một lệnh gói cả hai: `bash scripts/08_repro_minimal.sh`.
+
+| bước | lệnh | thời gian | cổng |
+|---|---|---|---|
+| tải `e2min` | `download::main --tiers e2min --mode fetch` | ~1.5 h @ 76.6 KiB/s | `download::verify` OK |
+| eval | `eval::main --tiers e2min` | < 2 phút CPU | **S2: `ACC(adm) ≥ 0.99`** |
+| eval đầy đủ | `eval::main --tiers e2` | ~10 phút CPU | bảng 16 generator |
+
+> ⚠ **Trần tốc độ là của TÀI KHOẢN Baidu, không phải của số container.** Đo
+> 2026-10-25 (`bench_concurrency --tiers e2 --limit 2 --ks 1,2`, 387.7 MB/lượt):
+> `k=1` → **5183.8 s / 76.6 KiB/s**; `k=2` → **5293.3 s / 75.0 KiB/s**. Tức thêm
+> container **không** nhanh hơn. Vì thế `max_containers: 1` và `baidu_parallel: 1`
+> trong `tiers.yaml` — và đó cũng là khuyến cáo của upstream BaiduPCS-Go cho tài
+> khoản miễn phí (tăng thread ⇒ bị throttle 0 tốc độ nhiều giờ tới nhiều ngày).
+>
+> `download::main` **tự lặp nhiều vòng** trong một lần gọi (ngân sách 20 h), tính
+> lại file còn thiếu từ đĩa sau mỗi vòng, nên không phải gõ lại lệnh ~9 lần.
+> Muốn nhanh hơn hẳn thì phải đổi **nguồn**, không phải đổi tham số: mirror lên
+> HF rồi `modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2`.
 
 ## Kiến trúc
 
@@ -68,19 +101,24 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.download::plan --tiers e2,e4` | Kế hoạch + **size thật** (không tải) |
 | `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng **so từng ảnh** trong tar (~53 MB) |
 | `./scripts/01_fetch_baidu.sh` | audit → plan → hỏi xác nhận → tải 22 file / 3.39 GB → verify |
-| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run). `--concurrency N` để chỉnh số container (clamp 1–8) |
+| `modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch` | Tải thật (mặc định là dry-run), **tự lặp vòng tới khi đủ hoặc hết 20 h**. `--concurrency N` chỉnh số container (clamp 1–8, nhưng đo được là >1 không nhanh hơn) |
+| `modal run -m dire_modal.download::main --paths a/b.tar.gz,c/d.tar.gz --mode fetch` | Tải **đúng danh sách file**, không cần tier — vẫn qua `NEVER` + guard dung lượng |
+| `modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2` | Kéo từ mirror HF Hub (**nhanh hơn Baidu 1–2 bậc**) |
+| `bash scripts/08_repro_minimal.sh` | Chuỗi tái lập gọn: status → plan → fetch → verify → eval pre-trained |
 | `modal run -m dire_modal.download::prune --tiers e2,e4` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `./scripts/02_verify.sh` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) + (tuỳ chọn) đẩy R2 |
 | `./scripts/03_pack_shards.sh` | Pack WebDataset + benchmark storage/compute |
-| `./scripts/04_eval_pretrained.sh` | Eval checkpoint tác giả (cổng: ACC ≈ 99% trên ADM-LSUN) |
-| `./scripts/05_train_repro.sh` | Train reproduce (`--detach`) |
+| `bash scripts/08_repro_minimal.sh` | **Đường chính hiện tại**: tải `e2min` → eval checkpoint tác giả (cổng S2: ACC ≥ 0.99 trên ADM-LSUN) |
+| `bash scripts/09_bench_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |
+| `./scripts/04_eval_pretrained.sh` | Eval checkpoint tác giả; `TIERS=e2min` để chỉ chạy cổng S2 |
+| `./scripts/05_train_repro.sh` | Train reproduce — **ngoài phạm vi dự án** (chỉ để tham chiếu) |
 | `./scripts/06_measure_dire.sh` | Đo ảnh/giây của DIRE → số giờ GPU thật |
 | `./scripts/bench_storage.sh` | Đo Volume vs R2 (mount + S3 API) |
 | `modal run -m dire_modal.archive::push_hf --repo-id <user>/<repo>` | Mirror lên HF |
 | `modal run -m dire_modal.archive::verify_hf --repo-id <user>/<repo>` | Đối chiếu sha256 mirror |
 | `modal run -m dire_modal.compute_dire::dire_batch --n 200` | Tính DIRE trên GPU — **có preflight chặn chi phí** trước khi bật container |
 | `modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run` | Chỉ in ước tính tiền, không bật GPU nào |
-| `modal run -m dire_modal.eval::main --tiers e2` | **Eval 1 checkpoint trên mọi cặp (real, generator)** → CSV + `run.json` |
+| `modal run -m dire_modal.eval::main --tiers e2` | **Eval checkpoint pre-trained trên mọi cặp (real, generator)** → CSV + `run.json`. Tự tìm ckpt trong `/raw/checkpoints` rồi `/ckpt/pretrained`; `--ckpt` để chỉ định tay |
 | `modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2` | Đo băng thông thật ở các mức song song (quyết định `max_containers`) |
 | `modal run -m dire_modal.compute_dire::make_gallery --n 12` | Sinh gallery |x−recon| cho demo |
 
@@ -97,6 +135,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | tier | file | size | mục đích |
 |---|---|---|---|
 | `e0` | 0 | — | code / tooling / docs |
+| **`e2min`** | **3** | **~0.40 GB** | **đường ngắn nhất tới con số đầu tiên**: `lsun_adm.pth` + test `real` + test `adm` |
 | `e1` | 0 | — | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
 | **`e2`** | **17** | **1.94 GB** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
 | `e3` | 24 | 4.85 GB | +10 tar `lsun_bedroom/imagenet` (**cross-generator**, xem dưới), ImageNet, CelebA-HQ |
@@ -150,8 +189,8 @@ src/dire_modal/
   pack.py           # /raw → WebDataset shards
   bench.py          # benchmark storage (Volume/R2) + throughput DIRE
   archive.py        # đẩy/kéo: R2, HF Hub, Kaggle + verify sha256
-  train.py          # (TODO) training loop
-  eval.py           # (TODO) eval 16 generator
+  train.py          # (TODO) training loop — ngoài phạm vi, xem spec.md N1
+  eval.py           # eval 16 generator bằng checkpoint có sẵn + CỔNG S2
   compute_dire.py   # tính DIRE bằng ADM DDIM inversion + gallery
   vendor/           # module DIRE gốc đã vendorize
 tools/              # free_quota.py, storage_cost.py (thuần stdlib)
@@ -168,7 +207,8 @@ manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 | Pack shards | ✅ |
 | Benchmark storage | ✅ code xong — **số đo cần chạy** `scripts/bench_storage.sh` |
 | Mirror HF/Kaggle + verify sha256 | ✅ |
-| Train / eval | ⏳ TODO — port từ `vendor/` và repo DIRE gốc |
+| Eval (pre-trained) | ✅ code xong — `eval::main` tự tìm ckpt, in CỔNG S2; **số đo cần chạy** `scripts/08_repro_minimal.sh` |
+| Train lại | ⛔ ngoài phạm vi (spec.md N1: chỉ cải thiện, không train lại) |
 | Stage-2 (compute DIRE toàn dataset) | ⏳ code viết theo API guided-diffusion, **chưa chạy thử**; cần ~30–60 A100-h |
 | Demo HF Spaces | ✅ code + hướng dẫn; ⏳ chờ checkpoint & gallery |
 

@@ -13,10 +13,14 @@
 | 4. Pack shards | Modal CPU | ~$1–2 | `pack::stats` đếm đủ ảnh mỗi generator |
 | 5. Mirror công khai | Modal CPU + egress | ~$0–1 | `verify_hf` → `mismatch=0, missing=0` |
 | 6. Smoke test | **Kaggle** | **$0** | Notebook chạy 3 step train, loss giảm |
-| 7. Train thật | Modal A100 | ~$8–20 (3–8 h) | ACC/AP trên val ≥ ngưỡng chọn trước |
-| 8. Eval 16 generator | Modal L4/A100 | ~$2–4 | Bảng ACC 16 dòng |
+| 7. **KHÔNG train** — lấy `lsun_adm.pth` | Modal CPU | ~$0.1 | `sha256` ckpt khớp manifest |
+| 8. Eval 16 generator | **Modal CPU** (ResNet50 inference) | ~$0.1 | Bảng ACC 16 dòng, **CỔNG S2 `ACC(adm) ≥ 0.99`** |
 | 9. Gallery + demo | Modal A100 + HF Spaces | ~$0.5 + $0 | Space public trả kết quả thật |
-| **Tổng** | | **≈ $13–30** (vừa $30/tháng) | |
+| **Tổng** | | **≈ $3–6** (bỏ hẳn $8–20 train) | |
+
+> Đường ngắn nhất, không cần chờ dữ liệu lớn: `download --tiers e2min --mode fetch`
+> (3 file ≈ 400 MB) → `eval::main --tiers e2min` (< 2 phút CPU). Đó là toàn bộ
+> "tái lập" theo nghĩa của dự án này: **nạp checkpoint tác giả rồi đo**, không train.
 
 > **Đo trước khi cam kết:** `./scripts/06_measure_dire.sh` cho biết số giờ GPU thật của stage-2.
 > Nếu ước lượng > 30 A100-giờ → **không làm stage-2 toàn bộ**; chỉ làm 2–5k ảnh.
@@ -111,6 +115,8 @@ modal run -m dire_modal.download::plan --tiers e2,e4
 ./scripts/01_fetch_baidu.sh            # gộp (a)→(d), hỏi xác nhận, rồi tải
 # hoặc:
 modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
+# đường ngắn nhất tới con số đầu tiên (3 file / ~400 MB / ~1.5 h):
+modal run -m dire_modal.download::main --tiers e2min --mode fetch
 
 # (f) Verify toàn bộ
 ./scripts/02_verify.sh                 # ✅ CỔNG 2: "All OK."
@@ -177,20 +183,59 @@ nữa. Cache theo `(size, mtime_ns)` bỏ được cả hai: file bị ghi đè 
 đổi nên cache tự vô hiệu. **Chỉ cache kết quả TỐT** — cache âm mà sai thì một
 file lành sẽ bị tải lại mãi mãi.
 
-**5. `--concurrency` giờ có tác dụng thật.**
+**5. `--concurrency` KHÔNG giúp gì — đã đo, đừng thử lại.**
 
 ```bash
-modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch --concurrency 4
+modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2
 ```
 
-Trước đây tham số này bị bỏ qua hoàn toàn (lỗi #3), nên tưởng chỉnh được mà
-không chỉnh được gì. Nay nó ghi đè `max_containers`, **clamp [1, 8]**: Baidu
-throttle theo số phiên, và log thật cho thấy 26 phiên đồng thời ⇒ `0B/s` hàng
-loạt. Nếu vẫn 0 byte thì giảm xuống 1 trước khi nghĩ tới việc tăng.
+| k (container) | thời gian | tổng | mỗi file |
+|---|---|---|---|
+| 1 | 5183.8 s | **76.6 KiB/s** | 37.5 KiB/s |
+| 2 | 5293.3 s | **75.0 KiB/s** | 37.5 KiB/s |
 
-`baidu_parallel` (mặc định 0 = không truyền cờ) là số kết nối song song **cho
-một file** (`-p N`). Chỉ nâng sau khi đo — nhiều kết nối có thể nhanh hơn, cũng
-có thể bị cắt sớm hơn.
+387.7 MB/lượt, đo 2026-10-25. `k=2` **không nhanh hơn** (chậm 2.1 %, trong sai
+số), và mỗi container chỉ được một nửa số file ⇒ file nào cũng chậm gấp đôi.
+Trần ~77 KiB/s là của **tài khoản**, không phải của cấu hình. Vì thế
+`max_containers: 1`.
+
+`baidu_parallel: 1` là số kết nối song song **cho một file** (`-p N`), truyền
+thành `-p 1`. Upstream BaiduPCS-Go nói rõ: tài khoản miễn phí phải để
+`max_parallel=1`; tăng lên chỉ nhanh trong vài phút rồi bị throttle, có thể về
+gần 0 tốc độ trên **mọi** client trong nhiều giờ tới nhiều ngày. `--mode` của
+client (`locate|pcs|stream`) đặt được qua `baidu_mode` trong `tiers.yaml`; đo
+bằng `bash scripts/09_bench_mode.sh` (chưa đo).
+
+**6. Một lần gọi tự chạy nhiều vòng (ngân sách 20 h).**
+
+Ở 76.6 KiB/s, `e2,e4` cần 12.9 h — dài hơn `FETCH_CALL_TIMEOUT_S` (7200 s), nên
+trước đây phải gõ lại lệnh ~9 lần. Giờ `_execute` có vòng lặp: sau mỗi wave nó
+tính lại file còn thiếu **từ đĩa** rồi chạy tiếp, tối đa `_MAX_WAVES = 40` vòng
+và `ORCHESTRATOR_BUDGET_S = 20 h` tổng. Nó dừng khi: hết file · hết ngân sách ·
+hoặc **một vòng không xong thêm file nào** (chốt chống đốt 20 h khi BDUSS hết
+hạn — đó là triệu chứng thường gặp, không phải file hỏng).
+
+**7. `--paths`: tải đúng vài file lẻ, không cần tier.**
+
+```bash
+modal run -m dire_modal.download::main \
+  --paths dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz,checkpoints/lsun_adm.pth \
+  --mode fetch
+```
+
+Vẫn đi qua `NEVER` và guard dung lượng. Dùng khi cần đúng một file để chẩn đoán
+hoặc để đủ điều kiện chạy eval; đừng tạo tier mới cho danh sách dùng một lần.
+
+**8. Nhanh hơn hẳn thì phải đổi NGUỒN, không phải đổi tham số.**
+
+```bash
+modal run -m dire_modal.archive::push_hf --repo-id <user>/<repo> --src /raw
+modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2
+```
+
+HF Hub thường cho vài MB/s, tức nhanh hơn Baidu 1–2 bậc. Đây là lối thoát duy
+nhất khỏi 77 KiB/s: mọi mẹo trong Baidu đều đã đo và đều không tăng tổng băng
+thông.
 
 ### Khi tải xong mà vẫn `gzip -t` fail
 
@@ -387,37 +432,43 @@ python3 tools/free_quota.py --used kaggle=0
 
 ---
 
-## 7. Train thật trên Modal (~$8–20)
+## 7. KHÔNG train — dùng checkpoint tác giả
+
+Ràng buộc dự án (spec.md N1): **chỉ cải thiện, không train lại**. Bước train của
+runbook cũ (`dire_modal.train::main`, ~$8–20, `train.py` vẫn là TODO) **không
+còn nằm trên đường chạy**. Nếu vì lý do mới mà cần train lại thì phải viết ADR
+riêng; xem `src/dire_modal/vendor/` (`train.py`, `utils/trainer.py` của DIRE gốc).
+
+Thay vào đó chỉ cần đưa `lsun_adm.pth` vào Volume — tier `e2min` đã gồm nó:
 
 ```bash
-# Xem còn bao nhiêu credit TRƯỚC khi chạy
-python3 tools/free_quota.py --used modal=0
-
-# Train (chạy nền, không cần giữ terminal)
-modal run --detach -m dire_modal.train::main --exp lsun_adm_repro
-
-# Theo dõi
-modal app logs dire
+modal run -m dire_modal.download::main --tiers e2min --mode fetch
+# → /raw/checkpoints/lsun_adm.pth  (269.4 MB)
 ```
 
-Cơ chế bảo vệ đã có trong thiết kế: checkpoint mỗi epoch + `vol_ckpt.commit()` → **nếu hết credit giữa chừng,
-vẫn resume được** ở lần chạy sau (kể cả trên nền tảng khác, miễn là shards truy cập được).
-
-> Nếu `train.py` chưa port xong: đây là việc còn TODO trong repo. Xem `references` của DIRE gốc
-> (`train.py`, `utils/trainer.py` đã vendorize trong `src/dire_modal/vendor/`).
-
-✅ **CỔNG 7**: ACC/AP val đạt ngưỡng bạn đặt trước khi chạy (ghi ngưỡng vào PR description).
+✅ **CỔNG 7** (đổi nghĩa): `/raw/checkpoints/lsun_adm.pth` tồn tại và
+`sha256` khớp manifest.
 
 ---
 
-## 8. Eval 16 generator (~$2–4)
+## 8. Eval 16 generator (~$0 compute, chỉ CPU)
 
 ```bash
-./scripts/04_eval_pretrained.sh
-# ✅ CỔNG 8: có bảng ACC cho 16 generator; so với paper (~99% trên ADM-LSUN)
+bash scripts/08_repro_minimal.sh          # e2min: 3 file → eval → in CỔNG S2
+# hoặc đầy đủ 16 generator:
+modal run -m dire_modal.download::main --tiers e2 --mode fetch
+modal run -m dire_modal.eval::main --tiers e2
+# ✅ CỔNG 8: bảng ACC cho 16 generator; so với paper (~99% trên ADM-LSUN)
 ```
 
-Chạy song song bằng `.map()` — mỗi generator 1 container, scale-to-zero khi xong.
+`eval::main` tự tìm checkpoint (`/raw/checkpoints/lsun_adm.pth` rồi
+`/ckpt/pretrained/lsun_adm.pth`) và in **CỔNG S2**: `ACC(adm) ≥ 0.99`. S2 KHÔNG
+ĐẠT thì đừng đọc bảng AP — kiểm đúng file ckpt, `n_real`/`n_fake`, và tiền xử lý
+(trường `preproc` trong `run.json`).
+
+ResNet50 inference trên CPU: 16 generator × ~2000 ảnh ≈ 32k ảnh ở 224² → dưới 10
+phút, không cần GPU. Chạy song song bằng `.map()` — mỗi cặp 1 container,
+scale-to-zero khi xong.
 
 ---
 
@@ -429,8 +480,9 @@ modal run -m dire_modal.compute_dire::make_gallery --n 12 --steps 20
 modal volume get dire-shards /_gallery ./platforms/hf-spaces/gallery
 
 # 9b. Đẩy checkpoint lên HF để Space tải được
-modal volume get dire-ckpt /lsun_adm_repro/last.pt ./
-huggingface-cli upload <user>/dire-detector ./last.pt dire_resnet50.pth
+#     (dùng checkpoint TÁC GIẢ, không phải bản train lại)
+modal volume get dire-raw /checkpoints/lsun_adm.pth ./
+huggingface-cli upload <user>/dire-detector ./lsun_adm.pth dire_resnet50.pth
 
 # 9c. Tạo Space (xem platforms/hf-spaces/README.md)
 ```

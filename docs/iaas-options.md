@@ -154,6 +154,11 @@ Dùng để đánh giá bất kỳ nền tảng nào — không chỉ các nền
 | 7 | Demo public | inference CPU | **HF Spaces free** | Modal web endpoint | ResNet-50 CPU ~0.2–1 s/ảnh |
 | 8 | Mirror dữ liệu công khai | storage | **HF Hub (~300 GB/repo)** + **Kaggle Datasets (200 GB/dataset)** | R2 (10 GB free) | Xem rủi ro license §6 |
 
+> **Dòng 4 và 6 KHÔNG nằm trên đường chạy của dự án này.** Ràng buộc đã chốt
+> (spec.md N1): *chỉ cải thiện, không train lại* ⇒ đường chạy là nạp
+> `lsun_adm.pth` của tác giả rồi eval (CPU). Hai dòng đó giữ lại để so sánh nền
+> tảng, không phải để lên kế hoạch.
+
 ---
 
 ## 4. Đường đi 0 đồng (chi tiết, có tính toán)
@@ -177,9 +182,9 @@ Dùng để đánh giá bất kỳ nền tảng nào — không chỉ các nền
 ```
 Tuần 1  Kaggle/Colab: viết & sửa code trên 1–2k ảnh mẫu        (0 credit)
         Modal CPU:    tải dữ liệu + verify sha256               (~$1–2 credit)
-Tuần 2  Modal A100:   fine-tune ResNet-50 (3–8 h)               (~$8–20 credit)
-        Kaggle:       tái lập kết quả nhỏ để so sánh             (0 credit)
-Tuần 3  Modal A100:   eval 16 generator song song               (~$2–4 credit)
+Tuần 2  Modal CPU:    tải lsun_adm.pth + e2min, mirror lên HF  (~$0.1 + chờ Baidu)
+        (KHÔNG train lại — spec.md N1; tiết kiệm ~$8–20 và 3–8 h A100)
+Tuần 3  Modal CPU:    eval 16 generator song song               (~$0.1)
         HF Spaces:    deploy demo (CPU)                          (0)
 Tuần 4  HF/Kaggle:    mirror dữ liệu + manifest                   (0)
         Dự phòng:     2–5 h A100 còn lại cho bug/retrain          (~$5–12 credit)

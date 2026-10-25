@@ -6,6 +6,60 @@
 
 ---
 
+## Skill 0 — Tái lập thử nghiệm nhanh nhất (KHÔNG train)
+
+**Khi nào:** cần có con số đầu tiên trên dữ liệu thật, hoặc ai đó hỏi "tái lập
+DIRE thế nào". Đây là đường chính của dự án.
+
+**Bước:**
+
+```bash
+modal run -m dire_modal.download::local_status          # 0 credit, xem policy
+modal run -m dire_modal.download::main --tiers e2min --mode fetch   # 3 file, ~400 MB
+modal run -m dire_modal.download::verify
+modal run -m dire_modal.eval::main --tiers e2min        # in CỔNG S2
+```
+
+Gói cả 4 bước: `bash scripts/08_repro_minimal.sh`.
+
+**Vì sao `e2min`:** chỉ cần `lsun_adm.pth` + test `real` + test `adm` để kiểm
+`ACC(adm) ≥ 0.99` (cổng S2 của SPEC-001). 3 file ≈ 400 MB ≈ **1.5 h** ở 76.6
+KiB/s, so với `e2` (17 file / 1.94 GB / 7.4 h).
+
+**Cạm bẫy:**
+
+- **Đừng "tối ưu" bằng cách tăng container hay `-p`.** Đo rồi: `k=1` 76.6 KiB/s
+  vs `k=2` 75.0 KiB/s — trần là của tài khoản. Tăng thread còn bị throttle.
+- **Đừng gõ lại lệnh tải nhiều lần.** `download::main` tự lặp vòng tới 20 h và
+  tính lại file còn thiếu từ đĩa; nó chỉ dừng sớm khi một vòng không xong thêm
+  file nào (dấu hiệu BDUSS hết hạn).
+- `eval::main` **tự tìm** ckpt ở `/raw/checkpoints/lsun_adm.pth` rồi
+  `/ckpt/pretrained/lsun_adm.pth`. Không thấy thì nó in lệnh cần chạy — đừng tự
+  đoán đường dẫn.
+- Cổng S2 KHÔNG ĐẠT thì đừng đọc bảng AP. Kiểm: đúng file ckpt chưa, `n_real`
+  và `n_fake` có bằng nhau và > 0 không, tiền xử lý có đúng resize256 →
+  centercrop224 → Normalize ImageNet không (xem `run.json`).
+
+**Đường nhanh hơn Baidu (khi đã có mirror):**
+
+```bash
+modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2
+```
+
+**Cần đúng vài file lẻ, không theo tier:**
+
+```bash
+modal run -m dire_modal.download::main \
+  --paths dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz,checkpoints/lsun_adm.pth \
+  --mode fetch
+```
+
+`--paths` vẫn đi qua danh sách `NEVER` và guard dung lượng như mọi đường khác.
+
+**Kiểm:** `pytest tests/ -q` xanh; `download::plan` in đúng số file/GB của tier.
+
+---
+
 ## Skill 1 — Chẩn đoán một lần tải hỏng
 
 **Khi nào:** `[STOP]`, `gzip -t FAIL`, file 0 byte, tải xong mà vẫn lỗi.
@@ -57,6 +111,8 @@ byte nào) phải in định dạng thật cho từng file hỏng.
 - Guard dùng `known + unknown × largest`: file chưa rõ size bị tính bằng file
   lớn nhất. Đừng "sửa" cho guard dễ thở hơn.
 - `DirSpec` để liệt kê động — nếu tên file đã biết chắc thì chuyển sang `File`.
+- Cần tải **một lần, vài file lẻ** thì đừng tạo tier mới: dùng `--paths`. Tier là
+  để chia sẻ và tái lập, không phải để chứa danh sách dùng một lần.
 
 **Kiểm:** `plan` in đúng số file/GB; `pytest tests/ -q` xanh.
 

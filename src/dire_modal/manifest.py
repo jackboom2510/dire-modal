@@ -177,6 +177,22 @@ E2: list[Entry] = [
 # 10 tên thật. Nay đã kê khai tĩnh trong E3 (_LSUN_IMAGENET_TEST_GENS).
 # Cơ chế DirSpec vẫn giữ và đang được E4X dùng thật.
 
+# --- e2min: 3 file để có CON SỐ ĐẦU TIÊN (≈ 400 MB · 1.5 giờ ở 76.6 KiB/s) --
+# `e2` là 1.94 GB = 7.4 giờ ở tốc độ đo được. Nhưng để trả lời "đường eval có
+# đúng không" chỉ cần MỘT generator (đúng tuyên bố chính của paper: ADM-LSUN):
+#   * detector DIRE train trên LSUN-ADM
+#   * DIRE map của ảnh real LSUN (nhãn 0)
+#   * DIRE map của ADM-LSUN (nhãn 1)  ← generator mạnh nhất của DIRE
+# Không có `real.tar.gz` thì `pairs_from_raw` bỏ qua cả nhóm, nên nó là bắt buộc.
+# Cổng S2 của SPEC-001 (ACC ≥ 0.99 trên `adm`) kiểm được với đúng 3 file này.
+E2MIN: list[Entry] = [
+    _f("checkpoints/lsun_adm.pth", "detector DIRE (pre-trained, KHÔNG train lại)"),
+    _f("dire/test/lsun_bedroom/lsun_bedroom/real.tar.gz",
+       "con số đầu tiên: DIRE map ảnh real LSUN (nhãn 0)"),
+    _f("dire/test/lsun_bedroom/lsun_bedroom/adm.tar.gz",
+       "con số đầu tiên: DIRE map ADM-LSUN (nhãn 1)"),
+]
+
 # --- e3: eval mở rộng cross-domain (24 file · 4.85 GB) ------------------
 E3: list[Entry] = [
     _f("checkpoints/imagenet_adm.pth", "detector cho domain ImageNet"),
@@ -312,6 +328,7 @@ TIERS: dict[str, list[Entry]] = {
     "e0": E0,
     "e1": E1,
     "e2": E2,
+    "e2min": E2MIN,
     "e3": E3,
     "e4": E4,
     "e4x": E4X,
@@ -385,12 +402,20 @@ class Policy:
     # 0 = KHÔNG truyền cờ -p (mặc định của BaiduPCS-Go). >0 = số kết nối song
     # song CHO MỘT FILE. Baidu throttle theo phiên, nên nhiều kết nối có thể
     # nhanh hơn, nhưng cũng dễ bị cắt hơn — đổi sau khi đo.
-    baidu_parallel: int = 0
+    # Số kết nối cho MỘT file. Tài liệu của BaiduPCS-Go (fork qjfoidnh) nói rõ:
+    # user free phải để 1; tăng thread chỉ nhanh một lúc rồi **kích throttle**
+    # khiến tài khoản về gần 0 tốc độ trong nhiều giờ. `0B/s in 42m48s` của lần
+    # chạy 2026-10-25 đúng là chữ ký đó. Nên đặt TƯỜNG MINH 1.
+    baidu_parallel: int = 1
     # Tên thư mục staging trong /raw. Đổi qua env DIRE_STAGING_DIR nếu muốn.
     dire_staging: str = ".staging"
     # Chu kỳ commit Volume khi đang tải (giây). Manifest dở nằm trong Volume nên
     # phải commit định kỳ, nếu không container chết là mất tiến độ.
     staging_commit_s: int = 45
+    # `--mode` của BaiduPCS-Go: rỗng = không truyền (dùng mặc định `locate`).
+    # Ba giá trị hợp lệ: locate | pcs | stream — ba API khác nhau của Baidu.
+    # Thử `pcs` khi tốc độ vẫn tệ: cùng tài khoản, khác đường.
+    baidu_mode: str = ""
     # Giết BaiduPCS-Go nếu file trong staging không lớn thêm trong bao nhiêu giây.
     # 0 = tắt watchdog. Đo thật 2026-10-25: `0B/s in 42m48s` — không có watchdog
     # thì BaiduPCS-Go ngồi chờ tới hết `subprocess_timeout` (90 phút) và đốt

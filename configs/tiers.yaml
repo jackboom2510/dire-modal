@@ -19,6 +19,7 @@
 #  ------  -----  --------  --------------------------------------------------
 #  e0          0  —         code / tooling / docs — không tải gì
 #  e1          0  —         demo AEROBLADE zero-shot — VAE (~1 GB) từ HF Hub
+#  e2min       3  ~0.40 GB  ĐƯỜNG NGẮN NHẤT: lsun_adm.pth + test real + test adm ⭐
 #  e2         17  1.94 GB   eval headline DIRE trên LSUN-Bedroom, 16 gen ⭐
 #  e3         24  4.85 GB   cross-domain: 10 tar lsun/imagenet, ImageNet, CelebA-HQ
 #  e4          5  1.45 GB   eval AEROBLADE trên ẢNH GỐC (images/)       ⭐
@@ -40,7 +41,13 @@
 # ---- Tải: tốc độ + resume xuyên container ----------------------------------
 #
 #  dire_staging        ".staging"  staging trong /raw (env DIRE_STAGING_DIR ghi đè)
-#  baidu_parallel      0           số kết nối/file (-p); 0 = để BaiduPCS-Go quyết
+#  baidu_parallel      1           số kết nối/file (-p). BẮT BUỘC = 1 với user free:
+#                                  tăng lên bị throttle về ~0 tốc độ nhiều giờ–nhiều ngày
+#  baidu_mode          ""          --mode của BaiduPCS-Go: locate|pcs|stream
+#                                  ("" = mặc định client). Đo: scripts/09_bench_mode.sh
+#  max_containers      1           SỐ ĐO 2026-10-25: k=1 76.6 KiB/s vs k=2 75.0 KiB/s
+#                                  ⇒ trần là của TÀI KHOẢN, thêm container không nhanh hơn
+#  --paths             (cờ CLI)    tải đúng danh sách file, không cần tier
 #  staging_commit_s    45          commit Volume định kỳ khi đang tải ⇒ resume
 #                                  sống qua container chết (clamp [0, 600])
 #
@@ -75,6 +82,14 @@
 #    modal run -m dire_modal.download::main --tiers e2,e4 --mode fetch
 #    modal run -m dire_modal.download::verify                # gzip -t toàn bộ
 #    modal run -m dire_modal.download::prune --tiers e2,e4   # file tải thừa
+#
+#  Tái lập bằng checkpoint PRE-TRAINED (không train lại — spec.md N1):
+#    modal run -m dire_modal.download::main --tiers e2min --mode fetch
+#    modal run -m dire_modal.eval::main --tiers e2min        # in CỔNG S2
+#    bash scripts/08_repro_minimal.sh                        # gói cả hai
+#
+#  Khi đã có mirror HF (nhanh hơn Baidu 1–2 bậc):
+#    modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2
 
 # Khóa duy nhất để file này là YAML hợp lệ (file toàn comment sẽ parse thành
 # None). Code không đọc giá trị này.

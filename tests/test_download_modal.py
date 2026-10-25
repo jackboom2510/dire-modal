@@ -501,7 +501,8 @@ def test_fetch_one_keeps_safety_kwargs():
     """Các fix của PR #2 không bị bản vá này làm hỏng."""
     dl, _ = install_stub()
     kw = dl.fetch_one._kw
-    assert kw["max_containers"] == dl.POLICY.max_containers == 2
+    # 1, không phải 2: đo 2026-10-25 cho thấy trần ~77 KiB/s là của TÀI KHOẢN.
+    assert kw["max_containers"] == dl.POLICY.max_containers == 1
     assert kw["retries"].max_retries == 0
     assert kw["cpu"] == 0.25
 

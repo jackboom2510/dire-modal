@@ -1,6 +1,6 @@
 # plan.md — đang ở đâu, làm gì tiếp
 
-> Cập nhật lần cuối: 2026-10-24. Cập nhật file này mỗi khi merge xong một việc.
+> Cập nhật lần cuối: 2026-10-25. Cập nhật file này mỗi khi merge xong một việc.
 > Bối cảnh và quy tắc: [AGENT.md](AGENT.md) · [instructions.md](instructions.md).
 
 ## Mục tiêu chi phối
@@ -11,6 +11,32 @@ kết quả nhanh nhất**, không phải pipeline đầy đủ.
 
 Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không train lại**.
 47 GB (77%) dữ liệu trong cây Baidu là train, nằm ngoài phạm vi.
+
+## Đường chạy hiện tại (chốt 2026-10-25)
+
+Không train ResNet50. Nạp `lsun_adm.pth` của tác giả rồi eval:
+
+```bash
+# tối thiểu: 3 file (~400 MB, ~1.5 h ở 76.6 KiB/s) — đủ cho CỔNG S2
+modal run -m dire_modal.download::main --tiers e2min --mode fetch
+modal run -m dire_modal.eval::main --tiers e2min
+
+# đầy đủ: 17 file (1.94 GB, 7.4 h) — bảng 16 generator
+modal run -m dire_modal.download::main --tiers e2 --mode fetch
+modal run -m dire_modal.eval::main --tiers e2
+
+# gói cả hai bước
+bash scripts/08_repro_minimal.sh
+```
+
+`download::main` **tự lặp vòng** trong một lần gọi (ngân sách `ORCHESTRATOR_BUDGET_S = 20 h`,
+tối đa `_MAX_WAVES = 40`): sau mỗi vòng nó tính lại file còn thiếu **từ đĩa**, và
+dừng nếu một vòng không xong thêm file nào (chốt chống đốt 20 h khi BDUSS hết hạn).
+Vì thế không còn phải gõ lại lệnh ~9 lần cho `e2,e4`.
+
+`eval::main` tự tìm checkpoint: `/raw/checkpoints/lsun_adm.pth` trước, rồi
+`/ckpt/pretrained/lsun_adm.pth`; `--ckpt` để chỉ định tay. Không tìm thấy thì nó
+in đúng lệnh cần chạy.
 
 ## Đã xong
 
@@ -28,7 +54,8 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không 
 | PR #9 *(đang mở)* | Bộ tài liệu agent: `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `CLAUDE.md` | 10 test canh link/entrypoint/đường dẫn trong tài liệu |
 | PR #9 *(đã merge)* | `spec.md` — SPEC-001 theo quy trình SDD: 7 yêu cầu `FR-*`, 6 mốc `M0–M5` | 10 test (thêm 2 test canh `PLANNED_ENTRYPOINTS`) |
 | PR #10 | Ngân sách thời gian + watchdog 0B/s + manifest bền từng file | 5 test mới; tái hiện đúng `FunctionTimeoutError` 18 000s từ log thật |
-| PR này | Lọc file đã có trước `.map()` · `subprocess_timeout` 5400→1800 · `bench_concurrency` · **port `eval.py` (M1 của SPEC-001)** · sửa `pack` làm mất nhánh | 117 test; AP/TPR khớp sklearn trên 500 ca ngẫu nhiên |
+| PR #11 | Lọc file đã có trước `.map()` · `subprocess_timeout` 5400→1800 · `bench_concurrency` · **port `eval.py` (M1 của SPEC-001)** · sửa `pack` làm mất nhánh | 117 test; AP/TPR khớp sklearn trên 500 ca ngẫu nhiên |
+| PR này | Tái lập pre-trained: tier `e2min` · `--paths` · tự lặp vòng 20 h · `--mode` BaiduPCS-Go · `eval::main` tự tìm ckpt + in CỔNG S2 · `download::from_hf` · `scripts/08_repro_minimal.sh` / `scripts/09_bench_mode.sh` | 117 test vẫn xanh; đo song song: k=1 76.6 KiB/s vs k=2 75.0 KiB/s ⇒ `max_containers: 1` |
 
 Kết luận dữ liệu quan trọng (chốt bằng `probe_pair` trên dữ liệu thật):
 
@@ -73,16 +100,15 @@ không cần submodule. Nhưng ai clone repo về đọc code gốc sẽ thấy 
 `.gitmodules` và ghi rõ "code gốc được clone trong image, không vendored".
 Đừng để trạng thái nửa vời.
 
-### 4. Đo `dire_sec_per_image` và `--concurrency` trên máy thật
+### 4. Đo `dire_sec_per_image` trên máy thật
 
-Hai con số đang là **giả định**, và mọi ước tính tiền scale theo chúng:
+`--concurrency` **đã đo xong** (xem mục 8): `k=1` 76.6 KiB/s vs `k=2` 75.0 KiB/s
+⇒ `max_containers: 1`. Còn lại `dire_sec_per_image: 5.0` vẫn là giả định:
 
-- `dire_sec_per_image: 5.0` → chạy `dire_batch --n 20` rồi lấy thời gian thật.
-- `--concurrency 2` vs `4` → đo trên cùng một tier. Baidu throttle theo **số
-  phiên**, nên tăng song song có thể làm chậm đi.
+- chạy `dire_batch --n 20` rồi lấy thời gian thật (sau khi có `e2min`).
 
-**Xong khi:** hai con số trong `tiers.yaml` là số đo, không phải ước lượng, và
-`docs/runbook-free.md` ghi ngày đo.
+**Xong khi:** `dire_sec_per_image` trong `tiers.yaml` là số đo, không phải ước
+lượng, và `docs/runbook-free.md` ghi ngày đo.
 
 ### 5. Tab AEROBLADE trong HF Spaces
 
@@ -114,22 +140,32 @@ viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu
 **Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
 truy được về một `run.json`.
 
-### 8. Chạy phép đo băng thông — mã đã có, SỐ thì chưa
-
-`download::bench_concurrency` đã viết xong và test canh phần tính toán, nhưng
-**chưa chạy lần nào trên Modal** (sandbox soạn code không có token). Nghĩa là
-`max_containers: 2` vẫn là **phỏng đoán** từ một quan sát duy nhất.
+### 8. ✅ Đã đo băng thông tải Baidu (2026-10-25) — chốt `max_containers: 1`
 
 ```bash
 modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2
 ```
 
-Đọc kết quả: nếu `k=2` không nhanh hơn `k=1` thì hạ `max_containers` xuống 1.
-Con số log thật cho thấy việc này rất đáng làm: **24.25 KB/s** và **48.49 KB/s**
-cho một phiên, chậm hơn 67.36 KB/s mà policy hiện dựa vào. Ở 24 KB/s thì `e2,e4`
-(3.39 GB) cần **~40 giờ** một phiên, ~20 giờ với 2 container.
+| k (container) | thời gian | tổng | mỗi file |
+|---|---|---|---|
+| 1 | 5183.8 s | **76.6 KiB/s** | 37.5 KiB/s |
+| 2 | 5293.3 s | **75.0 KiB/s** | 37.5 KiB/s |
 
-Còn treo: **chưa kiểm `-p N`** (`baidu_parallel`); 0 = để BaiduPCS-Go tự quyết.
+⇒ `k=2` **KHÔNG nhanh hơn** (chậm hơn 2.1 %, trong sai số). Trần ~77 KiB/s là
+của **tài khoản**, không phải của cấu hình. Nên `max_containers: 1`,
+`baidu_parallel: 1`; `tiers.yaml` đã ghi kèm bảng này.
+
+Hệ quả về thời gian (ở 76.6 KiB/s): `e2min` 0.40 GB → **~1.5 h** · `e2` 1.94 GB →
+**7.4 h** · `e2,e4` 3.39 GB → **12.9 h** · cả cây 61.40 GB → 233.5 h.
+
+**Còn treo:** `--mode locate|pcs|stream` chưa đo. Ba mode là ba API khác nhau của
+Baidu, có thể có lịch sử throttle khác nhau. `bash scripts/09_bench_mode.sh` đo
+trên một file 26.57 MB (~6 phút/mode). Đo trên tài khoản **đang bình thường**,
+nếu không cả ba mode sẽ cùng cho ≈0 và kết luận sẽ sai.
+
+**Đường thoát thật sự khỏi 77 KiB/s không phải tham số, mà là đổi nguồn:**
+mirror một lần (`archive::push_hf`) rồi `download::from_hf` — HF Hub thường cho
+vài MB/s, tức nhanh hơn 1–2 bậc.
 
 ### 9. M2 của SPEC-001 — chứng minh `compute_dire` khớp map tác giả
 
@@ -138,9 +174,11 @@ chưa từng chạy, và nó là điều kiện CHẶN cho FR-4 (format bias) + 
 (robustness). Phải có `compute_dire::equivalence` trước khi công bố bất kỳ số nào
 từ DIRE map tự tính.
 
-Đường rẻ nhất để có kết quả thật trước M2: chạy `eval::main --tiers e2` trên
-`lsun_adm.pth` vốn đã có trong Volume — chỉ ResNet50 inference, không cần ADM,
-không cần GPU mạnh. Đó là con số đầu tiên chứng minh đường eval đúng.
+Đường rẻ nhất để có kết quả thật trước M2: `download --tiers e2min` rồi
+`eval::main --tiers e2min` trên `lsun_adm.pth` — chỉ ResNet50 inference, không cần
+ADM, không cần GPU mạnh, không train gì. `eval::main` đã tự tìm ckpt và in
+**CỔNG S2** (`ACC(adm) ≥ 0.99`), nên đây là con số đầu tiên chứng minh đường eval
+đúng.
 
 ## Việc đã quyết là KHÔNG làm
 
