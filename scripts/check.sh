@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
+
 set -euo pipefail
+
+# Git Bash (MSYS2) đổi mọi tham số bắt đầu bằng "/" thành đường dẫn Windows:
+#   --path /raw  →  C:/Program Files/Git/raw  →  container Linux không thấy.
+# Hai biến này tắt việc đó; trên Linux/macOS chúng bị bỏ qua, vô hại.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 # CỔNG 0 — kiểm tra repo import được BẰNG MODAL THẬT trước khi tốn tiền.
 #
 # Vì sao cần: `compute_dire.py` từng có `from __future__ import annotations`

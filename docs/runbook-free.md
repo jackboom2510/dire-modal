@@ -577,6 +577,115 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv       # lưu tr�
 | Cần TPU miễn phí | **TRC**: apply, phải open-source nghiên cứu, hàng đợi có thể dài |
 | Chỉ có thời gian, không có tiền | Kaggle 30 h/tuần + Colab (tương tác) + Lightning → đủ để dev, **không** đủ cho stage-2 |
 
+## Windows / Git Bash: `/raw` biến thành `C:/Program Files/Git/raw`
+
+Triệu chứng (đã xảy ra thật):
+
+```bash
+$ ./tools/tree.sh
+SystemExit: [!] C:/Program Files/Git/raw không tồn tại. Volume mount: ['/ckpt', '/raw', '/shards']
+```
+
+MSYS2 "chuyển đổi tham số": **mọi argv bắt đầu bằng `/`** bị đổi thành đường dẫn
+Windows **trước khi** tiến trình Python nhìn thấy. Container Linux không có ổ `C:`
+nên lệnh chết — và thông báo lỗi còn in ra đường dẫn đã bị đổi, rất khó đoán.
+
+Đã chặn ở hai lớp:
+
+| Lớp | Việc |
+|---|---|
+| shell | `export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'` trong `scripts/lib.sh`, `scripts/check.sh`, mọi `tools/*.sh` (Linux/macOS bỏ qua hai biến này) |
+| Python | `_demangle()` trong `download.py` sửa `C:/…/Git/raw/…` → `/raw/…` cho `tree`, `ls_remote`, `audit`, `probe_pair`, `--paths` |
+
+Gõ tay thì thêm biến vào trước lệnh:
+
+```bash
+MSYS_NO_PATHCONV=1 modal volume ls dire-raw /raw/.staging
+MSYS_NO_PATHCONV=1 modal run -m dire_modal.download::tree --path /raw/checkpoints
+```
+
+Đường dẫn **tương đối** (`checkpoints/lsun_adm.pth`) không bị đổi, nên đó cũng là
+một cách tránh.
+
+## Dừng giữa chừng mà không mất dữ liệu
+
+Không cần "tạm dừng" riêng: **staging trong Volume đã được commit định kỳ**
+(`staging_commit_s: 45` trong `configs/tiers.yaml`), nên mọi cách dừng đều chỉ
+mất tối đa một nhịp commit — không bao giờ mất cả file.
+
+| Cách dừng | Chuyện xảy ra | Mất |
+|---|---|---|
+| `Ctrl+C` ở máy local | client thoát → app ephemeral bị dọn → container nhận **SIGTERM** | ≤ 45 s |
+| `modal app stop -y <app-id>` | SIGTERM tới từng container worker | ≤ 45 s |
+| `DETACH=1` rồi `Ctrl+C` | app **không** bị dọn, vẫn tải trên cloud; xem bằng `modal app logs` | 0 |
+| SIGKILL / `FunctionTimeoutError` | không chặn được | ≤ 45 s |
+
+**SIGTERM giờ là "dừng êm"** (`_request_stop` trong `download.py`): giết tiến
+trình `BaiduPCS-Go` con, `commit()` Volume, trả `status="partial"` và in
+
+```
+[stop] nhận tín hiệu dừng (15) → ngừng tải, commit Volume, giữ nguyên phần đã tải trong staging
+⏸  3 file dừng giữa chừng theo yêu cầu (SIGTERM/SIGINT).
+   Phần đã tải nằm trong /raw/.staging và đã được commit — chạy lại đúng lệnh là resume.
+```
+
+Trước đây SIGTERM làm Python chết ngay, **không chạy `finally`**, nên chỉ còn
+lớp bảo hiểm 45 s. Muốn chắc hơn nữa (ví dụ mạng chập chờn): hạ
+`staging_commit_s` xuống `15` — đổi lại là nhiều lệnh commit hơn.
+
+**Resume:** chạy lại **đúng lệnh cũ**. File đã xong → `[SKIP]`; file dở →
+BaiduPCS-Go thấy file `.BaiduPCS-Go-downloading` trong staging và tải tiếp từ
+đúng byte đã có, không phải từ 0.
+
+```bash
+modal volume ls dire-raw /.staging          # còn gì trong staging
+modal app list                              # app còn chạy?
+modal app stop -y <app-id>                  # dừng êm
+DETACH=1 bash scripts/01_repro.sh --quick   # chạy không phụ thuộc terminal
+```
+
+⛔ **Đừng xoá `/raw/.staging`** — đó không phải rác, đó là tiến độ. Chỉ
+`/raw/.staging/_held` (file không qua kiểm) và `/raw/.bench` mới là thứ xoá được.
+
+## Sự cố 2026-10-25 — "tải dở dang" trên file đã tải đủ
+
+Ba file `iddpm.tar.gz`, `pndm.tar.gz`, `ldm.tar.gz` tải xong 100 % rồi bị loại,
+lặp lại rồi bị xoá. Nguyên nhân **không** phải mạng, cũng không phải Baidu:
+
+```
+[RETRY 1/3] .../iddpm.tar.gz: size 125015131 ≠ remote 125011230 → tải dở dang
+```
+
+`ls -l` của BaiduPCS-Go in size **đã làm tròn 2 chữ số thập phân MB**
+(`119.22MB`). Code cũ quy đổi ngược: `119.22 × 2²⁰ = 125 011 230`, rồi đòi khớp
+từng byte với file thật `125 015 131`. Số "remote" trong log chính là
+`119.22MiB` — sai 3 901 B, tức 0.003 %.
+
+Sau đó: retry → Baidu thấy file đã có nên in `文件已经存在 … 跳过` (0 byte) →
+code cũ gọi đó là "hai lần cho ra byte GIỐNG HỆT ⇒ lỗi tất định" → **`unlink()`**
+→ mất 119 MB và lần sau tải lại từ 0 B.
+
+Đã sửa (`download.py`):
+
+| Trước | Sau |
+|---|---|
+| `int(float("119.22") × 2²⁰)` rồi đòi khớp tuyệt đối | `SizeEst(bytes, slack)` mang theo sai số làm tròn (±5 244 B cho `x.xxMB`) |
+| kiểm size TRƯỚC | `gzip -t`/tar (bằng chứng nội dung) kiểm TRƯỚC size |
+| nghi ngờ ⇒ kết luận hỏng | nghi ngờ ⇒ hỏi `meta` (size chính xác + md5) trước khi kết luận |
+| file không qua kiểm ⇒ `unlink()` | `_hold()` → `/raw/.staging/_held/`, **không xoá byte nào** |
+| Baidu bỏ qua vì file đã có ⇒ "lỗi tất định" | nhận diện riêng, tải lại từ 0 B đúng **một** lần |
+
+Đọc kết quả:
+
+```bash
+modal volume ls dire-raw / .staging/_held     # file bị giữ lại (nếu có)
+modal volume rm dire-raw /raw/.staging/_held -r   # xoá khi đã kiểm tay xong
+```
+
+Nếu `_held` có file: nó **không** bị xoá vì code cho là hỏng, mà vì code chưa
+chứng minh được nó tốt. Kiểm tay bằng `gzip -t`; nếu qua thì chép về đúng đường
+dẫn trong `/raw/` và chạy `::verify`.
+
 ## Những việc **không** làm (để không mất tài khoản / mất dữ liệu)
 
 1. ❌ Dùng nhiều tài khoản Kaggle/Colab để lấy thêm quota (vi phạm ToS → ban).

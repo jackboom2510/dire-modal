@@ -18,6 +18,12 @@ python3 tools/free_quota.py     # xem còn bao nhiêu quota miễn phí
 
 Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **không train lại**, bỏ hẳn khoản $8–20 của A100).
 
+> **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
+> Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
+> thấy gì. Mọi script trong `scripts/` + `tools/` đã `export MSYS_NO_PATHCONV=1`.
+> Nếu gõ `modal run … --path /raw/…` trực tiếp thì thêm biến đó vào trước lệnh;
+> code cũng tự sửa đường dẫn dạng `C:/…/Git/raw` (`_demangle` trong `download.py`).
+
 ## Hai quy trình thực nghiệm
 
 `scripts/` cố ý chỉ có **hai** quy trình — mỗi file là một câu hỏi, không phải

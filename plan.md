@@ -154,6 +154,26 @@ chạy 4 detector × 8 generator rồi `eval::report` in Δ so với
 
 **Xong khi:** S7 đạt (|ΔACC| ≤ 0.5 ở mọi ô) và số được ghi vào báo cáo.
 
+### 7c. ✅ Sửa lỗi "tải dở dang" trên file đã tải đủ (2026-10-25)
+
+Lần chạy `e2` thật: `iddpm` / `pndm` / `ldm` tải xong 100 % rồi bị loại, retry,
+rồi **bị xoá**. Nguyên nhân: `ls -l` của BaiduPCS-Go in size **đã làm tròn 2
+chữ số thập phân MB**, code quy đổi ngược ra byte (`119.22 × 2²⁰ = 125 011 230`)
+rồi đòi khớp từng byte với file thật `125 015 131`.
+
+Đã sửa: `SizeEst(bytes, slack)` · `gzip -t` xét trước size · `meta` làm ý kiến
+thứ hai (size chính xác + md5) · file không qua kiểm được `_hold()` thay vì
+`unlink()` · nhận diện riêng ca "Baidu thấy file đã có nên bỏ qua".
+Chi tiết: `docs/runbook-free.md` § "Sự cố 2026-10-25".
+
+**Xong khi:** lần chạy `e2` kế tiếp cho `ok` ngay attempt 1 cho cả 16 generator.
+(Chưa chạy lại thật — test đã tái hiện đúng hai con số trong log.)
+
+**Dừng giữa chừng:** SIGTERM (Ctrl+C ở local, `modal app stop`) giờ được chặn
+→ giết `BaiduPCS-Go` con, `commit()` Volume, trả `partial`. Không có nó thì
+Python chết ngay, `finally` không chạy, và chỉ còn lớp bảo hiểm
+`staging_commit_s: 45`. Xem `docs/runbook-free.md` § "Dừng giữa chừng".
+
 ### 8. ✅ Đã đo băng thông tải Baidu (2026-10-25) — chốt `max_containers: 1`
 
 ```bash

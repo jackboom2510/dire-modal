@@ -2,6 +2,12 @@
 # TIỆN ÍCH — không phải quy trình thực nghiệm (pack shards chỉ cần khi TRAIN,
 # mà dự án không train lại — spec.md N1). Giữ để đo/đóng gói kho.
 set -euo pipefail
+
+# Git Bash (MSYS2) đổi mọi tham số bắt đầu bằng "/" thành đường dẫn Windows:
+#   --path /raw  →  C:/Program Files/Git/raw  →  container Linux không thấy.
+# Hai biến này tắt việc đó; trên Linux/macOS chúng bị bỏ qua, vô hại.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
 # Pack /raw → /shards (WebDataset) và ĐO benchmark storage + compute.
 # (Bản cũ gọi `dire_modal.bench::throughput` — hàm không tồn tại. Đã sửa.)
 

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # TIỆN ÍCH — benchmark storage, không phải quy trình thực nghiệm.
 set -euo pipefail
+
+# Git Bash (MSYS2) đổi mọi tham số bắt đầu bằng "/" thành đường dẫn Windows:
+#   --path /raw  →  C:/Program Files/Git/raw  →  container Linux không thấy.
+# Hai biến này tắt việc đó; trên Linux/macOS chúng bị bỏ qua, vô hại.
+export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
+
 # Đo storage: Modal Volume vs R2 (CloudBucketMount + S3 API), và throughput DIRE proxy.
 #
 # R2_ACCOUNT_ID/R2_BUCKET phải có Ở MÁY LOCAL trước khi `modal run` vì
