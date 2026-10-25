@@ -943,10 +943,11 @@ def test_deterministic_error_stops_after_one_attempt():
 def test_identical_bytes_stop_retries():
     """Byte giống hệt sau khi tải lại TỪ 0 B ⇒ tải lại cũng thế, dừng.
 
-    Số attempt đổi 2 → 3 khi thêm luật "Baidu bỏ qua vì file đã có": lần 2
-    Baidu không ghi thêm byte nào nên file được `_hold` rồi lần 3 tải lại từ
-    đầu. Chỉ sau khi tải lại từ 0 B mà vẫn ra đúng chuỗi byte đó mới được kết
-    luận "tất định" — và kể cả lúc đó cũng KHÔNG xoá file.
+    Luật "Baidu bỏ qua vì file đã có" (lần 2: 0 byte, `文件已经存在`) được
+    `_hold` rồi tải lại từ 0 B. Lần bỏ qua đó **không tính** vào
+    `fetch_attempts` — nó không phải một lần tải — nên `attempts` vẫn là 2
+    trong khi BaiduPCS-Go được gọi 3 lần. Chỉ sau khi tải lại từ 0 B mà vẫn ra
+    đúng chuỗi byte đó mới kết luận "tất định" — và kể cả lúc đó cũng KHÔNG xoá.
     """
     import tempfile as _tf
 
@@ -971,7 +972,13 @@ def test_identical_bytes_stop_retries():
         os.environ.pop("COUNTER", None)
     assert r["status"] == "error"
     assert r.get("deterministic") is True, r
-    assert r["attempts"] == 3, f"phải tải lại từ 0 B một lần, đã chạy {r['attempts']}"
+    assert r["attempts"] == 2, (
+        f"lần 'Baidu bỏ qua' không được tính là attempt, đang đếm {r['attempts']}"
+    )
+    n_calls = len(counter.read_text().splitlines())
+    assert n_calls == 3, (
+        f"phải gọi BaiduPCS-Go 3 lần (tải, bị bỏ qua, tải lại từ 0 B), đang {n_calls}"
+    )
     # Byte bị loại KHÔNG được xoá: `_hold` giữ lại (sự cố 2026-10-25 đã xoá
     # 3 × 119 MB của những file thực ra đúng).
     held = Path(r.get("held") or "")

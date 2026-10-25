@@ -937,6 +937,18 @@ def _hold(path: Path) -> Path:
     hiện trong báo cáo, không bị ``prune`` đề nghị xoá, không bị ``verify`` đem
     đi ``gzip -t``. Xoá hẳn khi không cần nữa:
     ``modal volume rm dire-raw /raw/.staging/_held -r``
+
+    **Vì sao ``os.replace`` mà không COPY** (cùng filesystem ⇒ rename, O(1),
+    0 byte đọc/ghi):
+
+    * Copy chậm hơn theo định nghĩa: nó phải làm đúng việc rename làm, cộng
+      thêm 2N byte I/O qua FUSE và N byte dung lượng.
+    * Copy để lại file trong thư mục tải ⇒ BaiduPCS-Go luôn thấy
+      ``文件已经存在`` và ``跳过`` ⇒ mỗi lần chạy thêm một attempt 0 byte mà
+      **không bao giờ tiến bộ**. Đó chính là "attempt vô nghĩa" cần tránh, và
+      cái gây ra nó là *giữ file ở thư mục đích*, không phải việc xoá.
+    * Yêu cầu "đừng xoá dữ liệu trong ``.staging``" vẫn được thoả: ``_held``
+      NẰM TRONG ``.staging``.
     """
     dest_dir = _staging_root() / "_held" / path.parent.name
     try:
@@ -1978,9 +1990,16 @@ def _fetch_one_impl(f: dict) -> dict:
     budget_out = False           # dừng vì hết ngân sách (≠ lỗi tải)
     stopped = False              # dừng vì SIGTERM/SIGINT — cũng ≠ lỗi tải
     kept_bytes = 0
+    attempt = 0                  # số attempt TẢI THẬT đã dùng
+    holds = 0                    # số lần "Baidu bỏ qua" đã gặp (tối đa 1)
 
     try:
-        for attempt in range(1, POLICY.fetch_attempts + 1):
+        # `while` chứ không `for`: lần "Baidu thấy file đã có nên bỏ qua" không
+        # phải một attempt TẢI (nó luôn 0 byte, log thật: "下载结束, 时间: 0s").
+        # Để nó tiêu một suất trong `fetch_attempts` thì một file cần tải lại
+        # chỉ còn 1 suất cho lần thật — và mất luôn suất đó nếu mạng chập.
+        while attempt < POLICY.fetch_attempts:
+            attempt += 1
             # Không bao giờ để attempt vượt ngân sách: Modal giết container ở
             # FETCH_CALL_TIMEOUT_S và `FunctionTimeoutError` KHÔNG bắt được.
             tmo = _attempt_timeout(started)
@@ -2106,12 +2125,15 @@ def _fetch_one_impl(f: dict) -> dict:
                     # lần 1 tải đủ, lần 2 Baidu bỏ qua, code cũ gọi đó là "hai
                     # lần cho ra byte GIỐNG HỆT ⇒ lỗi tất định" rồi xoá sạch.
                     if size_now <= bytes_before:
-                        if not held_path:
+                        if holds == 0:
+                            holds += 1
                             held_path = _hold(got)
+                            # Hoàn lại suất: lần vừa rồi Baidu không tải gì cả.
+                            attempt -= 1
                             last = (
                                 f"Baidu không ghi thêm byte nào (coi file đã có là "
                                 f"xong) mà vẫn không qua kiểm: {v.reason} → giữ ở "
-                                f"{held_path}, attempt sau tải lại từ 0 B"
+                                f"{held_path}, tải lại từ 0 B (không tính là attempt)"
                             )
                             print(f"[HOLD] {remote_rel}: {last}")
                             _commit_volume("giữ file không qua kiểm")
