@@ -50,7 +50,8 @@ gpu_image = (
 
 # ---------- Volumes ----------
 # Tách 3 vai trò rõ ràng (đã bàn ở lượt trước)
-vol_raw    = modal.Volume.from_name("dire-raw",    create_if_missing=True)
+RAW_VOLUME = "dire-raw"   # tên CLI cần, vd. `modal volume rm dire-raw /raw/.bench -r`
+vol_raw    = modal.Volume.from_name(RAW_VOLUME, create_if_missing=True)
 vol_shards = modal.Volume.from_name("dire-shards", create_if_missing=True)
 vol_ckpt   = modal.Volume.from_name("dire-ckpt",   create_if_missing=True)
 

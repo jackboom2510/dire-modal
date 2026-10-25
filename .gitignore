@@ -20,3 +20,7 @@ manifests/*.tsv
 platforms/hf-spaces/gallery/*.png
 !platforms/hf-spaces/gallery/.gitkeep
 .DS_Store
+
+# Dữ liệu tải ở MÁY LOCAL (tools/local_download.sh) — không bao giờ commit
+data/
+*.BaiduPCS-Go-downloading
