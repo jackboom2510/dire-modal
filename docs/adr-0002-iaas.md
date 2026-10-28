@@ -60,7 +60,7 @@ Sự thật định lượng (xem `docs/iaas-options.md` §1): **$30 credit ≈ 
 | Phương án | Vì sao loại |
 |---|---|
 | **Thuần Modal** | $30 không đủ cho stage-2; lock-in cao; phí | 
-| **Thuần VM (Vast/RunPod)** | Rẻ hơn/giờ nhưng mất scale-to-zero, phải tự schedule 16 job eval, mất Volume |
+| **Thuần VM (Vast/RunPod)** | Rẻ hơn/giờ nhưng mất scale-to-zero, phải tự schedule 15 job eval, mất Volume |
 | **Thuần Kaggle/Colab (0 ₫ tuyệt đối)** | Không SSH, mất máy khi hết phiên, P100 16 GB, quota 30 h/tuần → không train nổi Tier A |
 | **Azure $200** | $200 = ~50 A100-h **nhưng** phải xin quota N-series, credit hết hạn 30 ngày, giá/giờ đắt (chủ repo đã chọn bỏ) |
 | **GCP $300** | Trial **không gắn được GPU vào Compute Engine VM** → vô dụng cho mục tiêu này |

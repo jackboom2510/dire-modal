@@ -17,7 +17,8 @@
 version: 2
 
 # Tier tải mặc định khi không truyền --tiers.
-#   e2 = eval headline DIRE trên LSUN-Bedroom (1 ckpt + 16 tar test) = 1.94 GB
+#   e2 = eval headline DIRE trên LSUN-Bedroom (1 ckpt + 16 tar test,
+#        trong đó 1 tar là `real`) = 15 cặp = 1.94 GB
 #   e4 = eval AEROBLADE trên ảnh gốc (5 tar images/)                 = 1.45 GB
 #   ---------------------------------------------------------------
 #   Tổng 22 file = 3.39 GB, so với 61.40 GB toàn cây đã audit.
@@ -173,7 +174,7 @@ tiers:
   e0:       "code/tooling/docs — 0 file, không tải gì từ Baidu"
   e1:       "demo AEROBLADE zero-shot — 0 file Baidu; chỉ cần VAE (~1 GB) từ HF Hub"
   e2min:    "3 file · ~0.40 GB · ĐƯỜNG NGẮN NHẤT: lsun_adm.pth + test real + test adm (cổng S2) ⭐"
-  e2:       "17 file · 1.94 GB · eval headline DIRE trên LSUN-Bedroom, 16 generator ⭐"
+  e2:       "17 file · 1.94 GB · eval headline DIRE trên LSUN-Bedroom, 15 generator ⭐"
   e3:       "24 file · 4.85 GB · cross-domain: +10 tar lsun/imagenet, ImageNet, CelebA-HQ"
   e4:       "5 file · 1.45 GB · eval AEROBLADE trên ẢNH GỐC (nhánh images/) ⭐"
   e4x:      "17 file · 3.47 GB · AEROBLADE MỌI generator (DirSpec, tự loại 8 file ddim)"

@@ -126,3 +126,36 @@ def test_report_renders_extra_generators_separately(paper):
     assert "MỞ RỘNG" in lines and "dalle2" in lines
     # Δ chỉ tính trên 8 cột paper, không tính generator mở rộng
     assert "8/8 ô" in lines
+
+
+# ---------------------------------------------------------------------------
+# Canh con số dễ sai nhất của repo: "16 generator"
+# ---------------------------------------------------------------------------
+def test_no_document_claims_sixteen_generators():
+    """`e2` có 16 TAR, trong đó 1 tar là `real` ⇒ **15 generator**, 15 cặp.
+
+    Con số "16 generator" từng nằm ở 12 chỗ (docs, spec, tiers.yaml, manifest,
+    download, free_quota). Nó không sai kiểu gõ nhầm mà sai kiểu *đếm*: người
+    đọc thấy 16 tar rồi gọi cả 16 là generator. Hệ quả thật: bảng eval bị mong
+    đợi 16 dòng, và mọi ước lượng "16 job" đều lệch.
+
+    Ngoại lệ duy nhất: `tools/manim/data.py` — chỗ đó *giải thích* lịch sử của
+    lỗi này nên buộc phải nhắc lại cụm từ.
+    """
+    allowed = {ROOT / "tools" / "manim" / "data.py", Path(__file__).resolve()}
+    bad: list[str] = []
+    for pattern in ("*.md", "*.py", "*.yaml", "*.tsv", "*.sh"):
+        for path in ROOT.rglob(pattern):
+            if ".git" in path.parts or path in allowed or "vendor" in path.parts:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8")
+            except (UnicodeDecodeError, OSError):
+                continue
+            for i, line in enumerate(text.splitlines(), 1):
+                if "16 generator" in line or "16 gen " in line:
+                    bad.append(f"{path.relative_to(ROOT)}:{i}: {line.strip()[:70]}")
+    assert not bad, (
+        "còn chỗ ghi '16 generator' (đúng là 15: 16 tar, 1 tar là `real`):\n  "
+        + "\n  ".join(bad)
+    )

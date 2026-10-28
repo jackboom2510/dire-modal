@@ -2,7 +2,7 @@
 
 > **Ngày lập / ngày truy cập nguồn:** 2026-10-14
 > **Ngữ cảnh:** repo `dire-modal` — tải DiffusionForensics, pack WebDataset,
-> fine-tune ResNet-50 detector (DIRE trên LSUN-Bedroom ADM), eval 16 generator, demo public.
+> fine-tune ResNet-50 detector (DIRE trên LSUN-Bedroom ADM), eval 15 generator, demo public.
 > **Dung lượng thật (audit 2026-10-21):** tập eval mặc định `e2,e4` = **3.39 GB** / 22 file;
 > eval đầy đủ `e2..e5` = **10.35 GB**; toàn cây = **61.40 GB** (77% là dữ liệu train).
 > Con số "Tier A ≈ 40–70 GB" trong bản đầu là của *cả cây*, sai 5.4–9.4 lần.
@@ -149,7 +149,7 @@ Dùng để đánh giá bất kỳ nền tảng nào — không chỉ các nền
 | 2 | Pack WebDataset shards | CPU + I/O | **Modal CPU** | VM rẻ | Volume v1 giới hạn ~50k file → shard 2000 ảnh là đúng thiết kế |
 | 3 | Smoke test trên 1–5k ảnh | GPU nhỏ | **Kaggle** (330 h/tháng) | Colab/Lightning | Nhanh nhất, không tốn credit Modal |
 | 4 | **Fine-tune detector trên DIRE có sẵn** | A100/H100 vài giờ | **Modal** ($30 credit ≈ 12 A100-h) | Lightning free 4 h/phiên + resume | Fine-tune ResNet-50 hội tụ trong vài epoch (theo paper) |
-| 5 | Eval 16 generator song song | 16 job nhỏ | **Modal `.map()`** | VM + tự schedule | Scale-to-zero thắng ở đây |
+| 5 | Eval 15 generator song song | 15 job nhỏ | **Modal `.map()`** | VM + tự schedule | Scale-to-zero thắng ở đây |
 | 6 | **Stage-2: tự tính DIRE (~200k ảnh, DDIM-20)** | **~30–60 A100-h** | ❌ **không free tier nào đủ** | Thu nhỏ còn 2–5k ảnh (≈1–3 GPU-h) | Xem §4 |
 | 7 | Demo public | inference CPU | **HF Spaces free** | Modal web endpoint | ResNet-50 CPU ~0.2–1 s/ảnh |
 | 8 | Mirror dữ liệu công khai | storage | **HF Hub (~300 GB/repo)** + **Kaggle Datasets (200 GB/dataset)** | R2 (10 GB free) | Xem rủi ro license §6 |
@@ -184,7 +184,7 @@ Tuần 1  Kaggle/Colab: viết & sửa code trên 1–2k ảnh mẫu        (0 c
         Modal CPU:    tải dữ liệu + verify sha256               (~$1–2 credit)
 Tuần 2  Modal CPU:    tải lsun_adm.pth + e2min, mirror lên HF  (~$0.1 + chờ Baidu)
         (KHÔNG train lại — spec.md N1; tiết kiệm ~$8–20 và 3–8 h A100)
-Tuần 3  Modal CPU:    eval 16 generator song song               (~$0.1)
+Tuần 3  Modal CPU:    eval 15 generator song song               (~$0.1)
         HF Spaces:    deploy demo (CPU)                          (0)
 Tuần 4  HF/Kaggle:    mirror dữ liệu + manifest                   (0)
         Dự phòng:     2–5 h A100 còn lại cho bug/retrain          (~$5–12 credit)
@@ -294,7 +294,7 @@ Lambda instances · Paperspace pricing · AWS SageMaker Studio Lab availability 
 
 | Vai trò | Chọn | Vì sao |
 |---|---|---|
-| **Orchestration + train + eval** | Modal Starter | $30 credit, Volume 1 TiB free, `.map()` cho 16 generator, code đã viết sẵn |
+| **Orchestration + train + eval** | Modal Starter | $30 credit, Volume 1 TiB free, `.map()` cho 15 generator, code đã viết sẵn |
 | **Dev loop & smoke test** | Kaggle (+ Colab tương tác) | 330 h/tháng, không tốn credit |
 | **Dữ liệu (nguồn công khai)** | HF Hub + Kaggle Datasets | Free, public, có thể mount trực tiếp trong notebook |
 | **Dữ liệu (kho riêng, nhỏ)** | R2 (10 GB free) | Chỉ chứa checkpoint + manifest sha256, không chứa dataset |

@@ -20,7 +20,7 @@
 #  e0          0  —         code / tooling / docs — không tải gì
 #  e1          0  —         demo AEROBLADE zero-shot — VAE (~1 GB) từ HF Hub
 #  e2min       3  ~0.40 GB  ĐƯỜNG NGẮN NHẤT: lsun_adm.pth + test real + test adm ⭐
-#  e2         17  1.94 GB   eval headline DIRE trên LSUN-Bedroom, 16 gen ⭐
+#  e2         17  1.94 GB   eval headline DIRE trên LSUN-Bedroom, 15 gen ⭐
 #  e3         24  4.85 GB   cross-domain: 10 tar lsun/imagenet, ImageNet, CelebA-HQ
 #  e4          5  1.45 GB   eval AEROBLADE trên ẢNH GỐC (images/)       ⭐
 #  e4x        17  3.47 GB   AEROBLADE mọi generator (DirSpec, tự loại 8 ddim)

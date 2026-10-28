@@ -19,7 +19,7 @@ import argparse
 import json
 import sys
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 # ---------------------------------------------------------------------------
 # Giá GPU để quy đổi credit (USD/giờ) — nguồn: docs/iaas-options.md §1.1
@@ -145,7 +145,7 @@ def report(used: dict[str, float], modal_gpu: str, lightning_gpu: str, json_out:
     if azure_start:
         age = (date.today() - azure_start).days
         left = 30 - age
-        print(f"• Azure $200 (one-time, hết hạn sau 30 ngày)")
+        print("• Azure $200 (one-time, hết hạn sau 30 ngày)")
         print(f"    kích hoạt: {azure_start.isoformat()} → còn {max(0, left)} ngày "
               f"{'⚠ ĐÃ HẾT HẠN' if left <= 0 else ''}")
         print(f"    quy đổi: ~${200 / 3.67:.0f} h A100 (nhưng PHẢI xin quota N-series trước)")
@@ -155,7 +155,7 @@ def report(used: dict[str, float], modal_gpu: str, lightning_gpu: str, json_out:
     print("--- Gợi ý phân bổ (theo docs/runbook-free.md) ---")
     print("  1. Dev/smoke test code        → Kaggle (không tốn credit)")
     print("  2. Train detector Tier A      → Modal A100 (~3–8 h ≈ $8–20) — phần đắt nhất, làm sau cùng")
-    print("  3. Eval 16 generator song song → Modal (.map), ~$2–4")
+    print("  3. Eval 15 generator song song → Modal (.map), ~$2–4")
     print("  4. Tải + verify dữ liệu        → Modal CPU (~$1–2)")
     print("  5. Demo public                 → HF Spaces CPU (0đ)")
     print()
