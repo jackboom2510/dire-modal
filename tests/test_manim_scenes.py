@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ast
 import importlib.util
+import os
 import subprocess
 import sys
 import types
@@ -438,6 +439,139 @@ def test_render_script_check_mode_lists_all_scenes():
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stderr
     assert set(r.stdout.split()) == EXPECTED_SCENES, r.stdout
+
+
+# ---------------------------------------------------------------------------
+# 4b. Chạy THẬT render.sh với `manim` giả (bắt được lỗi đường dẫn kiểu Windows)
+# ---------------------------------------------------------------------------
+STUB_MANIM = r"""#!/usr/bin/env bash
+set -euo pipefail
+
+log="${STUB_LOG:?}"
+{
+  printf 'ARGV'
+  printf '\t%s' "$@"
+  printf '\n'
+} >>"$log"
+
+# Kiểm TRƯỚC vòng `while` bên dưới: nó `shift` nên sẽ nuốt mất "$@" — bản đầu
+# đặt kiểm tra sau vòng lặp, nên nó không bao giờ chạy (test vẫn xanh vì lý do khác).
+if [ "${STUB_FAIL_POSIX:-0}" = "1" ]; then
+  for a in "$@"; do
+    case "$a" in
+      /*) echo "FileNotFoundError: ${a#/} not found (giả lập Windows native)" >&2
+          exit 1 ;;
+    esac
+  done
+fi
+
+media=""; out=""; args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --media_dir) media="${2#Z:}"; shift 2 ;;   # Z: = "ổ Windows" của cygpath giả
+    --output_file) out="$2"; shift 2 ;;
+    -q*) shift ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+src="${args[0]:-}"
+
+if [ ! -f "$src" ]; then
+  echo "FileNotFoundError: $PWD/$src not found" >&2
+  exit 1
+fi
+
+# manim "chạy xong" nhưng không ghi file — dùng để kiểm nhánh báo lỗi.
+if [ "${STUB_NO_OUTPUT:-0}" = "1" ]; then
+  exit 0
+fi
+
+ql="${STUB_QUALITY_DIR:-480p15}"
+mkdir -p "$media/videos/scenes/$ql"
+: >"$media/videos/scenes/$ql/${out:-unknown}.mp4"
+"""
+
+
+def _exe(path: Path, body: str) -> Path:
+    path.write_text(body, encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+def _run_render(tmp_path: Path, extra_args: list[str], *, windows: bool = False,
+                quality_dir: str = "480p15", no_output: bool = False):
+    """Chạy render.sh THẬT, với `manim` giả nằm trước trong PATH."""
+    bindir = tmp_path / "bin"
+    bindir.mkdir(exist_ok=True)
+    _exe(bindir / "manim", STUB_MANIM)
+    if windows:
+        # cygpath giả: mọi đường dẫn tuyệt đối -> "Z:<path>" (dạng mixed).
+        _exe(bindir / "cygpath", (
+            '#!/usr/bin/env bash\n'
+            'for a in "$@"; do case "$a" in -*) ;; *) p="$a" ;; esac; done\n'
+            "printf 'Z:%s\\n' \"$p\"\n"
+        ))
+
+    log = tmp_path / "argv.log"
+    env = {
+        "PATH": f"{bindir}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+        "STUB_LOG": str(log),
+        "STUB_QUALITY_DIR": quality_dir,
+        "STUB_NO_OUTPUT": "1" if no_output else "0",
+        "MEDIA_DIR": str(tmp_path / "media"),
+        "DIRE_LOSS_LOG": str(tmp_path / "no_log.json"),
+    }
+    if windows:
+        env["STUB_FAIL_POSIX"] = "1"
+    r = subprocess.run(["bash", str(MANIM / "render.sh"), *extra_args],
+                       capture_output=True, text=True, cwd=ROOT, env=env)
+    return r, log, tmp_path / "media"
+
+
+def test_render_script_runs_end_to_end_with_stub_manim(tmp_path):
+    """Cả 5 scene chạy, mp4 được gom ra MEDIA_DIR."""
+    r, log, media = _run_render(tmp_path, ["--quality", "l"])
+    assert r.returncode == 0, r.stdout + r.stderr
+    for name in EXPECTED_SCENES:
+        assert (media / f"{name}.mp4").exists(), f"thiếu {name}.mp4"
+    assert len(log.read_text(encoding="utf-8").splitlines()) == len(EXPECTED_SCENES)
+
+
+def test_render_script_maps_quality_letter_to_resolution_dir(tmp_path):
+    r"""`-qh` ⇒ manim ghi vào `1080p60/`, KHÔNG phải `h/`.
+
+    Bản đầu glob theo chữ cái nên mp4 không bao giờ được gom ra, mà script vẫn
+    in "Xong" — bẫy im lặng.
+    """
+    r, _log, media = _run_render(tmp_path, ["--quality", "h"], quality_dir="1080p60")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (media / "DiffusionTheory.mp4").exists()
+
+
+def test_render_script_never_hands_a_posix_path_to_native_manim(tmp_path):
+    r"""Sự cố 2026-10-28: Git Bash + `MSYS_NO_PATHCONV=1` ⇒ `/d/x` tới manim nguyên
+    văn, Windows đọc thành `D:\d\x` (một tầng thư mục thừa).
+
+    `manim` giả ở đây CHẾT nếu thấy argv bắt đầu bằng `/`, nên test đỏ ngay khi
+    ai đó truyền lại đường dẫn tuyệt đối POSIX vào lệnh render.
+    """
+    r, log, media = _run_render(tmp_path, ["--quality", "l"], windows=True)
+    assert r.returncode == 0, (
+        "render.sh vẫn đưa đường dẫn POSIX tuyệt đối cho binary native:\n"
+        + r.stdout + r.stderr
+    )
+    argv = log.read_text(encoding="utf-8")
+    assert "Z:" in argv, f"media_dir phải đi qua native_path() khi có cygpath:\n{argv}"
+    # File scene phải được truyền TƯƠNG ĐỐI: không tiền tố "/" nào để hiểu nhầm.
+    assert "tools/manim/scenes.py" in argv
+    assert (media / "DiffusionTheory.mp4").exists()
+
+
+def test_render_script_exits_nonzero_when_no_mp4_is_produced(tmp_path):
+    """"manim chạy xong" mà không có file ⇒ phải báo lỗi, không được im lặng."""
+    r, _log, _media = _run_render(tmp_path, ["--quality", "l"], no_output=True)
+    assert r.returncode != 0
+    assert "KHÔNG có mp4" in (r.stdout + r.stderr)
 
 
 def test_readme_documents_every_scene():

@@ -41,7 +41,33 @@ bash tools/manim/render.sh --quality h --gif        # kèm GIF 640px cho README
 ```
 
 Đầu ra: `docs/media/<Scene>.mp4` (+ `.gif` nếu `--gif`). Thư mục tạm của manim là
-`docs/media/_manim/` (đã gitignore).
+`docs/media/_manim/` (đã gitignore). manim ghi vào `_manim/videos/scenes/<độ phân
+giải>/`, ví dụ `480p15` cho `-ql` và `1080p60` cho `-qh` — **không** phải `l`/`h`.
+
+### Windows / Git Bash: `FileNotFoundError: D:\d\...`
+
+Nếu bạn thấy đường dẫn có **một tầng `d` thừa**:
+
+```
+FileNotFoundError: D:\d\Documents\Code\dire-modal\tools\manim\scenes.py not found
+```
+
+thì đó là MSYS path conversion, không phải thiếu file. Repo tắt conversion
+(`MSYS_NO_PATHCONV=1`) để gửi `/raw` cho `modal`, nên khi gọi binary Windows thật
+(`manim`, `ffmpeg`) thì phải tự đổi đường dẫn:
+
+* file scene ⇒ truyền **tương đối** (`tools/manim/scenes.py`);
+* đường dẫn tuyệt đối khác ⇒ qua `native_path()` (`tools/lib/native_path.sh`),
+  trả `D:/...` (dạng "mixed": Windows đọc được, bash vẫn đọc được).
+
+Bản đầu của `render.sh` truyền `"$HERE/scenes.py"` (tuyệt đối POSIX) và vì thế
+chết đúng như trên. Kiểm tra nhanh trên máy bạn:
+
+```bash
+bash -c '. tools/lib/native_path.sh; native_path "$PWD"'
+# Git Bash  → D:/Documents/Code/dire-modal
+# Linux     → /home/user/dire-modal
+```
 
 **Không dùng `MathTex`**: nó cần TeX Live 1–2 GB. Công thức trong scene viết bằng
 `Text` + ký hiệu Unicode. Font mặc định `DejaVu Sans` (phủ đủ dấu tiếng Việt);

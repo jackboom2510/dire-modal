@@ -21,6 +21,8 @@ python3 tools/free_quota.py     # xem còn bao nhiêu quota miễn phí
 > **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
 > Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
 > thấy gì. Mọi script trong `scripts/` + `tools/` đã `export MSYS_NO_PATHCONV=1`.
+> Chiều ngược lại — `/d/…` → `D:/…` cho binary Windows (manim, ffmpeg, `PYTHONPATH`) —
+> đi qua `tools/lib/native_path.sh`; xem runbook §Windows.
 > Nếu gõ `modal run … --path /raw/…` trực tiếp thì thêm biến đó vào trước lệnh;
 > code cũng tự sửa đường dẫn dạng `C:/…/Git/raw` (`_demangle` trong `download.py`).
 
