@@ -31,6 +31,9 @@ from typing import NamedTuple
 _UNITS = {"B": 1, "KB": 1024, "MB": 1024**2, "GB": 1024**3, "TB": 1024**4}
 _SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(B|KB|MB|GB|TB)\b", re.I)
 _KNOWN_SUFFIX = (".tar.gz", ".pth", ".pt")
+#: File KHÔNG phải archive: không kiểm được bằng `gzip -t`, nên bằng chứng duy
+#: nhất là size + sha256 đối chiếu manifest (xem :func:`check_artifact`).
+ARTIFACT_SUFFIX = (".pth", ".pt")
 
 
 # ============================================================================
@@ -571,3 +574,84 @@ def staging_dir_for(root: Path, remote_rel: str) -> Path:
     """
     digest = hashlib.sha1(remote_rel.encode()).hexdigest()[:12]
     return root / f"baidu_{digest}"
+
+
+# ---------------------------------------------------------------------------
+# Checkpoint (.pth/.pt): `gzip -t` không áp dụng được
+# ---------------------------------------------------------------------------
+def parse_sha256_manifest(text: str) -> dict[tuple[str, str], tuple[int, str]]:
+    """Parse ``_manifest_sha256.tsv`` → ``{(source, path): (size, sha256)}``.
+
+    Cùng định dạng với ``archive::make_manifest`` và ``local_fetch --mode
+    manifest``: ``source<TAB>path<TAB>size_bytes<TAB>sha256``. Header và dòng
+    hỏng bị bỏ qua chứ không raise: manifest là *bằng chứng thêm*, thiếu nó thì
+    vẫn kiểm được size — ném lỗi ở đây sẽ biến một file manifest cũ thành
+    "không verify được gì".
+    """
+    rows: dict[tuple[str, str], tuple[int, str]] = {}
+    for line in text.splitlines():
+        line = line.rstrip("\r")
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = line.split("\t")
+        if len(parts) < 4:
+            continue
+        source, rel, size, digest = (x.strip() for x in parts[:4])
+        if source == "source" or not rel:      # header
+            continue
+        try:
+            nbytes = int(size)
+        except ValueError:
+            continue
+        rows[(source, rel.strip("/"))] = (nbytes, digest.lower())
+    return rows
+
+
+def check_artifact(path: Path, expected: "tuple[int, str] | None" = None,
+                   digest_of=None) -> Verdict:
+    """Kiểm một file **không phải archive** (``.pth``/``.pt``).
+
+    Vì sao cần riêng: ``download::verify`` trước đây chỉ quét ``*.tar.gz``, nên
+    6 checkpoint ``.pth`` (269.4 MB/file) nằm ngoài mọi phép kiểm — CỔNG 7 của
+    runbook ("ckpt tồn tại và sha256 khớp manifest") không có code. Một file
+    ``.pth`` bị cụt vẫn "tồn tại", vẫn đúng tên, và chỉ nổ ở ``torch.load``
+    giữa lúc eval đã tiêu tiền GPU.
+
+    Args:
+        expected: ``(size, sha256)`` từ manifest; ``None`` ⇒ chỉ kiểm tồn tại +
+            size > 0, và **nói rõ** là không có tham chiếu (không được im lặng
+            gọi đó là "khớp manifest").
+        digest_of: hàm băm, cho phép dùng cache ``(size, mtime_ns)`` của caller.
+    """
+    if not path.exists():
+        return Verdict(False, "file không tồn tại")
+    size = path.stat().st_size
+    if size == 0:
+        return Verdict(False, "0 byte")
+    if expected is None:
+        return Verdict(
+            True,
+            f"ok ({_human(size)}) — KHÔNG có tham chiếu trong manifest nên chưa "
+            "chứng minh được nội dung",
+        )
+    want_size, want_sha = expected
+    if want_size and size != want_size:
+        return Verdict(
+            False,
+            f"size {size} ≠ manifest {want_size} (lệch {size - want_size:+d} B) "
+            "→ tải lại",
+            retryable=True,
+        )
+    if want_sha:
+        got = digest_of(path) if callable(digest_of) else _sha256(path)
+        if got != want_sha:
+            return Verdict(
+                False,
+                f"sha256 {got[:12]}… ≠ manifest {want_sha[:12]}… → nội dung khác "
+                "(cùng size, khác byte)",
+                retryable=True,
+            )
+        return Verdict(True, f"ok — sha256 khớp manifest ({_human(size)})",
+                       fmt="sha256")
+    return Verdict(True, f"ok — size khớp manifest ({_human(size)}), manifest "
+                         "không có sha256", fmt="size")

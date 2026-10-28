@@ -346,7 +346,12 @@ if __name__ == "__main__":
 #    (Không cần GPU: mọi thứ torch đụng tới đều được stub.)
 # ---------------------------------------------------------------------------
 class _Probs:
-    """Giả lập `model(x).softmax(dim=1)[:, 1]`: trả đúng danh sách điểm đã đặt."""
+    """Đầu ra THÔ của model: logit, chưa qua sigmoid/softmax.
+
+    `score_pair` đổi logit → P(fake) bằng `prob_fake` (n_out=1 ⇒ sigmoid), đúng
+    quy ước checkpoint DIRE gốc. Trước đây test này giả lập `softmax(...)[:, 1]`
+    nên không phát hiện được lỗi "model 2 lớp vs checkpoint 1 logit".
+    """
 
     def __init__(self, values):
         self.values = values
@@ -375,7 +380,7 @@ class _Stacked:
 def _fake_torch(_unused=None):
     """torch giả: `stack(buf)` giữ nguyên buf, `to()` không làm gì.
 
-    `preprocess` trả về một con số (điểm của ảnh đó); `model(x)` trả `_Probs`
+    `preprocess` trả về một con số (LOGIT của ảnh đó); `model(x)` trả `_Probs`
     đúng bằng các con số đó — nhờ vậy test điều khiển được điểm từng ảnh.
     """
 
@@ -451,10 +456,10 @@ def test_score_pair_assigns_labels_from_each_archive():
     orig = ev.preprocess
 
     def preprocess(img, torch, transforms):
-        # nửa đầu là real, nửa sau là fake ⇒ gán điểm theo archive
+        # nửa đầu là real, nửa sau là fake ⇒ gán LOGIT theo archive.
+        # -2.2 → sigmoid = 0.10 (real); +2.2 → 0.90 (fake).
         calls["n"] += 1
-        base = 0.1 if calls["n"] <= 2 else 0.9
-        return base
+        return -2.2 if calls["n"] <= 2 else 2.2
 
     ev.preprocess = preprocess
     torch, model = _fake_torch()
@@ -492,7 +497,7 @@ def test_score_pair_counts_unreadable_images_instead_of_crashing():
     make(real, [("0_real/ok.png", b"IMG"), ("0_real/bad.png", b"BROKEN")])
     make(fake, [("1_fake/ok.png", b"IMG")])
 
-    torch, model = _fake_torch({0.0: 0.9})
+    torch, model = _fake_torch({0.0: 2.2})
     try:
         sys.modules.setdefault("PIL", _fake_pil())
         r = ev.score_pair(model, real, fake, torch, None, "cpu", batch_size=8)
@@ -528,7 +533,7 @@ def test_score_pair_honours_limit_budget():
     make(real, 5)
     make(fake, 5)
 
-    torch, model = _fake_torch({0.0: 0.5})
+    torch, model = _fake_torch({0.0: 0.0})
     try:
         sys.modules.setdefault("PIL", _fake_pil())
         r = ev.score_pair(model, real, fake, torch, None, "cpu", batch_size=4, limit=2)
@@ -537,3 +542,265 @@ def test_score_pair_honours_limit_budget():
         sys.modules.pop("PIL", None)
 
     assert r["n_real"] == 2 and r["n_fake"] == 2, r
+
+
+# ---------------------------------------------------------------------------
+# 8. Lớp cuối của checkpoint: 1 logit (DIRE gốc, BCE) vs 2 lớp (CrossEntropy)
+# ---------------------------------------------------------------------------
+# Sự cố THẬT 2026-10-28, log:
+#   RuntimeError: Error(s) in loading state_dict for ResNet:
+#     size mismatch for fc.weight: copying a param with shape torch.Size([1, 2048])
+#     from checkpoint, the shape in current model is torch.Size([2, 2048]).
+# Toàn bộ eval chết ở dòng `load_state_dict` — sau khi đã trả tiền bật container
+# GPU — vì code tạo `resnet50(num_classes=2)` trong khi checkpoint của tác giả
+# (`vendor/utils/utils.py`: `resnet(num_classes=1)`, loss `BCEWithLogitsLoss`)
+# có đúng MỘT logit.
+class _Shape:
+    """Giả lập `torch.Size` — chỉ cần `len()` và truy cập theo chỉ số."""
+
+    def __init__(self, *dims):
+        self._d = tuple(dims)
+
+    def __len__(self):
+        return len(self._d)
+
+    def __getitem__(self, i):
+        return self._d[i]
+
+
+class _Tensor:
+    """Giả lập tensor: thứ `load_detector` cần duy nhất là `.shape`."""
+
+    def __init__(self, *dims):
+        self.shape = _Shape(*dims)
+
+
+def test_fc_out_features_reads_the_author_one_logit_checkpoint():
+    ev = _install_stub()
+    assert ev.fc_out_features({"fc.weight": _Tensor(1, 2048), "fc.bias": _Tensor(1)}) == 1
+
+
+def test_fc_out_features_reads_a_two_class_checkpoint():
+    ev = _install_stub()
+    assert ev.fc_out_features({"fc.weight": _Tensor(2, 2048)}) == 2
+
+
+def test_fc_out_features_handles_dataparallel_prefix():
+    """Checkpoint train bằng DataParallel có tiền tố `module.`."""
+    ev = _install_stub()
+    assert ev.fc_out_features({"module.fc.weight": _Tensor(1, 2048)}) == 1
+
+
+def test_fc_out_features_returns_zero_when_it_cannot_tell():
+    """Không thấy `fc.weight` ⇒ 0, để caller BÁO RÕ thay vì đoán 2 cho chắc."""
+    ev = _install_stub()
+    assert ev.fc_out_features({"conv1.weight": _Shape(64, 3, 7, 7)}) == 0
+
+
+def test_prob_fake_uses_sigmoid_for_one_logit():
+    """1 logit ⇒ sigmoid; đây là quy ước của checkpoint tác giả."""
+    ev = _install_stub()
+    p = ev.prob_fake([0.0, 2.2, -2.2], n_out=1)
+    assert abs(p[0] - 0.5) < 1e-9
+    assert abs(p[1] - 0.9010) < 1e-3      # sigmoid(2.2)
+    assert abs(p[2] - 0.0998) < 1e-3      # sigmoid(-2.2)
+    # Điểm phải ĐƠN ĐIỆU theo logit, nếu không ngưỡng 0.5 vô nghĩa.
+    assert p[2] < p[0] < p[1]
+
+
+def test_prob_fake_uses_softmax_for_two_logits():
+    ev = _install_stub()
+    p = ev.prob_fake([[0.0, 0.0], [0.0, 5.0], [5.0, 0.0]], n_out=2)
+    assert abs(p[0] - 0.5) < 1e-9
+    assert p[1] > 0.99 and p[2] < 0.01
+
+
+def test_prob_fake_accepts_nested_rows_for_one_logit():
+    """`model(x)` thật trả tensor [B, 1] ⇒ `.tolist()` ra [[z], [z], …]."""
+    ev = _install_stub()
+    flat = ev.prob_fake([2.2, -2.2], n_out=1)
+    nested = ev.prob_fake([[2.2], [-2.2]], n_out=1)
+    assert flat == nested
+
+
+def test_prob_fake_does_not_overflow_on_extreme_logits():
+    """`sigmoid(-800)` phải là 0.0, không phải OverflowError giết cả eval."""
+    ev = _install_stub()
+    p = ev.prob_fake([-800.0, 800.0], n_out=1)
+    assert p[0] == 0.0 and p[1] == 1.0
+
+
+def test_prob_fake_refuses_to_invent_a_score_when_columns_are_missing():
+    ev = _install_stub()
+    try:
+        ev.prob_fake([[0.3]], n_out=2)
+    except ValueError as exc:
+        assert "logit" in str(exc)
+    else:
+        raise AssertionError("thiếu cột lớp fake mà vẫn trả điểm ⇒ bịa số")
+
+
+class _FakeTorch:
+    """Chỉ đủ cho `load_detector`: `torch.load`."""
+
+    def __init__(self, state):
+        self.state = state
+
+    def load(self, ckpt, map_location=None):
+        return self.state
+
+
+class _FakeModel:
+    def __init__(self, n_classes):
+        self.n_classes = n_classes
+        self.loaded = None
+
+    def load_state_dict(self, state):
+        # Mô phỏng đúng việc torch làm: so shape của `fc.weight`.
+        shape = getattr(state.get("fc.weight"), "shape", None)
+        got = shape[0] if shape is not None else None
+        if got != self.n_classes:
+            raise RuntimeError(
+                "Error(s) in loading state_dict for ResNet:\n"
+                f"\tsize mismatch for fc.weight: copying a param with shape "
+                f"torch.Size([{got}, 2048]) from checkpoint, the shape in current "
+                f"model is torch.Size([{self.n_classes}, 2048])."
+            )
+        self.loaded = state
+
+    def to(self, device):
+        return self
+
+    def eval(self):
+        return self
+
+
+def _fake_resnet(record):
+    def resnet50(num_classes=1000, **kw):
+        record.append(num_classes)
+        return _FakeModel(num_classes)
+
+    return resnet50
+
+
+def test_load_detector_builds_the_model_that_matches_the_checkpoint():
+    """Đây chính là lỗi 2026-10-28: phải tạo 1 lớp, không phải 2."""
+    ev = _install_stub()
+    made: list[int] = []
+    state = {"fc.weight": _Tensor(1, 2048), "fc.bias": _Tensor(1)}
+    model, n_out = ev.load_detector("x.pth", _FakeTorch(state), _fake_resnet(made), "cpu")
+
+    assert made == [1], f"tạo resnet50(num_classes={made}) cho checkpoint 1 logit"
+    assert n_out == 1 and model.loaded is not None
+
+
+def test_load_detector_still_accepts_a_two_class_checkpoint():
+    ev = _install_stub()
+    made: list[int] = []
+    state = {"fc.weight": _Tensor(2, 2048)}
+    _model, n_out = ev.load_detector("x.pth", _FakeTorch(state), _fake_resnet(made), "cpu")
+    assert made == [2] and n_out == 2
+
+
+def test_load_detector_unwraps_nested_state_dicts():
+    ev = _install_stub()
+    made: list[int] = []
+    nested = {"epoch": 7, "model": {"module.fc.weight": _Tensor(1, 2048)}}
+    _model, n_out = ev.load_detector("x.pth", _FakeTorch(nested), _fake_resnet(made), "cpu")
+    assert made == [1] and n_out == 1
+
+
+def test_load_detector_explains_itself_instead_of_a_bare_runtimeerror():
+    """Nếu vẫn lệch, thông điệp phải nói quy ước 1 logit vs 2 lớp."""
+    ev = _install_stub()
+
+    class _Wrong(_FakeModel):
+        def load_state_dict(self, state):
+            raise RuntimeError("size mismatch for fc.weight")
+
+    try:
+        ev.load_detector("x.pth", _FakeTorch({"fc.weight": _Tensor(1, 2048)}),
+                         lambda **k: _Wrong(2), "cpu")
+    except SystemExit as exc:
+        msg = str(exc)
+        assert "n_out đọc từ checkpoint = 1" in msg, msg
+        assert "[1,2048]" in msg and "[2,2048]" in msg, msg
+    else:
+        raise AssertionError("load lệch mà không báo gì")
+
+
+def test_load_detector_says_so_when_it_cannot_find_fc():
+    ev = _install_stub()
+    try:
+        ev.load_detector("x.pth", _FakeTorch({"conv1.weight": _Shape(64, 3, 7, 7)}),
+                         lambda **k: _FakeModel(2), "cpu")
+    except SystemExit as exc:
+        assert "Không đọc được lớp cuối" in str(exc)
+    else:
+        raise AssertionError("không thấy fc.weight mà vẫn đoán bừa")
+
+
+# ---------------------------------------------------------------------------
+# 9. Một cặp lỗi không được vứt cả lượt eval
+# ---------------------------------------------------------------------------
+def test_failed_pair_row_keeps_metrics_empty_and_records_the_reason():
+    """`acc = 0` đọc như "đoán sai hết"; ô trống + `error` đọc đúng là "không chấm"."""
+    ev = _install_stub()
+    meta = {"branch": "lsun_bedroom__lsun_bedroom", "generator": "adm"}
+    row = ev.row_for_result("exp", {"fake": "/x/adm.tar.gz",
+                                    "error": "size mismatch for fc.weight"},
+                            meta, "test", "deadbeef", "2026-10-28T00:00:00Z")
+
+    assert row["acc"] == "" and row["ap"] == "" and row["n_fake"] == ""
+    assert row["error"] == "size mismatch for fc.weight"
+    assert row["branch"] == "lsun_bedroom__lsun_bedroom"
+    # Không được bịa 0
+    assert row["acc"] != 0 and row["ap"] != 0
+
+
+def test_ok_pair_row_has_no_error_and_keeps_numbers():
+    ev = _install_stub()
+    meta = {"branch": "b", "generator": "adm"}
+    row = ev.row_for_result("exp", {"n_real": 100, "n_fake": 100, "acc": 0.995,
+                                    "ap": 0.998, "tpr_at_5fpr": 0.99},
+                            meta, "test", "sha", "t")
+    assert row["error"] == "" and row["acc"] == 0.995 and row["n_real"] == 100
+
+
+def test_eval_one_never_raises_out_of_the_map():
+    """`.map()` của Modal huỷ mọi task anh em khi một task raise ⇒ phải bắt."""
+    import ast as _ast
+
+    src = (SRC / "dire_modal" / "eval.py").read_text(encoding="utf-8")
+    tree = _ast.parse(src)
+    fn = next(n for n in tree.body
+              if isinstance(n, _ast.FunctionDef) and n.name == "eval_one")
+    handlers = [h for node in _ast.walk(fn) if isinstance(node, _ast.Try)
+                for h in node.handlers]
+    assert handlers, "eval_one phải có try/except để không raise ra .map()"
+    caught = " ".join(_ast.dump(h.type) if h.type else "Bare" for h in handlers)
+    assert "Exception" in caught, "phải bắt cả Exception, không chỉ lỗi cụ thể"
+    assert "SystemExit" in caught, "SystemExit mang thông điệp đã rõ, phải giữ"
+
+
+# ---------------------------------------------------------------------------
+# 10. Demo HF Spaces phải dùng CÙNG quy ước lớp cuối (nếu không: im lặng sai)
+# ---------------------------------------------------------------------------
+def test_hf_space_detects_fc_width_instead_of_hardcoding_two_classes():
+    """`num_classes=2` + `strict=False` ⇒ lớp fc KHÔNG được nạp mà chỉ in warn.
+
+    Demo vẫn "chạy", vẫn trả hai con số cộng lại bằng 1 — nhưng là xác suất của
+    một cái đầu phân loại chưa từng được train. Cùng gốc với sự cố eval
+    2026-10-28, chỉ khác là ở đây nó KHÔNG ném lỗi.
+    """
+    src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
+    assert "num_classes=2)" not in src, "hard-code 2 lớp ⇒ fc không bao giờ được nạp"
+    assert "n_out" in src and "fc.weight" in src, "phải đọc số unit từ checkpoint"
+    assert "sigmoid" in src, "checkpoint 1 logit cần sigmoid, không phải softmax"
+
+
+def test_hf_space_preprocessing_matches_the_author_pipeline():
+    """Resize(256) → CenterCrop(224) → Normalize(ImageNet): lệch là lệch số."""
+    src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
+    assert "RESIZE = 256" in src and "CROP = 224" in src, src[:200]
+    assert "0.485" in src and "0.229" in src, "phải chuẩn hoá ImageNet như lúc train"

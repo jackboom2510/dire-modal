@@ -194,7 +194,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | `e0` | 0 | — | code / tooling / docs |
 | **`e2min`** | **3** | **~0.40 GB** | **đường ngắn nhất tới con số đầu tiên**: `lsun_adm.pth` + test `real` + test `adm` |
 | `e1` | 0 | — | demo AEROBLADE zero-shot (VAE ~1 GB kéo thẳng từ HF Hub) |
-| **`e2`** | **17** | **1.94 GB** | **eval headline DIRE trên LSUN-Bedroom, 16 generator** |
+| **`e2`** | **17** | **1.94 GB** | **eval headline DIRE trên LSUN-Bedroom, 15 generator** |
 | `e3` | 24 | 4.85 GB | +10 tar `lsun_bedroom/imagenet` (**cross-generator**, xem dưới), ImageNet, CelebA-HQ |
 | **`e4`** | **5** | **1.45 GB** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
 | `e4x` | 17 | 3.47 GB | AEROBLADE trên MỌI generator (tự loại 8 file `*ddim*`) |
@@ -247,7 +247,7 @@ src/dire_modal/
   bench.py          # benchmark storage (Volume/R2) + throughput DIRE
   archive.py        # đẩy/kéo: R2, HF Hub, Kaggle + verify sha256
   train.py          # (TODO) training loop — ngoài phạm vi, xem spec.md N1
-  eval.py           # eval 16 generator bằng checkpoint có sẵn + CỔNG S2
+  eval.py           # eval 15 generator bằng checkpoint có sẵn + CỔNG S2
   compute_dire.py   # tính DIRE bằng ADM DDIM inversion + gallery
   vendor/           # module DIRE gốc đã vendorize
 tools/              # free_quota.py, storage_cost.py (thuần stdlib) + tiện ích .sh

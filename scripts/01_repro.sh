@@ -115,7 +115,8 @@ Cách đọc:
   * Cột nào "thiếu dữ liệu" → chưa tải đủ. `--tiers e2,ckpts` cho generator +
                          detector; `--tiers e2` nếu chỉ thiếu generator.
   * 8 cột của Table 2 KHÔNG gồm stylegan/projectedgan/dalle2/if/midjouney… —
-    nhánh `e2` có 16 generator, 8 cái còn lại là phần mở rộng của dự án.
+    nhánh `e2` có 15 generator: 8 cột của paper + 7 generator mở rộng của dự án
+   (stylegan, projectedgan, diff-*, dalle2, if, midjouney).
 
 Tải kết quả về máy:
   modal volume get dire-ckpt results ./results

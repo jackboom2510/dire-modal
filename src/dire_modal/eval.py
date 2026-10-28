@@ -32,6 +32,7 @@ CSV để một lần chạy không thể lẫn với lần chạy khác.
 import csv
 import datetime
 import json
+import math as _math
 import os
 import tarfile
 from pathlib import Path
@@ -281,7 +282,41 @@ CSV_FIELDS = [
     "experiment_id", "detector", "branch", "generator", "split", "transform",
     "n_real", "n_fake", "acc", "ap", "tpr_at_5fpr", "threshold",
     "git_sha", "created_at",
+    # Cột cuối: cặp KHÔNG chấm được (checkpoint sai kiểu, tar hỏng, …). Để trống
+    # nghĩa là "chạy xong"; có chữ nghĩa là "cặp này không có số" — không được để
+    # một dòng toàn ô rỗng trông giống "đã chấm nhưng ra 0".
+    "error",
 ]
+
+
+def row_for_result(exp: str, r: dict, meta: dict, split: str,
+                   git_sha: str, created: str) -> dict:
+    """Một dòng CSV từ kết quả của ``eval_one`` — kể cả kết quả LỖI.
+
+    Cặp lỗi phải để **trống** metric, không được ghi 0: dòng ``acc = 0`` đọc như
+    "detector đoán sai hết", còn dòng trống + cột ``error`` đọc đúng là "cặp này
+    không chấm được". NFR-6: không bịa số.
+    """
+    err = r.get("error") or ""
+    if err:
+        return {
+            "experiment_id": exp, "detector": "dire",
+            "branch": meta.get("branch", ""), "generator": meta.get("generator", ""),
+            "split": split, "transform": PREPROC,
+            "n_real": "", "n_fake": "", "acc": "", "ap": "", "tpr_at_5fpr": "",
+            "threshold": ACC_THRESHOLD, "git_sha": git_sha, "created_at": created,
+            "error": err,
+        }
+    return {
+        "experiment_id": exp, "detector": "dire",
+        "branch": meta.get("branch", ""), "generator": meta.get("generator", ""),
+        "split": split, "transform": PREPROC,
+        "n_real": r["n_real"], "n_fake": r["n_fake"],
+        "acc": round(r["acc"], 6), "ap": round(r["ap"], 6),
+        "tpr_at_5fpr": round(r["tpr_at_5fpr"], 6),
+        "threshold": ACC_THRESHOLD, "git_sha": git_sha, "created_at": created,
+        "error": "",
+    }
 
 
 def write_csv(rows: list[dict], path: Path) -> None:
@@ -350,8 +385,77 @@ def preprocess(img, torch, transforms):
     return tf(img)
 
 
+def fc_out_features(state: dict) -> int:
+    """Số unit của lớp cuối, đọc từ **chính checkpoint** — không đoán theo tên.
+
+    Vì sao phải đọc thay vì chọn một con số: DIRE gốc dùng
+    ``resnet(num_classes=1)`` + ``BCEWithLogitsLoss`` (một logit, ``sigmoid`` >
+    0.5 là fake), trong khi ResNet của torchvision/timm quen dùng 2 lớp +
+    ``CrossEntropyLoss``. Hai quy ước cho ra ``fc.weight`` shape ``[1, 2048]`` và
+    ``[2, 2048]``; chọn sai thì ``load_state_dict`` nổ:
+
+        size mismatch for fc.weight: copying a param with shape torch.Size([1, 2048])
+        from checkpoint, the shape in current model is torch.Size([2, 2048])
+
+    và đó là lỗi chặn TOÀN BỘ eval (lần chạy 2026-10-28) — sau khi đã trả tiền
+    bật container GPU.
+
+    Trả ``0`` nếu không thấy ``fc.weight`` (checkpoint lạ) để caller báo rõ.
+    """
+    for key in ("fc.weight", "module.fc.weight", "_orig_mod.fc.weight"):
+        w = state.get(key)
+        if w is None:
+            continue
+        shape = getattr(w, "shape", None)
+        if shape is None:
+            continue
+        try:
+            if len(shape) == 2:
+                return int(shape[0])
+        except TypeError:      # shape không phải chuỗi số
+            continue
+    return 0
+
+
+def prob_fake(rows, n_out: int = 1):
+    """Logit thô → ``P(fake)``, theo đúng quy ước mà checkpoint được train.
+
+    ``n_out == 1``: ``sigmoid(z)`` — DIRE gốc, ``1_fake`` là lớp dương.
+    ``n_out >= 2``: ``softmax(z)[FAKE]``.
+
+    Nhận list ``float`` (một logit/ảnh) hoặc list ``list[float]`` (nhiều logit).
+    Tính bằng toán Python thuần trên list đã qua ``.tolist()``: batch 64 nên chi
+    phí không đáng kể, và đổi lại hàm này test được **không cần torch** — đúng
+    loại logic đã sai âm thầm một lần.
+    """
+    out: list[float] = []
+    for row in rows:
+        if n_out == 1:
+            z = float(row[0] if isinstance(row, (list, tuple)) else row)
+            # Chặn tràn số: sigmoid(-800) = 0.0 là đúng, math.exp sẽ raise.
+            if z >= 0:
+                out.append(1.0 / (1.0 + _math.exp(-z)))
+            else:
+                e = _math.exp(z)
+                out.append(e / (1.0 + e))
+            continue
+        vals = list(row) if isinstance(row, (list, tuple)) else [float(row)]
+        if len(vals) <= FAKE:
+            # Không đủ cột để lấy lớp fake — thà báo lỗi còn hơn bịa điểm.
+            raise ValueError(f"model trả {len(vals)} logit, cần > {FAKE}")
+        m = max(vals)
+        exps = [_math.exp(v - m) for v in vals]
+        out.append(exps[FAKE] / sum(exps))
+    return out
+
+
 def load_detector(ckpt: str, torch, resnet50, device):
-    """ResNet50 nhị phân của DIRE.
+    """ResNet50 nhị phân của DIRE → ``(model, n_out)``.
+
+    ``n_out`` là số unit lớp cuối **đọc từ checkpoint** (xem
+    :func:`fc_out_features`): 1 với checkpoint gốc của tác giả, 2 với checkpoint
+    huấn luyện theo kiểu CrossEntropy. Nhờ vậy một checkpoint thuộc quy ước nào
+    cũng nạp được, và không có chỗ nào phải "đoán 2 cho chắc".
 
     File checkpoint gốc lưu cả ``optimizer``/``epoch`` (269.4 MB so với 97.8 MB
     của ResNet50 fp32), nên phải bóc đúng lớp: ``model``/``state_dict``/``net``,
@@ -365,15 +469,34 @@ def load_detector(ckpt: str, torch, resnet50, device):
                 break
     state = {k[len("module."):] if k.startswith("module.") else k: v
              for k, v in state.items()}
-    model = resnet50(num_classes=2)
-    model.load_state_dict(state)
+
+    n_out = fc_out_features(state)
+    if n_out not in (1, 2):
+        raise SystemExit(
+            f"[!] Không đọc được lớp cuối của checkpoint: {ckpt}\n"
+            f"    Có {len(state)} tensor, không thấy `fc.weight` shape [n, 2048].\n"
+            f"    Khoá đầu tiên: {list(state)[:5]}\n"
+            "    Kiểm file có đúng là ResNet50 của DIRE không "
+            "(`modal run -m dire_modal.download::verify` in sha256 để đối chiếu)."
+        )
+
+    model = resnet50(num_classes=n_out)
+    try:
+        model.load_state_dict(state)
+    except RuntimeError as exc:
+        raise SystemExit(
+            f"[!] Checkpoint không khớp kiến trúc ResNet50: {ckpt}\n"
+            f"    n_out đọc từ checkpoint = {n_out}\n"
+            f"    {exc}\n"
+            "    Gợi ý: `fc.weight` [1,2048] = DIRE gốc (BCE, 1 logit); [2,2048] = 2 lớp."
+        ) from exc
     model.to(device).eval()
-    return model
+    return model, n_out
 
 
 def score_pair(
     model, real: Path, fake: Path, torch, transforms, device,
-    batch_size: int = 64, limit: int = 0,
+    batch_size: int = 64, limit: int = 0, n_out: int = 1,
 ) -> dict:
     """Chạy cả hai archive, trả ``y_true``/``y_score`` và metric.
 
@@ -403,13 +526,13 @@ def score_pair(
                 if limit and len(labels) >= limit:
                     break
                 if len(buf) >= batch_size:
-                    probs = model(torch.stack(buf).to(device)).softmax(dim=1)[:, FAKE]
-                    y_score.extend(probs.cpu().tolist())
+                    out = model(torch.stack(buf).to(device))
+                    y_score.extend(prob_fake(out.cpu().tolist(), n_out))
                     y_true.extend(labels)
                     buf, labels = [], []
             if buf:
-                probs = model(torch.stack(buf).to(device)).softmax(dim=1)[:, FAKE]
-                y_score.extend(probs.cpu().tolist())
+                out = model(torch.stack(buf).to(device))
+                y_score.extend(prob_fake(out.cpu().tolist(), n_out))
                 y_true.extend(labels)
 
     res = metrics(y_true, y_score)
@@ -676,10 +799,23 @@ def eval_one(ckpt: str, real: str, fake: str, limit: int = 0,
     from .vendor.networks.resnet import resnet50
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = load_detector(ckpt, torch, resnet50, device)
-    r = score_pair(model, Path(real), Path(fake), torch, transforms, device,
-                   batch_size=batch_size, limit=limit)
-    return {"real": real, "fake": fake, **r}
+    # `.map()` của Modal HUỶ mọi task anh em khi một task raise ⇒ trước đây một
+    # checkpoint sai kiểu (fc [1,2048] vs [2,2048], 2026-10-28) làm chết cả 4
+    # detector × 15 cặp và KHÔNG ghi được CSV nào. Cùng bài học với `fetch_one`:
+    # không bao giờ raise ra ngoài, trả dict để `main` ghi lại và báo cáo.
+    try:
+        model, n_out = load_detector(ckpt, torch, resnet50, device)
+        r = score_pair(model, Path(real), Path(fake), torch, transforms, device,
+                       batch_size=batch_size, limit=limit, n_out=n_out)
+    except SystemExit as exc:      # thông điệp đã rõ ràng, giữ nguyên văn
+        return {"real": real, "fake": fake, "error": str(exc)}
+    except Exception as exc:  # noqa: BLE001 — một cặp hỏng không được giết cả lượt
+        import traceback
+
+        traceback.print_exc()
+        return {"real": real, "fake": fake,
+                "error": f"{type(exc).__name__}: {exc}"}
+    return {"real": real, "fake": fake, "n_out": n_out, **r}
 
 
 def _sysinfo() -> dict:
@@ -751,34 +887,20 @@ def main(
     created = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
     git_sha = os.environ.get("GIT_SHA") or "unknown"
     by_fake = {str(p["fake"]): p for p in pairs}
-    rows: list[dict] = []
-    for r in results:
-        meta = by_fake.get(r["fake"], {})
-        rows.append(
-            {
-                "experiment_id": exp,
-                "detector": "dire",
-                "branch": meta.get("branch", ""),
-                "generator": meta.get("generator", ""),
-                "split": split,
-                "transform": PREPROC,
-                "n_real": r["n_real"],
-                "n_fake": r["n_fake"],
-                "acc": round(r["acc"], 6),
-                "ap": round(r["ap"], 6),
-                "tpr_at_5fpr": round(r["tpr_at_5fpr"], 6),
-                "threshold": ACC_THRESHOLD,
-                "git_sha": git_sha,
-                "created_at": created,
-            }
-        )
+    failed: list[dict] = [r for r in results if r.get("error")]
+    rows: list[dict] = [
+        row_for_result(exp, r, by_fake.get(r["fake"], {}), split, git_sha, created)
+        for r in results
+    ]
     rows.sort(key=lambda d: (d["branch"], d["generator"]))
 
+    scored = [r for r in results if not r.get("error")]
     n_images = {
-        "real_total": sum(r["n_real"] for r in results),
-        "fake_total": sum(r["n_fake"] for r in results),
+        "real_total": sum(r["n_real"] for r in scored),
+        "fake_total": sum(r["n_fake"] for r in scored),
         "limit_per_archive": limit,
-        "skipped_unreadable": sum(r.get("skipped", 0) for r in results),
+        "skipped_unreadable": sum(r.get("skipped", 0) for r in scored),
+        "pairs_failed": len(failed),
     }
     write_csv(rows, out_dir / "dire.csv")
     run_json(
@@ -788,16 +910,32 @@ def main(
         n_images=n_images,
         rows=len(rows),
         sysinfo=_sysinfo(),
-        extra={"ckpt": ckpt, "split": split, "root": root, "only": only},
+        extra={"ckpt": ckpt, "split": split, "root": root, "only": only,
+               "pairs_failed": [{"fake": r["fake"], "error": r["error"]}
+                                for r in failed]},
     )
 
     # Bảng in ra: đọc được ngay trong log của Modal, không phải tải CSV về.
     print(f"\n{'branch':<28} {'generator':<18} {'n':>6} {'ACC':>7} {'AP':>7} {'T@5%':>7}")
     print("-" * 78)
     for d in rows:
+        if d.get("error"):
+            continue
         print(f"{d['branch']:<28} {d['generator']:<18} "
               f"{d['n_fake']:>6} {d['acc']:>7.4f} {d['ap']:>7.4f} {d['tpr_at_5fpr']:>7.4f}")
-    broken = [d for d in rows if d["n_real"] == 0 or d["n_fake"] == 0]
+    if failed:
+        print(f"\n[!] {len(failed)}/{len(results)} cặp KHÔNG chấm được "
+              "(metric để trống trong CSV, xem cột `error`):")
+        seen: set[str] = set()
+        for r in failed:
+            head = r["error"].strip().splitlines()[0] if r["error"].strip() else "?"
+            if head in seen:
+                continue
+            seen.add(head)
+            print(f"    {head}")
+        print("    (gộp theo thông điệp — sửa một lần là hết cả lượt)")
+    broken = [d for d in rows if d.get("error") is None and (
+        d["n_real"] == 0 or d["n_fake"] == 0)]
     if broken:
         print("\n[!] Cặp có một lớp RỖNG — nhãn hoặc đường dẫn sai, số ở trên vô nghĩa:")
         for d in broken:
@@ -812,6 +950,13 @@ def main(
 
     print(f"\n[eval] → {out_dir}/dire.csv · {out_dir}/run.json")
     vol_ckpt.commit()
+    if failed:
+        # Ném SAU khi đã ghi + commit: script dừng ở detector hỏng thay vì chạy
+        # tiếp 3 detector nữa với cùng lỗi (và cùng hoá đơn).
+        raise SystemExit(
+            f"[!] {len(failed)}/{len(results)} cặp không chấm được — kết quả đã "
+            f"ghi ở {out_dir} để còn đối chiếu."
+        )
     return str(out_dir)
 
 
