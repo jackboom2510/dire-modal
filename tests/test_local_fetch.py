@@ -503,12 +503,13 @@ def test_manifest_reuses_the_hash_cache_instead_of_rereading_gigabytes(tmp_path,
 # ---------------------------------------------------------------------------
 # 13. Tài liệu phải dùng ĐÚNG đường dẫn local mà manifest sinh ra
 # ---------------------------------------------------------------------------
-def test_runbook_upload_examples_use_real_local_paths():
-    """Mình đã viết sai chỗ này một lần: local KHÔNG có `data/raw/e2/`, nó giữ
-    đúng cây manifest (`dire/test/…`, `checkpoints/…`). Copy-paste lệnh sai từ
-    runbook là mất cả buổi upload nhầm thư mục."""
+def test_runbook_paths_under_data_raw_are_real():
+    """Mình đã viết sai chỗ này một lần: local KHÔNG có `data/raw/e2/`. Cây local
+    giữ đúng đường dẫn manifest (`dire/test/…`, `checkpoints/…`), nên một ví dụ
+    `./data/raw/e2` là đường dẫn không tồn tại — copy-paste từ runbook sẽ đẩy
+    nhầm thư mục rồi `eval::main` báo "không tìm thấy cặp real/generator nào",
+    lỗi trông như thiếu dữ liệu chứ không như sai đường dẫn."""
     from dire_modal.manifest import TIERS
-
     from dire_modal.manifest import File as _F
 
     prefixes = {f.local.split("/", 1)[0] for tier in TIERS.values()
@@ -516,7 +517,7 @@ def test_runbook_upload_examples_use_real_local_paths():
     prefixes |= {"dire", "checkpoints"}      # DirSpec mở ra dưới hai gốc này
 
     text = (Path(__file__).resolve().parents[1] / "docs/runbook-free.md").read_text(encoding="utf-8")
-    srcs = re.findall(r"modal volume put \S+ \./data/raw/(\S+)", text)
-    assert srcs, "không tìm thấy ví dụ `modal volume put` nào trong runbook"
-    bad = [s for s in srcs if s.split("/")[0] not in prefixes]
-    assert not bad, f"runbook đẩy `data/raw/{{{'|'.join(bad)}}}` — không phải cây local thật"
+    refs = re.findall(r"\./data/raw(?:/([^\s`'\")]+))?", text)
+    assert refs, "runbook không nhắc đường dẫn local nào — test đang kiểm nhầm chỗ?"
+    bad = [r for r in refs if r and r.split("/")[0] not in prefixes]
+    assert not bad, f"runbook nhắc `data/raw/{bad[0]}` — không phải cây local thật"

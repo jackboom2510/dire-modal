@@ -223,27 +223,49 @@ tải bằng GUI vào cây hơi khác vẫn được nhận nếu tên khớp **
 viên cùng tên thì báo thiếu chứ không đoán, vì đoán sai là báo "đủ" cho file sai.
 
 **Đưa lên Modal.** Eval chỉ đọc nhánh `dire/test/` (tier `e2`) + checkpoint tác
-giả, nên chỉ cần đẩy phần đó:
+giả, nên chỉ cần đẩy phần đó. `upload.py` lo việc đó — nó **hỏi Volume trước**
+để không đẩy lại file đã có, và đẩy **từng file** để resume được:
 
 ```bash
-# Đường dẫn local giữ ĐÚNG cây của manifest (`checkpoints/…`, `dire/test/…`),
-# nên đẩy nguyên hai thư mục con là xong — `modal volume put` chỉ truyền byte.
-modal volume put dire-raw ./data/raw/dire /raw/dire
-modal volume put dire-raw ./data/raw/checkpoints /raw/checkpoints
+# (1) Kế hoạch: đẩy gì, bỏ qua gì, `.staging` trên Volume đang chiếm bao nhiêu
+modal run -m dire_modal.upload::main --tiers e2min
 
-# xác nhận trên cloud (đối chiếu size + gzip) — CỔNG 2
+# (2) Đẩy thật (chỉ file thiếu / sai size), rồi tự kiểm lại size từng file
+modal run -m dire_modal.upload::main --tiers e2min --mode push
+
+# (3) Dọn `.staging` cũ trên Volume — CHỈ sau khi (2) báo "Volume khớp local"
+modal run -m dire_modal.upload::main --tiers e2min --mode clean --yes
+
+# Hoặc gộp (2)+(3): chỉ dọn khi kiểm lại thấy khớp từng byte
+modal run -m dire_modal.upload::main --tiers e2 --mode push --clean-after
+```
+
+Ba chi tiết mà `upload.py` xử lý thay bạn (đều thành test):
+
+| Bẫy | Hậu quả | Cách xử lý |
+|---|---|---|
+| `modal volume put` nhận path **tính từ gốc Volume** (`dire/test/…`), không phải `/raw/...` | dữ liệu nằm ở `/raw/raw/...` ⇒ eval báo "không tìm thấy cặp real/generator nào" | `remote_path()` bỏ tiền tố `/raw` |
+| `modal volume put <dir> <dest>` đặt thư mục **vào trong** đích | `/raw/dire/dire/...` | đẩy **từng file** tới đúng đường dẫn đích |
+| xoá `.staging` khi dữ liệu chưa lên Volume | mất bản duy nhất còn lại trên cloud | `--mode clean` **từ chối** nếu còn file của tier chưa có trên Volume; `--clean-after` chỉ chạy sau khi kiểm lại khớp |
+
+`--mode clean` **mặc định là dry-run** (in dung lượng từng vùng); chỉ xoá khi có
+`--yes`. Nó chỉ nhận đúng ba tên vùng nội bộ (`.staging`/`.bench`/`.state`) —
+gõ `--areas dire` sẽ bị từ chối, để một lần gõ sai không xoá dữ liệu thật.
+Muốn giữ lại phần đã tải xong của đường Modal cũ thì dọn `.bench`, `.state`
+trước và để `.staging` lại: `--mode clean --areas .bench,.state --yes`.
+
+Sau đó xác nhận trên cloud — CỔNG 2:
+
+```bash
 modal run -m dire_modal.download::verify
 bash tools/tree.sh                      # cây thật trên Volume, nếu nghi lệch tầng
 ```
-
-`modal volume put` đặt thư mục **vào trong** đường dẫn đích, nên nếu `::tree`
-thấy `/raw/dire/dire/...` thì đẩy lại bằng đích là thư mục cha: `… ./data/raw/dire /raw`.
 
 Muốn kiểm sha256 khớp giữa máy và Modal thay vì tin `modal volume put`:
 
 ```bash
 modal run -m dire_modal.archive::make_manifest          # /raw/_manifest_sha256.tsv
-# rồi so hai file TSV (cùng cột, cùng thứ tự) bằng diff
+# rồi so với `local_fetch --mode manifest` (cùng cột, cùng thứ tự) bằng diff
 ```
 
 Lưu ý dung lượng: Volume tính tiền theo **peak** đã dùng, nên đẩy 3.39 GB rồi

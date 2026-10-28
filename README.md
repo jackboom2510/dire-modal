@@ -150,6 +150,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | Lệnh | Việc |
 |---|---|
 | `bash tools/local_download.sh` | Tải dữ liệu về **máy local** (không Modal, không Volume) — cần `BaiduPCS-Go` đã login; xem runbook §2b |
+| `modal run -m dire_modal.upload::main --tiers e2min --mode push` | Đẩy dữ liệu **đã tải ở máy** lên Volume (chỉ file thiếu), rồi `--mode clean --yes` để dọn `.staging` cũ; xem runbook §2c |
 | `bash tools/tree.sh` | Cây toàn bộ Volume (`modal volume ls` chỉ đọc 1 tầng nên không ra cây được) |
 | `bash tools/bench_storage.sh` | Đo Volume vs R2 (mount + S3 API) |
 | `bash tools/bench_baidu_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |
