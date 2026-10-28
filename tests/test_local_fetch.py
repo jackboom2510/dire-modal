@@ -376,3 +376,124 @@ def test_msys_mangled_dest_is_demangled():
 def test_plain_windows_paths_are_left_alone():
     for p in ("C:/data/raw", "D:/GitLab/raw", "data/raw"):
         assert fc._demangle(p) == p
+
+
+# ---------------------------------------------------------------------------
+# 11. `--mode verify` — đã tải ĐÚNG chưa, không cần tải lại, không cần Baidu
+# ---------------------------------------------------------------------------
+import gzip as _gzip  # noqa: E402
+
+
+def _real_gz(path: Path, payload: bytes = b"x" * 50_000) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_gzip.compress(payload))
+    return path
+
+
+def test_verify_passes_when_everything_is_there_and_valid(tmp_path, monkeypatch, capsys):
+    dest = tmp_path / "raw"
+    _real_gz(dest / "e2/a/iddpm.tar.gz")
+    _stub_baidu(monkeypatch)
+    monkeypatch.setattr(lf, "_download_with_watchdog",
+                        lambda *a, **k: pytest.fail("verify không được tải gì"))
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote", "--paths",
+                  "e2/a/iddpm.tar.gz"])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "ĐỦ và ĐÚNG" in out
+
+
+def test_verify_reports_missing_and_broken_separately(tmp_path, capsys):
+    dest = tmp_path / "raw"
+    _real_gz(dest / "e2/a/good.tar.gz")
+    body = _gzip.compress(b"y" * 80_000)
+    (dest / "e2/b").mkdir(parents=True)
+    (dest / "e2/b/bad.tar.gz").write_bytes(body[: len(body) // 2])   # cụt
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote", "--paths",
+                  "e2/a/good.tar.gz,e2/b/bad.tar.gz,e2/c/absent.tar.gz"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "THIẾU" in out and "absent.tar.gz" in out
+    assert "HỎNG" in out and "bad.tar.gz" in out
+    assert "✅ đúng : 1/3" in out
+
+
+def test_verify_works_without_baidu_installed(tmp_path, monkeypatch, capsys):
+    """Máy đã có dữ liệu, không có BaiduPCS-Go: vẫn phải kiểm chứng được."""
+    dest = tmp_path / "raw"
+    _real_gz(dest / "e2/a/iddpm.tar.gz")
+    monkeypatch.setattr(lf, "_find_baidu", lambda *_a, **_k: (_ for _ in ()).throw(
+        SystemExit("không có BaiduPCS-Go")))
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--paths", "e2/a/iddpm.tar.gz"])
+    assert rc == 0, capsys.readouterr().out
+
+
+def test_verify_finds_files_downloaded_by_hand_under_another_tree(tmp_path, capsys):
+    """Người dùng tải bằng GUI vào cây hơi khác — tìm theo TÊN nếu khớp duy nhất."""
+    dest = tmp_path / "raw"
+    _real_gz(dest / "tai-bang-gui" / "iddpm.tar.gz")
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote", "--paths",
+                  "e2/lsun/iddpm.tar.gz"])
+    assert rc == 0, capsys.readouterr().out
+
+
+def test_verify_does_not_guess_when_two_files_share_a_name(tmp_path, capsys):
+    """Hai ứng viên cùng tên ⇒ KHÔNG đoán: đoán sai là báo "đủ" cho file sai."""
+    dest = tmp_path / "raw"
+    _real_gz(dest / "a/iddpm.tar.gz")
+    _real_gz(dest / "b/iddpm.tar.gz")
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote", "--paths",
+                  "e2/lsun/iddpm.tar.gz"])
+    assert rc == 1
+    assert "THIẾU" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# 12. `--mode manifest` — sha256 TSV CÙNG schema với archive::make_manifest
+# ---------------------------------------------------------------------------
+def test_manifest_matches_archive_schema_and_skips_internal_areas(tmp_path, capsys):
+    dest = tmp_path / "raw"
+    _real_gz(dest / "e2/a/iddpm.tar.gz")
+    (dest / "ckpts").mkdir(parents=True)
+    (dest / "ckpts/lsun_adm.pth").write_bytes(b"\0" * 500)          # .pth, có trong manifest
+    (dest / ".staging/baidu_x").mkdir(parents=True)
+    _real_gz(dest / ".staging/baidu_x/half.tar.gz")                  # nội bộ ⇒ bỏ
+    (dest / ".state").mkdir(parents=True)
+    (dest / ".state/validated.json").write_text("{}", encoding="utf-8")
+
+    assert lf.main(["--dest", str(dest), "--mode", "manifest"]) == 0
+    lines = (dest / "_manifest_sha256.tsv").read_text(encoding="utf-8").splitlines()
+
+    assert lines[0].split("\t") == ["source", "path", "size_bytes", "sha256"]
+    paths = [ln.split("\t")[1] for ln in lines[1:]]
+    assert paths == ["ckpts/lsun_adm.pth", "e2/a/iddpm.tar.gz"], paths
+    row = [ln for ln in lines if "iddpm" in ln][0].split("\t")
+    assert row[2] == str((dest / "e2/a/iddpm.tar.gz").stat().st_size)
+    assert row[3] == fc._sha256(dest / "e2/a/iddpm.tar.gz")
+
+
+def test_manifest_reuses_the_hash_cache_instead_of_rereading_gigabytes(tmp_path, monkeypatch):
+    """Băm lại 3.39 GB mỗi lần chạy là lý do người ta thôi không kiểm tra nữa."""
+    dest = tmp_path / "raw"
+    f = _real_gz(dest / "e2/a/iddpm.tar.gz")
+    calls = {"n": 0}
+    real = fc._sha256
+
+    def counting(p):
+        calls["n"] += 1
+        return real(p)
+
+    monkeypatch.setattr(lf, "_sha256", counting)
+    lf.make_manifest(dest)
+    assert calls["n"] == 1
+    lf.make_manifest(dest)          # size + mtime_ns không đổi ⇒ dùng cache
+    assert calls["n"] == 1, "băm lại file dù (size, mtime_ns) không đổi"
+
+    f.write_bytes(_gzip.compress(b"z" * 1000))   # đổi nội dung ⇒ phải băm lại
+    lf.make_manifest(dest)
+    assert calls["n"] == 2

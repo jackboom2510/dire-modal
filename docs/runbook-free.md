@@ -204,6 +204,47 @@ lệnh là tải tiếp từ byte đã có; file đã xong in `[SKIP]`.
 (timestamp, remote, local, size, sha256, status) và `.state/validated.json` giữ
 cache `(size, mtime_ns, sha256)`.
 
+### 2c. Đã có dữ liệu ở máy: kiểm chứng, rồi đưa phần cần thiết lên Modal
+
+```bash
+# Đã tải đúng chưa? (KHÔNG tải byte nào; thiếu/sai thì in rõ từng file)
+bash tools/local_download.sh --mode verify
+bash tools/local_download.sh --mode verify --no-remote    # không cần BaiduPCS-Go
+TIERS=e2 bash tools/local_download.sh --mode verify       # chỉ kiểm tier e2
+
+# sha256 toàn bộ — CÙNG schema với archive::make_manifest (/raw/_manifest_sha256.tsv)
+bash tools/local_download.sh --mode manifest
+# → <DEST>/_manifest_sha256.tsv : source, path, size_bytes, sha256
+```
+
+`verify` trả `0` chỉ khi **đủ và đúng**; hỏng/tải dở thì in `gzip -t` nói gì và
+gợi ý chạy lại `--mode fetch` (file đã đúng sẽ `[SKIP]`, **không xoá gì**). File
+tải bằng GUI vào cây hơi khác vẫn được nhận nếu tên khớp **duy nhất** — hai ứng
+viên cùng tên thì báo thiếu chứ không đoán, vì đoán sai là báo "đủ" cho file sai.
+
+**Đưa lên Modal.** Eval chỉ đọc nhánh `dire/test/` (tier `e2`) + checkpoint tác
+giả, nên chỉ cần đẩy phần đó:
+
+```bash
+# chỉ ~1.94 GB thay vì cả cây; `modal volume put` truyền thẳng byte đã có
+modal volume put dire-raw ./data/raw/e2 /raw/e2
+modal volume put dire-ckpt ./data/raw/checkpoints/lsun_adm.pth /lsun_adm.pth
+
+# xác nhận trên cloud (đối chiếu size + gzip) — CỔNG 2
+modal run -m dire_modal.download::verify
+```
+
+Muốn kiểm sha256 khớp giữa máy và Modal thay vì tin `modal volume put`:
+
+```bash
+modal run -m dire_modal.archive::make_manifest          # /raw/_manifest_sha256.tsv
+# rồi so hai file TSV (cùng cột, cùng thứ tự) bằng diff
+```
+
+Lưu ý dung lượng: Volume tính tiền theo **peak** đã dùng, nên đẩy 3.39 GB rồi
+xoá không làm hoá đơn nhỏ đi trong tháng đó. Chỉ đẩy `e2` + checkpoint là đủ cho
+Table 2 headline; `e4`/`e5` thêm khi thật cần ô đó.
+
 ### Tốc độ tải và resume xuyên container
 
 Ba thay đổi, mỗi cái nhắm một chi phí khác nhau:
