@@ -90,7 +90,8 @@ Entry = File | DirSpec
 # ============================================================================
 # Tên generator / dataset (giữ nguyên chính tả gốc của dataset, kể cả typo)
 # ============================================================================
-# 16 generator cho test LSUN-Bedroom — đây là bảng eval headline của DIRE.
+# 15 generator (+ `real`) cho test LSUN-Bedroom — bảng eval headline của DIRE.
+# Đếm kỹ: 16 phần tử ở đây, nhưng `real` KHÔNG phải generator ⇒ 15 cặp.
 _LSUN_TEST_GENS = [
     "adm",
     "ddpm",
@@ -167,7 +168,7 @@ E2: list[Entry] = [
     *_tars(
         "dire/test/lsun_bedroom/lsun_bedroom",
         _LSUN_TEST_GENS,
-        "eval headline: 16 generator, nhánh dire/ (0_real/1_fake)",
+        "eval headline: 15 generator, nhánh dire/ (0_real/1_fake)",
     ),
 ]
 

@@ -1510,7 +1510,7 @@ def main(
         # 1.5 giờ: chỉ 3 file đủ để chạy eval đầu tiên (xem tier `e2min`)
         modal run -m dire_modal.download::main --tiers e2min --mode fetch
 
-        # 7.4 giờ ở 76.6 KiB/s: toàn bộ bảng eval DIRE (16 generator)
+        # 7.4 giờ ở 76.6 KiB/s: toàn bộ bảng eval DIRE (15 generator, 16 tar)
         modal run -m dire_modal.download::main --tiers e2 --mode fetch
 
         # file lẻ, bỏ qua tier

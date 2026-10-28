@@ -19,7 +19,7 @@
 #     StyleGAN                            →   lsun_stylegan.pth
 #
 # Vì sao 8 cột: Table 2 có đúng 8 generator cho khối DIRE. Nhánh `e2` của repo
-# tải 16 generator (thêm projectedgan, diff-projectedgan, diff-stylegan, dalle2,
+# tải 15 generator (thêm projectedgan, diff-projectedgan, diff-stylegan, dalle2,
 # if, midjouney, stylegan…); những cái ngoài 8 cột này là phần MỞ RỘNG của dự
 # án, không có số paper để so.
 #

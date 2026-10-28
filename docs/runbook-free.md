@@ -661,6 +661,28 @@ diffusion ADM (`lsun_bedroom.pt`, 2.5 GB, trong `NEVER`).
 
 ---
 
+## 8b. Video giải thích (manim) — 0 credit, tuỳ chọn
+
+5 scene: lý thuyết → pipeline → bảng paper → đường đi dữ liệu → training.
+Số trong hình **đọc từ repo** (`paper_table2.tsv`, manifest, `loss_log.json`),
+không chép tay; `tests/test_manim_scenes.py` canh điều đó.
+
+```bash
+bash tools/manim/render.sh --check      # 5 scene, không render
+bash tools/manim/render.sh --quality l  # nháp 480p15
+bash tools/manim/render.sh --quality h --gif
+```
+
+Cần `ffmpeg` + `libcairo2-dev` + `libpango1.0-dev` (Linux) / chỉ `ffmpeg`
+(Windows). **Không** cài manim vào `cpu_image`/`gpu_image`: manim cần
+`numpy>=2.1`, torch ở đây pin `1.26.4`. Chi tiết + đường render trên Modal:
+`tools/manim/README.md`.
+
+Scene `TrainMechanism` cần log thật (§7b). **Chưa có log thì scene hiện khung
+"chưa có log" chứ không vẽ đường loss giả** — đó là hành vi đúng, không phải lỗi.
+
+---
+
 ## 9. Gallery + demo công khai (~$0.5 + $0)
 
 ```bash

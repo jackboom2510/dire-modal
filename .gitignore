@@ -24,3 +24,7 @@ platforms/hf-spaces/gallery/*.png
 # Dữ liệu tải ở MÁY LOCAL (tools/local_download.sh) — không bao giờ commit
 data/
 *.BaiduPCS-Go-downloading
+
+# Video (tools/manim) — GIF nhỏ thì commit để nhúng README, MP4 thì không
+docs/media/_manim/
+docs/media/*.mp4

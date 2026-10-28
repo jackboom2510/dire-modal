@@ -74,7 +74,7 @@ LỘ TRÌNH CẢI THIỆN (thứ tự là RÀNG BUỘC, không phải đề xu�
   FR-4  bias          AP ở clean / jpeg90 / png → tách dấu vết sinh ảnh khỏi codec
   FR-5  fusion        DIRE ⊕ AEROBLADE: rank-normalise + trọng số fit trên VAL
                       └─ chỉ gọi là "cải thiện" nếu AP(test) > cả hai thành phần
-                         ở ≥ 12/16 generator (AC-5.3). Nếu không → báo cáo là
+                         ở ≥ 75 % generator = 12/15 (AC-5.3). Nếu không → báo cáo là
                          "không cải thiện", đó là kết quả hợp lệ.
   FR-6  robustness    20 điều kiện × 2 detector (jpeg/blur/crop/noise)
 
@@ -158,5 +158,5 @@ Tải về:  modal volume get dire-ckpt results ./results
 Cổng chặn cần nhớ (spec.md §11):
   FR-2 KHÔNG ĐẠT ⇒ dừng, mọi kết luận sau chỉ dựa trên map TÁC GIẢ phát hành.
   FR-5 phải báo cáo cả 3 dòng (DIRE / AEROBLADE / kết hợp) trên cùng tập.
-  AC-5.3: không đạt ≥ 12/16 generator thì ghi "không cải thiện" — đừng uốn số.
+  AC-5.3: không đạt ≥ 75 % generator (12/15) thì ghi "không cải thiện" — đừng uốn số.
 EOF

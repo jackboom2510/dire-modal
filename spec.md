@@ -104,7 +104,7 @@ Ký hiệu tiêu chí: **Given / When / Then**.
 
 ### FR-1 — Đo DIRE trên checkpoint tác giả
 
-Hệ thống phải eval được `lsun_adm.pth` trên 16 generator của
+Hệ thống phải eval được `lsun_adm.pth` trên 15 generator của
 `dire/test/lsun_bedroom/lsun_bedroom/` và xuất bảng ACC/AP từng generator.
 
 - **Given** `/raw` đã có tier `e2,ckpts`
@@ -175,7 +175,8 @@ tái tạo được map của tác giả.
   trong lúc chọn.
 - **AC-5.2** Báo cáo cả 3 dòng: DIRE, AEROBLADE, kết hợp — cùng bảng, cùng tập.
 - **AC-5.3** Kết hợp chỉ được gọi là "cải thiện" nếu AP trên test **cao hơn cả
-  hai** thành phần ở **≥ 12/16** generator. Nếu không, phải báo cáo là "không
+  hai** thành phần ở **≥ 75 %** generator (12/15 — trước ghi `12/16` vì đếm cả
+  tar `real`; dùng % để ngưỡng không phụ thuộc số generator). Nếu không, phải báo cáo là "không
   cải thiện" — đây là kết quả hợp lệ.
 - **AC-5.4** Không có tham số nào của detector bị sửa (ràng buộc C3). Chỉ một
   trọng số vô hướng + một ngưỡng.
@@ -241,10 +242,10 @@ gốc) nhưng phải **cùng ảnh nguồn** — đó là AC-3.1.
 cần ResNet50 inference, ở 224², trên CPU: **< 10 phút**, gần như miễn phí. Không
 cần ADM, không cần diffusion, **không train**.
 
-**Số ảnh phải đọc là ~17k, không phải 32k** (bản trước ghi sai gấp đôi). Theo
+**Số ảnh phải đọc là ~16k, không phải 32k** (bản trước ghi sai gấp đôi). Theo
 paper §3.1: mỗi cột generator dùng **chung một bộ 1k ảnh real** (`real.tar.gz`,
-26.6 MB) + 1k ảnh của generator đó. Nhánh `e2` có 16 generator ⇒ 1k real + 16k
-generated ≈ **17k ảnh**, cộng dồn qua 4 detector thì mới là ~68k lượt forward.
+26.6 MB) + 1k ảnh của generator đó. Nhánh `e2` có 15 generator (16 tar: 1 `real` + 15 generator) ⇒ 1k real + 15k
+generated ≈ **16k ảnh**, cộng dồn qua 4 detector thì mới là ~64k lượt forward.
 Con số "2000 ảnh/generator" là real+fake của **một** cột, không phải 2000 ảnh
 riêng cho mỗi generator.
 
@@ -275,7 +276,7 @@ Số tham chiếu của Table 2 nằm ở `src/dire_modal/paper_table2.tsv` (kè
 arXiv:2303.09295v1, Table 2, trang 7). `eval::report` in Δ từng ô và đếm số ô
 khớp — không có bảng tham chiếu thì "tái lập" chỉ là một lời khẳng định.
 
-⚠ Nhánh `e2` có **16 generator**, nhưng Table 2 chỉ có **8 cột** (adm, ddpm,
+⚠ Nhánh `e2` có **15 generator** (16 tar, gồm cả `real`), nhưng Table 2 chỉ có **8 cột** (adm, ddpm,
 iddpm, pndm, sdv1, sdv2, ldm, vqdiffusion). 8 generator còn lại (stylegan,
 projectedgan, diff-projectedgan, diff-stylegan, dalle2, if, midjouney… ) là phần
 **mở rộng của dự án** — không có số paper, không được cộng vào "tái lập paper".

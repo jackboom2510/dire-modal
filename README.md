@@ -156,6 +156,8 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `bash tools/bench_baidu_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |
 | `bash tools/measure_dire.sh` | Đo ảnh/giây của DIRE → số giờ GPU thật |
 | `bash tools/pack_shards.sh` | Pack WebDataset shards (chỉ cần nếu TRAIN — ngoài phạm vi) |
+| `bash tools/manim/render.sh --check` | Liệt kê 5 scene video giải thích DIRE (không render) |
+| `bash tools/manim/render.sh --quality l` | Render video giải thích (nháp 480p15) — xem `tools/manim/README.md` |
 
 **Lệnh Modal trực tiếp:**
 
@@ -252,6 +254,7 @@ src/dire_modal/
   vendor/           # module DIRE gốc đã vendorize
 tools/              # free_quota.py, storage_cost.py (thuần stdlib) + tiện ích .sh
                     #   local_download.sh = tải ở MÁY LOCAL (không cần Modal)
+                    #   manim/ = video giải thích (5 scene, số đọc từ repo)
 scripts/            # ĐÚNG 2 quy trình: 01_repro.sh · 02_improve.sh (+ setup/check/lib)
 platforms/          # bootstrap cho kaggle / runpod / vast / hf-spaces
 docs/               # runbook, so sánh, ADR
@@ -268,6 +271,8 @@ manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 | Mirror HF/Kaggle + verify sha256 | ✅ |
 | Eval (pre-trained) | ✅ code xong — `eval::main` tự tìm ckpt, in CỔNG S2; `eval::report` in Δ so với paper |
 | Tái lập Table 2 | ✅ code + quy trình xong (`scripts/01_repro.sh`) — **số của mình chưa có**, cần chạy thật |
+| Video giải thích (manim) | ✅ code 5 scene xong — **chưa render** (máy cần cairo/pango; hoặc image Modal riêng, xem `tools/manim/README.md`) |
+| `demo_train` (train demo để quay video) | ✅ code + 29 test — **chưa chạy thật** (cần tier `train`) |
 | Train lại | ⛔ ngoài phạm vi (spec.md N1: chỉ cải thiện, không train lại) |
 | Stage-2 (compute DIRE toàn dataset) | ⏳ code viết theo API guided-diffusion, **chưa chạy thử**; cần ~30–60 A100-h |
 | Demo HF Spaces | ✅ code + hướng dẫn; ⏳ chờ checkpoint & gallery |
