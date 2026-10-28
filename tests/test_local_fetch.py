@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 
@@ -497,3 +498,25 @@ def test_manifest_reuses_the_hash_cache_instead_of_rereading_gigabytes(tmp_path,
     f.write_bytes(_gzip.compress(b"z" * 1000))   # đổi nội dung ⇒ phải băm lại
     lf.make_manifest(dest)
     assert calls["n"] == 2
+
+
+# ---------------------------------------------------------------------------
+# 13. Tài liệu phải dùng ĐÚNG đường dẫn local mà manifest sinh ra
+# ---------------------------------------------------------------------------
+def test_runbook_upload_examples_use_real_local_paths():
+    """Mình đã viết sai chỗ này một lần: local KHÔNG có `data/raw/e2/`, nó giữ
+    đúng cây manifest (`dire/test/…`, `checkpoints/…`). Copy-paste lệnh sai từ
+    runbook là mất cả buổi upload nhầm thư mục."""
+    from dire_modal.manifest import TIERS
+
+    from dire_modal.manifest import File as _F
+
+    prefixes = {f.local.split("/", 1)[0] for tier in TIERS.values()
+                if isinstance(tier, list) for f in tier if isinstance(f, _F)}
+    prefixes |= {"dire", "checkpoints"}      # DirSpec mở ra dưới hai gốc này
+
+    text = (Path(__file__).resolve().parents[1] / "docs/runbook-free.md").read_text(encoding="utf-8")
+    srcs = re.findall(r"modal volume put \S+ \./data/raw/(\S+)", text)
+    assert srcs, "không tìm thấy ví dụ `modal volume put` nào trong runbook"
+    bad = [s for s in srcs if s.split("/")[0] not in prefixes]
+    assert not bad, f"runbook đẩy `data/raw/{{{'|'.join(bad)}}}` — không phải cây local thật"

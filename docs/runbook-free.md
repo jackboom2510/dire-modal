@@ -226,13 +226,18 @@ viên cùng tên thì báo thiếu chứ không đoán, vì đoán sai là báo 
 giả, nên chỉ cần đẩy phần đó:
 
 ```bash
-# chỉ ~1.94 GB thay vì cả cây; `modal volume put` truyền thẳng byte đã có
-modal volume put dire-raw ./data/raw/e2 /raw/e2
-modal volume put dire-ckpt ./data/raw/checkpoints/lsun_adm.pth /lsun_adm.pth
+# Đường dẫn local giữ ĐÚNG cây của manifest (`checkpoints/…`, `dire/test/…`),
+# nên đẩy nguyên hai thư mục con là xong — `modal volume put` chỉ truyền byte.
+modal volume put dire-raw ./data/raw/dire /raw/dire
+modal volume put dire-raw ./data/raw/checkpoints /raw/checkpoints
 
 # xác nhận trên cloud (đối chiếu size + gzip) — CỔNG 2
 modal run -m dire_modal.download::verify
+bash tools/tree.sh                      # cây thật trên Volume, nếu nghi lệch tầng
 ```
+
+`modal volume put` đặt thư mục **vào trong** đường dẫn đích, nên nếu `::tree`
+thấy `/raw/dire/dire/...` thì đẩy lại bằng đích là thư mục cha: `… ./data/raw/dire /raw`.
 
 Muốn kiểm sha256 khớp giữa máy và Modal thay vì tin `modal volume put`:
 
