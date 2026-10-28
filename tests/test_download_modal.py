@@ -1810,3 +1810,183 @@ def test_pack_groups_are_stable_for_single_level_branch():
     pack = importlib.import_module("dire_modal.pack")
     assert pack.shard_group("dire/test/celebahq/stargan.tar.gz", "test") == "celebahq__stargan"
     assert pack.shard_group("dire/train/lsun_bedroom/adm.tar.gz", "train") == "lsun_bedroom__adm"
+
+
+# ---------------------------------------------------------------------------
+# 16. CỔNG 7 — `verify` phải kiểm CẢ checkpoint `.pth` (không chỉ .tar.gz)
+# ---------------------------------------------------------------------------
+# Vì sao: `verify` cũ chỉ `rglob("*.tar.gz")`, nên 6 checkpoint 269.4 MB nằm
+# ngoài mọi phép kiểm. Một `.pth` cụt vẫn "tồn tại", vẫn đúng tên, và chỉ nổ ở
+# `torch.load` — giữa lúc eval đã tiêu tiền GPU. `.pth` không kiểm được bằng
+# `gzip -t`, nên bằng chứng duy nhất là size + sha256 đối chiếu manifest.
+def _ckpt_env(dl, *, size: int = 1000, body: bytes | None = None,
+              manifest_size: int | None = None, manifest_sha: str | None = None,
+              rel: str = "checkpoints/lsun_adm.pth", source: str = "raw",
+              root: str = "raw"):
+    """Dựng RAW/CKPT + manifest TSV cho test checkpoint."""
+    import hashlib as _hashlib
+    import tempfile as _tf
+
+    dl.RAW = Path(_tf.mkdtemp())
+    dl.CKPT = Path(_tf.mkdtemp())
+    base = dl.RAW if root == "raw" else dl.CKPT
+    f = base / rel
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(body if body is not None else b"\0" * size)
+    digest = manifest_sha if manifest_sha is not None else _hashlib.sha256(f.read_bytes()).hexdigest()
+    size_col = manifest_size if manifest_size is not None else f.stat().st_size
+    (dl.RAW / "_manifest_sha256.tsv").write_text(
+        "source\tpath\tsize_bytes\tsha256\n"
+        f"{source}\t{rel}\t{size_col}\t{digest}\n", encoding="utf-8")
+    return f
+
+
+def _run_verify(dl):
+    """Chạy `verify` và trả (stdout, SystemExit|None)."""
+    import contextlib
+    import io
+
+    buf = io.StringIO()
+    err = None
+    with contextlib.redirect_stdout(buf):
+        try:
+            dl.verify.local()
+        except SystemExit as exc:      # verify in hết báo cáo rồi mới raise
+            err = exc
+    return buf.getvalue(), err
+
+
+def test_verify_checks_checkpoint_against_manifest():
+    dl, _ = install_stub()
+    _ckpt_env(dl)
+    out, err = _run_verify(dl)
+
+    assert err is None, out
+    assert "checkpoints/lsun_adm.pth" in out, out
+    assert "sha256 khớp manifest" in out, out
+    assert "[CỔNG 7] 1/1 checkpoint OK" in out, out
+    assert "All OK." in out, out
+
+
+def test_verify_flags_truncated_checkpoint_even_though_the_file_exists():
+    """Đây là lỗi mà verify cũ bỏ sót hoàn toàn: file tồn tại nhưng thiếu byte."""
+    dl, _ = install_stub()
+    _ckpt_env(dl, size=1000, manifest_size=269_400_000)
+    out, err = _run_verify(dl)
+
+    assert err is not None and err.code == 1, out
+    assert "≠ manifest" in out and "lệch -269399000 B" in out, out
+    assert "Checkpoint HỎNG" in out, out
+    assert "All OK." not in out
+
+
+def test_verify_flags_same_size_different_bytes():
+    """Hai file cùng size, khác nội dung — chỉ sha256 bắt được."""
+    dl, _ = install_stub()
+    _ckpt_env(dl, body=b"A" * 64, manifest_sha="0" * 64)
+    out, err = _run_verify(dl)
+
+    assert err is not None and err.code == 1, out
+    assert "sha256" in out and "nội dung khác" in out, out
+
+
+def test_verify_does_not_claim_proof_when_manifest_is_missing():
+    """Không có manifest ⇒ chỉ kiểm được size; phải NÓI RÕ, không gọi là 'khớp'."""
+    dl, _ = install_stub()
+    import tempfile as _tf
+
+    dl.RAW = Path(_tf.mkdtemp())
+    dl.CKPT = Path(_tf.mkdtemp())
+    (dl.RAW / "checkpoints").mkdir(parents=True)
+    (dl.RAW / "checkpoints" / "lsun_adm.pth").write_bytes(b"\0" * 500)
+
+    out, err = _run_verify(dl)
+    assert err is None, out
+    assert "chưa có /raw/_manifest_sha256.tsv" in out, out
+    assert "CHƯA đối chiếu sha256" in out, out
+
+
+def test_verify_covers_the_ckpt_volume_too():
+    dl, _ = install_stub()
+    _ckpt_env(dl, rel="pretrained/lsun_adm.pth", source="ckpt", root="ckpt")
+    out, err = _run_verify(dl)
+
+    assert err is None, out
+    assert "ckpt/pretrained/lsun_adm.pth" in out, out
+
+
+def test_verify_hashes_each_checkpoint_once_then_uses_the_cache():
+    """Băm lại 6 × 269.4 MB mỗi lần là lý do người ta thôi không verify."""
+    dl, _ = install_stub()
+    _ckpt_env(dl)
+    calls = {"n": 0}
+    real = dl._sha256
+
+    def counting(p):
+        calls["n"] += 1
+        return real(p)
+
+    dl._sha256 = counting
+    try:
+        _run_verify(dl)
+        assert calls["n"] == 1
+        _run_verify(dl)                    # size + mtime_ns không đổi
+        assert calls["n"] == 1, "băm lại dù file không đổi ⇒ verify sẽ bị né"
+        # Đổi nội dung + mtime (ghi đè nhanh có thể giữ nguyên mtime_ns trên
+        # tmpfs ⇒ test sẽ pass vì lý do sai).
+        import os as _os
+
+        ck = dl.RAW / "checkpoints" / "lsun_adm.pth"
+        ck.write_bytes(b"\1" * 1000)
+        st = ck.stat()
+        _os.utime(ck, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+        _run_verify(dl)                    # (size, mtime_ns) đổi ⇒ bắt buộc băm lại
+        assert calls["n"] == 2
+    finally:
+        dl._sha256 = real
+
+
+def test_verify_still_checks_tar_gz():
+    """Đừng để việc thêm checkpoint làm rơi phép kiểm gzip cũ."""
+    import gzip as _gz
+
+    dl, _ = install_stub()
+    import tempfile as _tf
+
+    dl.RAW = Path(_tf.mkdtemp())
+    dl.CKPT = Path(_tf.mkdtemp())
+    good = dl.RAW / "dire/test/a/real.tar.gz"
+    good.parent.mkdir(parents=True)
+    good.write_bytes(_gz.compress(b"x" * 100))
+    bad = dl.RAW / "dire/test/b/fake.tar.gz"
+    bad.parent.mkdir(parents=True)
+    bad.write_bytes(b"Rar!\x1a\x07\x00" + b"\0" * 10)
+
+    out, err = _run_verify(dl)
+    assert err is not None and err.code == 1, out
+    assert "đã kiểm 2 file · hỏng 1" in out, out
+
+
+def test_parse_sha256_manifest_is_tolerant():
+    dl, _ = install_stub()
+    text = (
+        "source\tpath\tsize_bytes\tsha256\r\n"
+        "raw\tcheckpoints/a.pth\t100\t" + "a" * 64 + "\r\n"
+        "raw\tdire/test/x/real.tar.gz\t200\t" + "b" * 64 + "\n"
+        "rác không đủ cột\n"
+        "raw\tx/y.pth\tkhông-phải-số\t" + "c" * 64 + "\n"
+        "\n"
+    )
+    idx = dl.parse_sha256_manifest(text)
+    assert idx[("raw", "checkpoints/a.pth")] == (100, "a" * 64)
+    assert idx[("raw", "dire/test/x/real.tar.gz")] == (200, "b" * 64)
+    assert len(idx) == 2, idx          # dòng hỏng bị bỏ, không raise
+
+
+def test_checkpoint_check_is_shared_not_reimplemented():
+    """`local` và `download` phải dùng CÙNG một phép kiểm (bài học 2026-10-25)."""
+    src = (SRC / "dire_modal" / "download.py").read_text(encoding="utf-8")
+    assert "from .fetchcore import" in src
+    assert "def check_artifact" not in src, "download.py tự viết lại phép kiểm"
+    core = (SRC / "dire_modal" / "fetchcore.py").read_text(encoding="utf-8")
+    assert "def check_artifact" in core

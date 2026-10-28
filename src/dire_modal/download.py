@@ -66,6 +66,7 @@ from .common import (
 )
 from .fetchcore import (  # noqa: F401 — re-export, xem `__all__` bên dưới
     _KNOWN_SUFFIX,
+    ARTIFACT_SUFFIX,
     SizeEst,
     Verdict,
     _bytes_of,
@@ -87,6 +88,8 @@ from .fetchcore import (  # noqa: F401 — re-export, xem `__all__` bên dưới
     _slack_of,
     _tar_content,
     _validate_ex,
+    check_artifact,
+    parse_sha256_manifest,
 )
 from .manifest import (
     BAIDU_ROOT,
@@ -101,6 +104,8 @@ from .manifest import (
 )
 
 RAW = Path("/raw")
+#: Volume checkpoint — cũng chứa ``.pth`` nên phải nằm trong phép kiểm.
+CKPT = Path("/ckpt")
 
 # `fetchcore` mới là nơi ĐỊNH NGHĨA các hàm thuần dùng chung với `local_fetch`;
 # ở đây chỉ re-export để `download._validate_ex` (và test) vẫn là CÙNG một
@@ -809,6 +814,37 @@ def _validate_cached(rel: str | None, path: Path, expected: int = 0,
         except OSError:
             pass
     return v
+
+
+def _sha256_manifest() -> dict[tuple[str, str], tuple[int, str]]:
+    """Đọc ``/raw/_manifest_sha256.tsv`` (CỔNG 3). Thiếu ⇒ ``{}``, không raise."""
+    try:
+        text = (RAW / "_manifest_sha256.tsv").read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    return parse_sha256_manifest(text)
+
+
+def _digest_cached(key: str, path: Path) -> str:
+    """sha256 của ``path``, dùng cache ``(size, mtime_ns)`` trong ``.state``.
+
+    Băm lại 6 × 269.4 MB trên FUSE mỗi lần chạy ``verify`` là lý do người ta
+    thôi không verify. Cache chỉ có hiệu lực khi size VÀ mtime khớp.
+    """
+    rec = _load_state().get(key) or {}
+    try:
+        st = path.stat()
+    except OSError:
+        return ""
+    if (rec.get("sha256") and rec.get("size") == st.st_size
+            and rec.get("mtime_ns") == st.st_mtime_ns):
+        return rec["sha256"]
+    digest = _sha256(path)
+    try:
+        _record_valid(key, path, digest, "sha256")
+    except OSError:
+        pass
+    return digest
 
 
 def _find_downloaded(tmpdir: Path, want: str) -> Path | None:
@@ -2126,12 +2162,24 @@ def prune(tiers: str = POLICY.default_tiers, mode: str = "dry") -> None:
 
 @app.function(
     image=cpu_image,
-    volumes={"/raw": vol_raw},
+    volumes={"/raw": vol_raw, "/ckpt": vol_ckpt},
     timeout=2 * 3600,
     cpu=2.0,
 )
-def verify() -> None:
-    """``gzip -t`` toàn bộ file trong ``/raw``.
+def verify(check_ckpts: bool = True) -> None:
+    """Kiểm ``/raw`` **và** ``/ckpt``: ``gzip -t`` cho archive, size+sha256 cho ``.pth``.
+
+    Hai loại file cần hai loại bằng chứng, và trước đây chỉ loại thứ nhất được
+    kiểm:
+
+    * ``*.tar.gz`` — ``gzip -t`` đọc hết file, kiểm CRC + độ dài trailer. Đây là
+      bằng chứng mạnh nhất và không cần tham chiếu ngoài.
+    * ``*.pth``/``*.pt`` — **không** nén được kiểm bằng ``gzip -t``. Bản trước
+      bỏ qua hoàn toàn, nên 6 checkpoint 269.4 MB nằm ngoài mọi phép kiểm
+      (CỔNG 7 của runbook chưa có code). Một ``.pth`` cụt vẫn "tồn tại", vẫn
+      đúng tên, và chỉ nổ ở ``torch.load`` giữa lúc eval đã tiêu tiền GPU.
+      Giờ đối chiếu ``_manifest_sha256.tsv`` (CỔNG 3); chưa có manifest thì
+      **nói rõ** là chưa có tham chiếu, không im lặng coi là "khớp".
 
     Không cần Baidu secret (chỉ đọc Volume) nên cố ý KHÔNG gọi ``_baidu_login``
     — bản nháp đầu có gọi và sẽ chết KeyError vì thiếu ``secrets=[baidu_secret]``.
@@ -2154,7 +2202,56 @@ def verify() -> None:
         print(f"        ↳ {v.reason}")
         bad.append((rel, v.reason, v.retryable))
 
+    # --- checkpoint: KHÔNG kiểm được bằng `gzip -t` ------------------------
+    n_art = n_sha_ref = 0
+    art_bad: list[tuple[str, str]] = []
+    manifest: dict = {}
+    if check_ckpts:
+        manifest = _sha256_manifest()
+        if not manifest:
+            print("\n[ckpt] chưa có /raw/_manifest_sha256.tsv (CỔNG 3) → chỉ kiểm "
+                  "được tồn tại/size, KHÔNG đối chiếu được nội dung")
+        for root, source in ((RAW, "raw"), (CKPT, "ckpt")):
+            if not root.is_dir():
+                continue
+            for p in sorted(root.rglob("*")):
+                if not p.is_file() or p.suffix.lower() not in ARTIFACT_SUFFIX:
+                    continue
+                rel = p.relative_to(root).as_posix()
+                if _is_internal(rel):
+                    continue
+                n_art += 1
+                key = rel if source == "raw" else f"{source}/{rel}"
+                expected = manifest.get((source, rel)) or manifest.get(("raw", rel))
+                if expected:
+                    n_sha_ref += 1
+                v = check_artifact(p, expected,
+                                   digest_of=lambda q, k=key: _digest_cached(k, q))
+                tag = "OK  " if v.ok else "FAIL"
+                print(f"[{tag}] {_human(p.stat().st_size):>10}  {source}/{rel}")
+                if not v.ok:
+                    print(f"        ↳ {v.reason}")
+                    art_bad.append((f"{source}/{rel}", v.reason))
+                elif expected:
+                    # Có tham chiếu ⇒ in RA BẰNG CHỨNG (sha256 khớp), để "OK" ở
+                    # trên không bị đọc thành "chỉ tồn tại là xong".
+                    print(f"        ↳ {v.reason}")
+
     print(f"\nđã kiểm {n} file · hỏng {len(bad)}")
+    if n_art:
+        print(f"checkpoint: {n_art} file .pth/.pt · {n_sha_ref} có tham chiếu "
+              f"manifest · hỏng {len(art_bad)}")
+        if not art_bad:
+            print(f"[CỔNG 7] {n_art}/{n_art} checkpoint OK"
+                  + (f" (đối chiếu sha256: {n_sha_ref})" if n_sha_ref else
+                     " — CHƯA đối chiếu sha256 (thiếu manifest)"))
+    if art_bad:
+        print("\nCheckpoint HỎNG (eval sẽ nổ ở torch.load, không phải lúc tải):")
+        for rel, why in art_bad:
+            print(f"  ✗ {rel}\n     {why}")
+        print("\n  Cách xử lý: đẩy lại đúng file từ máy (upload::main) hoặc tải lại:")
+        print("    modal run -m dire_modal.download::main --paths <đường dẫn> --mode fetch")
+
     if bad:
         det = [b for b in bad if not b[2]]
         ret = [b for b in bad if b[2]]
@@ -2178,6 +2275,7 @@ def verify() -> None:
                 "  Cách xử lý: đối chiếu tên/định dạng với bản gốc của tác giả,"
                 "\n  hoặc để tier tương ứng ra khỏi phạm vi."
             )
+    if bad or art_bad:
         raise SystemExit(1)
     print("All OK.")
 

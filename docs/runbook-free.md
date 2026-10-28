@@ -117,8 +117,8 @@ modal run -m dire_modal.download::main --tiers e2,ckpts --mode fetch
 # đường ngắn nhất tới con số đầu tiên (3 file / ~400 MB / ~1.5 h):
 modal run -m dire_modal.download::main --tiers e2min --mode fetch
 
-# (f) Verify toàn bộ
-modal run -m dire_modal.download::verify    # ✅ CỔNG 2: "All OK."
+# (f) Verify toàn bộ — archive (.tar.gz) VÀ checkpoint (.pth/.pt)
+modal run -m dire_modal.download::verify    # ✅ CỔNG 2 (+ CỔNG 7): "All OK."
 ```
 
 **Phải chạy (c) và (d) trước khi tải.** Hai bước đó gần như miễn phí, và đã
@@ -254,12 +254,17 @@ gõ `--areas dire` sẽ bị từ chối, để một lần gõ sai không xoá 
 Muốn giữ lại phần đã tải xong của đường Modal cũ thì dọn `.bench`, `.state`
 trước và để `.staging` lại: `--mode clean --areas .bench,.state --yes`.
 
-Sau đó xác nhận trên cloud — CỔNG 2:
+Sau đó xác nhận trên cloud — CỔNG 2 **và** CỔNG 7 (verify kiểm cả `.pth`):
 
 ```bash
 modal run -m dire_modal.download::verify
 bash tools/tree.sh                      # cây thật trên Volume, nếu nghi lệch tầng
 ```
+
+`verify` kiểm `/raw` **và** `/ckpt`. Nếu mới upload và chưa sinh manifest, chạy
+`modal run -m dire_modal.archive::make_manifest` trước để có sha256 mà đối chiếu
+— không có nó thì checkpoint chỉ được kiểm "tồn tại + size > 0", và một file cụt
+sẽ chỉ nổ ở `torch.load` giữa lúc eval đã tiêu tiền GPU.
 
 Muốn kiểm sha256 khớp giữa máy và Modal thay vì tin `modal volume put`:
 
@@ -575,7 +580,22 @@ modal run -m dire_modal.download::main --tiers e2min --mode fetch
 ```
 
 ✅ **CỔNG 7** (đổi nghĩa): `/raw/checkpoints/lsun_adm.pth` tồn tại và
-`sha256` khớp manifest.
+`sha256` khớp manifest — **giờ do `download::verify` kiểm** (trước đây nó chỉ
+quét `*.tar.gz` nên 6 checkpoint 269.4 MB nằm ngoài mọi phép kiểm):
+
+```bash
+modal run -m dire_modal.download::verify
+# [OK  ]     269.4MB  raw/checkpoints/lsun_adm.pth
+#         ↳ ok — sha256 khớp manifest (269.4MB)
+# checkpoint: 6 file .pth/.pt · 6 có tham chiếu manifest · hỏng 0
+# [CỔNG 7] 6/6 checkpoint OK (đối chiếu sha256: 6)
+```
+
+`.pth` không kiểm được bằng `gzip -t`, nên bằng chứng là **size + sha256 đối
+chiếu `_manifest_sha256.tsv`** (CỔNG 3). Chưa có manifest ⇒ `verify` vẫn chạy
+nhưng **nói rõ** "CHƯA đối chiếu sha256" chứ không gọi đó là "khớp". sha256 được
+cache theo `(size, mtime_ns)` trong `/raw/.state` nên không băm lại 1.6 GB mỗi
+lần chạy.
 
 ---
 

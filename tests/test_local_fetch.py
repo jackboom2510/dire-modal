@@ -521,3 +521,42 @@ def test_runbook_paths_under_data_raw_are_real():
     assert refs, "runbook không nhắc đường dẫn local nào — test đang kiểm nhầm chỗ?"
     bad = [r for r in refs if r and r.split("/")[0] not in prefixes]
     assert not bad, f"runbook nhắc `data/raw/{bad[0]}` — không phải cây local thật"
+
+
+# ---------------------------------------------------------------------------
+# 14. `verify` tại máy cũng phải đối chiếu sha256 cho `.pth`
+# ---------------------------------------------------------------------------
+def test_local_verify_uses_manifest_sha_for_checkpoints(tmp_path, capsys):
+    """Đường local không có `gzip -t` cho `.pth`; manifest là bằng chứng duy nhất.
+
+    Cùng `fetchcore.check_artifact` với `download::verify` — hai phía không được
+    trả lời khác nhau cho cùng một câu hỏi (bài học 2026-10-25).
+    """
+    import hashlib as _hashlib
+
+    dest = tmp_path / "raw"
+    ck = dest / "checkpoints/lsun_adm.pth"
+    ck.parent.mkdir(parents=True)
+    body = b"\0" * 4096
+    ck.write_bytes(body)
+    (dest / "_manifest_sha256.tsv").write_text(
+        "source\tpath\tsize_bytes\tsha256\n"
+        f"raw\tcheckpoints/lsun_adm.pth\t{len(body)}\t{_hashlib.sha256(body).hexdigest()}\n",
+        encoding="utf-8")
+
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote",
+                  "--paths", "checkpoints/lsun_adm.pth"])
+    out = capsys.readouterr().out
+    assert rc == 0, out
+    assert "đối chiếu sha256" in out, out
+
+    # Cùng size, khác byte ⇒ chỉ sha bắt được.
+    ck.write_bytes(b"\1" * len(body))
+    import os as _os
+    st = ck.stat()
+    _os.utime(ck, ns=(st.st_atime_ns, st.st_mtime_ns + 1_000_000))
+    rc = lf.main(["--dest", str(dest), "--mode", "verify", "--no-remote",
+                  "--paths", "checkpoints/lsun_adm.pth"])
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert "sha256" in out and "nội dung khác" in out, out

@@ -48,6 +48,7 @@ import time
 from pathlib import Path
 
 from .fetchcore import (
+    ARTIFACT_SUFFIX,
     SizeEst,
     _bytes_of,
     _demangle,
@@ -57,7 +58,9 @@ from .fetchcore import (
     _sha256,
     _slack_of,
     _validate_ex,
+    check_artifact,
     hold_into,
+    parse_sha256_manifest,
     staging_dir_for,
 )
 from .manifest import BAIDU_ROOT, POLICY, TIERS, File, expand, is_never, resolve_many
@@ -424,6 +427,17 @@ def verify(files: list[File], sizes: dict[str, SizeEst | None], dest: Path,
     print(f"\n{'='*78}\nKIỂM CHỨNG {len(files)} file → {dest}\n{'='*78}")
     ok, missing, bad = [], [], []
     total = 0
+    # `.pth` không kiểm được bằng `gzip -t` ⇒ đối chiếu manifest nếu đã sinh
+    # (`--mode manifest`). Cùng hàm với `download::verify` để hai phía không
+    # trả lời khác nhau cho cùng một câu hỏi.
+    manifest: dict[str, tuple[int, str]] = {}
+    try:
+        idx = parse_sha256_manifest(
+            (dest / "_manifest_sha256.tsv").read_text(encoding="utf-8"))
+        manifest = {rel: rec for (_src, rel), rec in idx.items()}
+    except OSError:
+        pass
+    n_sha_ref = 0
     for f in files:
         p = _find_on_disk(dest, f.local)
         if p is None:
@@ -431,7 +445,13 @@ def verify(files: list[File], sizes: dict[str, SizeEst | None], dest: Path,
             missing.append(f)
             continue
         est = sizes.get(f.remote)
-        v = _validate_ex(p, _bytes_of(est), slack=_slack_of(est))
+        expected = manifest.get(f.local) if p.suffix.lower() in ARTIFACT_SUFFIX else None
+        if expected:
+            n_sha_ref += 1
+            v = check_artifact(p, expected,
+                               digest_of=lambda q, r=f.local: _hash_cached(dest, r, q))
+        else:
+            v = _validate_ex(p, _bytes_of(est), slack=_slack_of(est))
         size = p.stat().st_size
         if not v.ok:
             print(f"  ❌ HỎNG    {_human(size):>10}  {f.local}\n"
@@ -453,6 +473,8 @@ def verify(files: list[File], sizes: dict[str, SizeEst | None], dest: Path,
         print(f"  ❌ thiếu: {len(missing)}")
     if bad:
         print(f"  ❌ hỏng : {len(bad)}")
+    if n_sha_ref:
+        print(f"  🔐 checkpoint đối chiếu sha256 với manifest: {n_sha_ref}")
     if n_all and not missing and not bad:
         print("\n  → ĐỦ và ĐÚNG. Sẵn sàng cho bước tiếp theo.")
     else:
