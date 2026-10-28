@@ -4,6 +4,8 @@
 #   bash tools/local_download.sh                             # kế hoạch e2min (không tải)
 #   DEST=./data/raw bash tools/local_download.sh --mode fetch
 #   TIERS=e2,ckpts bash tools/local_download.sh --mode fetch  # 3.25 GB, ~12 h
+#   bash tools/local_download.sh --mode verify                # đã tải đúng chưa?
+#   bash tools/local_download.sh --mode manifest              # sha256 TSV (để mirror)
 #   MSYS_NO_PATHCONV=1 ... (script tự bật)
 #
 # Vì sao có script này: đường Modal bị ba trần của nền tảng (attempt 1800 s, lần

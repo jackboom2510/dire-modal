@@ -50,6 +50,7 @@ MODULES = [
     "dire_modal.manifest",
     "dire_modal.common",
     "dire_modal.pack",
+    "dire_modal.upload",
 ]
 
 # Chạy trong subprocess với sys.modules sạch. Tên module truyền qua argv để

@@ -370,23 +370,144 @@ def fetch_one(bin_: str, f: File, dest: Path, expected: SizeEst | None,
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+def _is_internal_rel(rel: str) -> bool:
+    """``True`` nếu đường dẫn thuộc vùng nội bộ, không phải dữ liệu.
+
+    Cùng luật với ``download._is_internal``: file dở (``.staging``) mà đem đi
+    kiểm thì lúc nào cũng "hỏng", còn ``.bench`` là rác của phép đo tốc độ.
+    """
+    first = rel.replace("\\", "/").lstrip("/").split("/", 1)[0]
+    return first in {".staging", ".state", ".bench"}
+
+
+def _hash_cached(dest: Path, rel: str, path: Path) -> str:
+    """sha256 của ``path``, dùng lại cache nếu ``(size, mtime_ns)`` không đổi.
+
+    Đọc lại 3.39 GB chỉ để hỏi "file này vẫn tốt chứ" là thứ khiến người ta thôi
+    kiểm tra. Cache chỉ có hiệu lực khi size VÀ mtime khớp.
+    """
+    rec = _load_state(dest).get(rel) or {}
+    st = path.stat()
+    if rec.get("size") == st.st_size and rec.get("mtime_ns") == st.st_mtime_ns \
+            and rec.get("sha256"):
+        return rec["sha256"]
+    digest = _sha256(path)
+    _save_state(dest, rel, path, digest, rec.get("fmt") or "gzip")
+    return digest
+
+
+def _find_on_disk(dest: Path, local_rel: str) -> Path | None:
+    """Tìm file theo đường dẫn chính thức; nếu không có thì tìm theo TÊN.
+
+    Cần nhánh thứ hai vì người dùng hay tải bằng GUI Baidu (hoặc giải nén tay)
+    vào một cây hơi khác, rồi hỏi "thế đủ chưa?". Đoán theo tên chỉ khi khớp
+    DUY NHẤT — hai ứng viên thì không đoán, báo thiếu để người dùng chỉ đường.
+    """
+    exact = dest / local_rel
+    if exact.is_file():
+        return exact
+    name = Path(local_rel).name
+    hits = [p for p in dest.rglob(name)
+            if p.is_file() and not _is_internal_rel(p.relative_to(dest).as_posix())]
+    return hits[0] if len(hits) == 1 else None
+
+
+def verify(files: list[File], sizes: dict[str, SizeEst | None], dest: Path,
+           do_hash: bool = True) -> int:
+    """Kiểm chứng dữ liệu ĐÃ CÓ trên máy. Không gọi Baidu để tải byte nào.
+
+    Vì sao cần: sau khi tải xong, câu hỏi thật là "có đủ và đúng không", chứ
+    không phải "tải tiếp". Đường Modal trả lời câu đó bằng ``::verify``; ở đây
+    phải trả lời được mà không cần Modal, nếu không người dùng phải upload dữ
+    liệu lên cloud chỉ để biết nó có hỏng hay không.
+    """
+    print(f"\n{'='*78}\nKIỂM CHỨNG {len(files)} file → {dest}\n{'='*78}")
+    ok, missing, bad = [], [], []
+    total = 0
+    for f in files:
+        p = _find_on_disk(dest, f.local)
+        if p is None:
+            print(f"  ❌ THIẾU   {f.local}")
+            missing.append(f)
+            continue
+        est = sizes.get(f.remote)
+        v = _validate_ex(p, _bytes_of(est), slack=_slack_of(est))
+        size = p.stat().st_size
+        if not v.ok:
+            print(f"  ❌ HỎNG    {_human(size):>10}  {f.local}\n"
+                  f"       → {v.reason}")
+            bad.append((f, v.reason))
+            continue
+        total += size
+        ok.append((f, p, v))
+        line = f"  ✅ {_human(size):>10}  {f.local}"
+        if do_hash:
+            line += f"  sha256={_hash_cached(dest, f.local, p)[:12]}…"
+        if v.fmt and v.fmt != "gzip":
+            line += f"  ({v.fmt})"
+        print(line)
+
+    n_all = len(files)
+    print(f"{'-'*78}\n  ✅ đúng : {len(ok)}/{n_all}  ({_human(total)})")
+    if missing:
+        print(f"  ❌ thiếu: {len(missing)}")
+    if bad:
+        print(f"  ❌ hỏng : {len(bad)}")
+    if n_all and not missing and not bad:
+        print("\n  → ĐỦ và ĐÚNG. Sẵn sàng cho bước tiếp theo.")
+    else:
+        print("\n  Chạy lại đúng lệnh tải để lấp phần thiếu/hỏng: thêm --mode fetch\n"
+              "  (đừng xoá gì: file đã đúng sẽ [SKIP])")
+    return 0 if (not missing and not bad) else 1
+
+
+def make_manifest(dest: Path, out: Path | None = None) -> int:
+    """Sinh ``_manifest_sha256.tsv`` — CÙNG schema với ``archive::make_manifest``.
+
+    Nhờ vậy manifest tính ở máy (miễn phí, chỉ tốn đĩa) dùng được cho bước mirror
+    / kiểm chứng trên cloud mà không phải băm lại 3.39 GB trong container.
+    """
+    dest = dest.resolve()
+    out = out or dest / "_manifest_sha256.tsv"
+    rows = []
+    for p in sorted(dest.rglob("*")):
+        if not p.is_file() or p.suffix not in (".gz", ".pth", ".pt"):
+            continue
+        rel = p.relative_to(dest).as_posix()
+        if _is_internal_rel(rel):
+            continue
+        rows.append((rel, p.stat().st_size, _hash_cached(dest, rel, p)))
+    with out.open("w", encoding="utf-8", newline="") as fh:
+        fh.write("source\tpath\tsize_bytes\tsha256\n")
+        for rel, size, digest in rows:
+            fh.write(f"{dest.name}\t{rel}\t{size}\t{digest}\n")
+    total = sum(r[1] for r in rows)
+    print(f"\n[manifest] {len(rows)} file · {_human(total)} → {out}")
+    print("            (cùng schema với archive::make_manifest — dùng được cho "
+          "bước mirror/verify trên Modal)")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="python -m dire_modal.local_fetch",
-        description="Tải dữ liệu DIRE về máy local (không Modal, không Volume).",
+        description="Tải / kiểm chứng dữ liệu DIRE ở máy local (không Modal, không Volume).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""ví dụ:
   python -m dire_modal.local_fetch --tiers e2min --dest ./data/raw
   python -m dire_modal.local_fetch --tiers e2min --dest ./data/raw --mode fetch
   python -m dire_modal.local_fetch --tiers e2,ckpts --mode fetch   # 3.25 GB, ~12 h
+  python -m dire_modal.local_fetch --tiers e2min --mode verify     # đã tải đúng chưa?
+  python -m dire_modal.local_fetch --mode manifest                 # sinh sha256 TSV
   python -m dire_modal.local_fetch --paths checkpoints/lsun_adm.pth --mode fetch
 """)
     ap.add_argument("--tiers", default="e2min",
                     help=f"tier cần tải, phân cách bằng dấu phẩy. Có: {sorted(TIERS)}")
     ap.add_argument("--dest", default=DEFAULT_DEST,
                     help=f"thư mục gốc trên máy (mặc định {DEFAULT_DEST})")
-    ap.add_argument("--mode", default="plan", choices=["plan", "fetch"],
-                    help="plan (mặc định — KHÔNG tải gì) hoặc fetch")
+    ap.add_argument("--mode", default="plan", choices=["plan", "fetch", "verify", "manifest"],
+                    help="plan (mặc định, KHÔNG tải) | fetch | verify (kiểm chứng) "
+                         "| manifest (sinh sha256 TSV)")
     ap.add_argument("--paths", default="",
                     help="danh sách đường dẫn remote, phân cách bằng dấu phẩy")
     ap.add_argument("--max-gb", type=float, default=POLICY.max_gb,
@@ -399,6 +520,10 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--max-hours", type=float, default=0,
                     help="0 = không giới hạn (mặc định)")
     ap.add_argument("--baidu-bin", default="", help="đường dẫn tới BaiduPCS-Go")
+    ap.add_argument("--no-remote", action="store_true",
+                    help="verify/manifest: KHÔNG hỏi Baidu (kiểm bằng gzip -t + size local)")
+    ap.add_argument("--no-hash", action="store_true",
+                    help="verify: bỏ qua sha256 (nhanh hơn nhiều trên ổ chậm)")
     return ap
 
 
@@ -408,11 +533,27 @@ def main(argv: list[str] | None = None) -> int:
     dest = Path(_demangle(args.dest)).expanduser()
     paths = _demangle_list(args.paths)
 
-    bin_ = _find_baidu(args.baidu_bin)
-    _preflight(bin_)
+    offline = args.mode == "manifest" or args.no_remote
+    bin_ = ""
+    if not offline:
+        try:
+            bin_ = _find_baidu(args.baidu_bin)
+            _preflight(bin_)
+        except SystemExit:
+            if args.mode != "verify":
+                raise
+            # Verify vẫn hữu ích khi không có Baidu: gzip -t + size trả lời được
+            # "file này có đọc được trọn vẹn không" mà không cần mạng.
+            print("[warn] không có BaiduPCS-Go → kiểm bằng gzip -t + size local")
 
     print(f"[local] đích      : {dest.resolve()}")
-    print(f"[local] baidu     : {bin_}")
+    if bin_:
+        print(f"[local] baidu     : {bin_}")
+
+    if args.mode == "manifest":
+        if not dest.exists():
+            raise SystemExit(f"[!] {dest} không tồn tại — đã tải gì chưa?")
+        return make_manifest(dest)
 
     # --- chọn file -----------------------------------------------------------
     unresolved = []
@@ -424,11 +565,15 @@ def main(argv: list[str] | None = None) -> int:
         if not ents:
             raise SystemExit(f"[!] tier {args.tiers!r} không có file nào. Có: {sorted(TIERS)}")
         files, unresolved, blocked = expand(
-            ents, lister=lambda d: list(_ls_estimates(bin_, d)))
+            ents, lister=(lambda d: list(_ls_estimates(bin_, d))) if bin_ else (lambda d: []))
         for f, why in blocked:
             print(f"  ⛔ NEVER chặn: {why}")
 
-    sizes = _size_map(bin_, files)
+    sizes = _size_map(bin_, files) if bin_ else {}
+
+    if args.mode == "verify":
+        return verify(files, sizes, dest, do_hash=not args.no_hash)
+
     print(f"\n{'='*78}\nKẾ HOẠCH TẢI — {len(files)} file → {dest}\n{'='*78}")
     known = unknown = largest = 0
     for f in files:
@@ -495,6 +640,7 @@ def main(argv: list[str] | None = None) -> int:
     if err:
         print("\nChạy lại đúng lệnh: file đã xong sẽ [SKIP], file dở resume từ byte đã có.")
     print(f"\n[manifest] → {dest / MANIFEST}")
+    print("Bước tiếp theo: --mode verify (đã đủ chưa?) rồi --mode manifest (sha256).")
     return 0 if not err else 1
 
 

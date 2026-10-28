@@ -204,6 +204,74 @@ lệnh là tải tiếp từ byte đã có; file đã xong in `[SKIP]`.
 (timestamp, remote, local, size, sha256, status) và `.state/validated.json` giữ
 cache `(size, mtime_ns, sha256)`.
 
+### 2c. Đã có dữ liệu ở máy: kiểm chứng, rồi đưa phần cần thiết lên Modal
+
+```bash
+# Đã tải đúng chưa? (KHÔNG tải byte nào; thiếu/sai thì in rõ từng file)
+bash tools/local_download.sh --mode verify
+bash tools/local_download.sh --mode verify --no-remote    # không cần BaiduPCS-Go
+TIERS=e2 bash tools/local_download.sh --mode verify       # chỉ kiểm tier e2
+
+# sha256 toàn bộ — CÙNG schema với archive::make_manifest (/raw/_manifest_sha256.tsv)
+bash tools/local_download.sh --mode manifest
+# → <DEST>/_manifest_sha256.tsv : source, path, size_bytes, sha256
+```
+
+`verify` trả `0` chỉ khi **đủ và đúng**; hỏng/tải dở thì in `gzip -t` nói gì và
+gợi ý chạy lại `--mode fetch` (file đã đúng sẽ `[SKIP]`, **không xoá gì**). File
+tải bằng GUI vào cây hơi khác vẫn được nhận nếu tên khớp **duy nhất** — hai ứng
+viên cùng tên thì báo thiếu chứ không đoán, vì đoán sai là báo "đủ" cho file sai.
+
+**Đưa lên Modal.** Eval chỉ đọc nhánh `dire/test/` (tier `e2`) + checkpoint tác
+giả, nên chỉ cần đẩy phần đó. `upload.py` lo việc đó — nó **hỏi Volume trước**
+để không đẩy lại file đã có, và đẩy **từng file** để resume được:
+
+```bash
+# (1) Kế hoạch: đẩy gì, bỏ qua gì, `.staging` trên Volume đang chiếm bao nhiêu
+modal run -m dire_modal.upload::main --tiers e2min
+
+# (2) Đẩy thật (chỉ file thiếu / sai size), rồi tự kiểm lại size từng file
+modal run -m dire_modal.upload::main --tiers e2min --mode push
+
+# (3) Dọn `.staging` cũ trên Volume — CHỈ sau khi (2) báo "Volume khớp local"
+modal run -m dire_modal.upload::main --tiers e2min --mode clean --yes
+
+# Hoặc gộp (2)+(3): chỉ dọn khi kiểm lại thấy khớp từng byte
+modal run -m dire_modal.upload::main --tiers e2 --mode push --clean-after
+```
+
+Ba chi tiết mà `upload.py` xử lý thay bạn (đều thành test):
+
+| Bẫy | Hậu quả | Cách xử lý |
+|---|---|---|
+| `modal volume put` nhận path **tính từ gốc Volume** (`dire/test/…`), không phải `/raw/...` | dữ liệu nằm ở `/raw/raw/...` ⇒ eval báo "không tìm thấy cặp real/generator nào" | `remote_path()` bỏ tiền tố `/raw` |
+| `modal volume put <dir> <dest>` đặt thư mục **vào trong** đích | `/raw/dire/dire/...` | đẩy **từng file** tới đúng đường dẫn đích |
+| xoá `.staging` khi dữ liệu chưa lên Volume | mất bản duy nhất còn lại trên cloud | `--mode clean` **từ chối** nếu còn file của tier chưa có trên Volume; `--clean-after` chỉ chạy sau khi kiểm lại khớp |
+
+`--mode clean` **mặc định là dry-run** (in dung lượng từng vùng); chỉ xoá khi có
+`--yes`. Nó chỉ nhận đúng ba tên vùng nội bộ (`.staging`/`.bench`/`.state`) —
+gõ `--areas dire` sẽ bị từ chối, để một lần gõ sai không xoá dữ liệu thật.
+Muốn giữ lại phần đã tải xong của đường Modal cũ thì dọn `.bench`, `.state`
+trước và để `.staging` lại: `--mode clean --areas .bench,.state --yes`.
+
+Sau đó xác nhận trên cloud — CỔNG 2:
+
+```bash
+modal run -m dire_modal.download::verify
+bash tools/tree.sh                      # cây thật trên Volume, nếu nghi lệch tầng
+```
+
+Muốn kiểm sha256 khớp giữa máy và Modal thay vì tin `modal volume put`:
+
+```bash
+modal run -m dire_modal.archive::make_manifest          # /raw/_manifest_sha256.tsv
+# rồi so với `local_fetch --mode manifest` (cùng cột, cùng thứ tự) bằng diff
+```
+
+Lưu ý dung lượng: Volume tính tiền theo **peak** đã dùng, nên đẩy 3.39 GB rồi
+xoá không làm hoá đơn nhỏ đi trong tháng đó. Chỉ đẩy `e2` + checkpoint là đủ cho
+Table 2 headline; `e4`/`e5` thêm khi thật cần ô đó.
+
 ### Tốc độ tải và resume xuyên container
 
 Ba thay đổi, mỗi cái nhắm một chi phí khác nhau:
