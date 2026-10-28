@@ -14,7 +14,7 @@
 | 5. Mirror công khai | Modal CPU + egress | ~$0–1 | `verify_hf` → `mismatch=0, missing=0` |
 | 6. Smoke test | **Kaggle** | **$0** | Notebook chạy 3 step train, loss giảm |
 | 7. **KHÔNG train** — lấy `lsun_adm.pth` | Modal CPU | ~$0.1 | `sha256` ckpt khớp manifest |
-| 8. Eval 16 generator | **Modal CPU** (ResNet50 inference) | ~$0.1 | Bảng ACC 16 dòng, **CỔNG S2 `ACC(adm) ≥ 0.99`** |
+| 8. Eval 15 generator | **Modal CPU** (ResNet50 inference) | ~$0.1 | Bảng ACC 15 dòng, **CỔNG S2 `ACC(adm) ≥ 0.99`** |
 | 9. Gallery + demo | Modal A100 + HF Spaces | ~$0.5 + $0 | Space public trả kết quả thật |
 | **Tổng** | | **≈ $3–6** (bỏ hẳn $8–20 train) | |
 
@@ -599,13 +599,13 @@ lần chạy.
 
 ---
 
-## 8. Eval 16 generator (~$0 compute, chỉ CPU)
+## 8. Eval 15 generator (~$0 compute, chỉ CPU)
 
 ```bash
 bash scripts/01_repro.sh --quick          # e2min: 3 file → eval → in CỔNG S2
 # hoặc đầy đủ 32 ô của Table 2 (4 detector × 8 generator):
 bash scripts/01_repro.sh                  # e2,ckpts → eval → report Δ so với paper
-# ✅ CỔNG 8: bảng ACC cho 16 generator; so với paper (~99% trên ADM-LSUN)
+# ✅ CỔNG 8: bảng ACC cho 15 generator; so với paper (~99% trên ADM-LSUN)
 ```
 
 `eval::main` tự tìm checkpoint (`/raw/checkpoints/lsun_adm.pth` rồi
@@ -613,7 +613,7 @@ bash scripts/01_repro.sh                  # e2,ckpts → eval → report Δ so v
 ĐẠT thì đừng đọc bảng AP — kiểm đúng file ckpt, `n_real`/`n_fake`, và tiền xử lý
 (trường `preproc` trong `run.json`).
 
-ResNet50 inference trên CPU: **~17k ảnh** ở 224² (1k real dùng chung + 16 generator
+ResNet50 inference trên CPU: **~16k ảnh** ở 224² (1k real dùng chung + 15 generator
 × 1k) → dưới 10 phút, không cần GPU. Chạy song song bằng `.map()` — mỗi cặp 1
 container, scale-to-zero khi xong.
 
@@ -822,6 +822,51 @@ DETACH=1 bash scripts/01_repro.sh --quick   # chạy không phụ thuộc termin
 
 ⛔ **Đừng xoá `/raw/.staging`** — đó không phải rác, đó là tiến độ. Chỉ
 `/raw/.staging/_held` (file không qua kiểm) và `/raw/.bench` mới là thứ xoá được.
+
+## Sự cố 2026-10-28 — `size mismatch for fc.weight: [1,2048] vs [2,2048]`
+
+```bash
+bash scripts/01_repro.sh --stage eval
+# [eval] 15 cặp · ckpt=/raw/checkpoints/lsun_adm.pth
+# RuntimeError: Error(s) in loading state_dict for ResNet:
+#   size mismatch for fc.weight: copying a param with shape torch.Size([1, 2048])
+#   from checkpoint, the shape in current model is torch.Size([2, 2048]).
+```
+
+Lỗi **không phải** dữ liệu hỏng, không phải checkpoint sai: nó là hai *quy ước
+lớp cuối* khác nhau.
+
+| | Checkpoint của tác giả | Code cũ của mình |
+|---|---|---|
+| dựng model | `resnet(num_classes=1)` (`vendor/utils/utils.py`) | `resnet50(num_classes=2)` |
+| loss lúc train | `BCEWithLogitsLoss` (`vendor/utils/trainer.py`) | — |
+| `fc.weight` | `[1, 2048]` — **một logit** | `[2, 2048]` |
+| điểm fake | `sigmoid(logit)` (`vendor/utils/eval.py`) | `softmax(...)[:, 1]` |
+
+Nên `load_state_dict` từ chối, và vì nó nằm trong `eval_one` (một `.map()`) nên
+**một** cặp lỗi làm Modal huỷ mọi task anh em: cả 4 detector × 15 cặp không chấm
+được, không CSV, tiền GPU vẫn mất.
+
+Đã sửa:
+
+| Trước | Sau |
+|---|---|
+| `resnet50(num_classes=2)` cố định | `fc_out_features(state)` đọc `fc.weight` shape **từ checkpoint**, dựng đúng 1 hay 2 lớp; không đọc được thì báo rõ thay vì đoán |
+| `softmax(dim=1)[:, 1]` cho mọi checkpoint | `prob_fake(rows, n_out)`: `n_out=1` ⇒ `sigmoid` (DIRE gốc), `n_out>=2` ⇒ `softmax[:, 1]`; chặn tràn số ở logit ±800 |
+| một cặp lỗi ⇒ `.map()` huỷ tất cả, mất trắng | `eval_one` không raise: trả `{"error": …}`, `main` ghi CSV với metric **để trống** + cột `error`, commit, rồi mới `SystemExit` để script dừng (không đốt thêm 3 detector với cùng lỗi) |
+| `platforms/hf-spaces/app.py`: `num_classes=2` + `strict=False` | đọc `fc.weight` từ checkpoint, `sigmoid` khi 1 logit, và **coi việc `fc.*` không nạp được là LỖI** (trước đây chỉ in warn ⇒ demo trả xác suất của đầu phân loại chưa train, trông vẫn "chạy") |
+| demo: crop thẳng 224, `Normalize([0.5]*3, …)` | `Resize(256) → CenterCrop(224) → Normalize(ImageNet)`, khớp `utils/datasets.py` |
+
+Đọc kết quả khi có cặp lỗi:
+
+```bash
+modal volume get dire-ckpt results ./results
+# dire.csv: dòng lỗi có acc/ap/n_fake TRỐNG và cột `error` nói lý do.
+# run.json: extra.pairs_failed = [{fake, error}, …]
+```
+
+Ô trống nghĩa là "không chấm được"; `acc = 0` sẽ bị đọc thành "detector đoán sai
+hết" — nên không bao giờ ghi 0 thay cho trống (NFR-6: không bịa số).
 
 ## Sự cố 2026-10-25 — "tải dở dang" trên file đã tải đủ
 

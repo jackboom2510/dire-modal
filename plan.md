@@ -166,7 +166,7 @@ thứ hai (size chính xác + md5) · file không qua kiểm được `_hold()` 
 `unlink()` · nhận diện riêng ca "Baidu thấy file đã có nên bỏ qua".
 Chi tiết: `docs/runbook-free.md` § "Sự cố 2026-10-25".
 
-**Xong khi:** lần chạy `e2` kế tiếp cho `ok` ngay attempt 1 cho cả 16 generator.
+**Xong khi:** lần chạy `e2` kế tiếp cho `ok` ngay attempt 1 cho cả 15 generator.
 (Chưa chạy lại thật — test đã tái hiện đúng hai con số trong log.)
 
 **Dừng giữa chừng:** SIGTERM (Ctrl+C ở local, `modal app stop`) giờ được chặn

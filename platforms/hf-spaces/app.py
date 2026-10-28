@@ -18,13 +18,15 @@ import os
 from pathlib import Path
 
 import gradio as gr
-import numpy as np
 from PIL import Image
 
 MODEL_REPO = os.environ.get("DIRE_MODEL_REPO", os.environ.get("MODEL_REPO", "jackboom2510/dire-detector"))
 MODEL_FILE = os.environ.get("DIRE_MODEL_FILE", "dire_resnet50.pth")
 GALLERY_DIR = Path(os.environ.get("DIRE_GALLERY_DIR", "gallery"))
-IMG_SIZE = 256
+# Tiền xử lý của tác giả (`utils/datasets.py`, nhánh eval):
+# Resize(256) → CenterCrop(224) → ToTensor → Normalize(ImageNet).
+RESIZE = 256
+CROP = 224
 
 _state: dict = {"model": None, "error": None}
 
@@ -46,18 +48,34 @@ def _load_model():
         return
 
     try:
-        model = torchvision.models.resnet50(num_classes=2)
         state = torch.load(ckpt_path, map_location="cpu")
         if isinstance(state, dict) and "model" in state:
             state = state["model"]
         # bỏ tiền tố "module." nếu train bằng DataParallel
         state = {k.replace("module.", "", 1): v for k, v in state.items()}
+
+        # Số unit lớp cuối phải ĐỌC TỪ CHECKPOINT, không được chọn sẵn.
+        # DIRE gốc: `resnet(num_classes=1)` + BCEWithLogitsLoss ⇒ `fc.weight` [1, 2048].
+        # Bản trước hard-code `num_classes=2` + `strict=False` nên lớp fc KHÔNG
+        # được nạp (chỉ in warn) và demo trả xác suất rác mà trông vẫn "chạy" —
+        # cùng gốc với lỗi eval 2026-10-28:
+        #   size mismatch for fc.weight: [1,2048] vs [2,2048]
+        w = state.get("fc.weight")
+        n_out = int(w.shape[0]) if w is not None and len(w.shape) == 2 else 0
+        if n_out not in (1, 2):
+            raise ValueError(f"không đọc được `fc.weight` (shape {getattr(w, 'shape', None)})")
+
+        model = torchvision.models.resnet50(num_classes=n_out)
         missing, unexpected = model.load_state_dict(state, strict=False)
-        if missing:
-            print(f"[warn] thiếu {len(missing)} key khi load checkpoint: {missing[:5]}")
+        # `fc.weight`/`fc.bias` mà thiếu = lớp quyết định chưa được nạp ⇒ demo
+        # đoán bừa. Phải là lỗi, không phải cảnh báo.
+        if any(k.startswith("fc.") for k in missing):
+            raise ValueError(f"lớp fc không được nạp: missing={[m for m in missing if m.startswith('fc.')]}")
+        _state["n_out"] = n_out
         model.eval()
         _state["model"] = model
-        print(f"[ok] đã nạp {MODEL_REPO}/{MODEL_FILE} (missing={len(missing)}, unexpected={len(unexpected)})")
+        print(f"[ok] đã nạp {MODEL_REPO}/{MODEL_FILE} (n_out={n_out}, "
+              f"missing={len(missing)}, unexpected={len(unexpected)})")
     except Exception as exc:
         _state["error"] = f"Checkpoint tải được nhưng load lỗi: {exc}"
         print("[warn]", _state["error"])
@@ -81,14 +99,21 @@ def detect(image: Image.Image | None):
     import torch
     import torchvision.transforms as T
 
-    tf = T.Compose([T.Resize(IMG_SIZE), T.CenterCrop(IMG_SIZE), T.ToTensor(),
-                    T.Normalize([0.5] * 3, [0.5] * 3)])
+    # Tiền xử lý phải khớp lúc train (`utils/datasets.py` của tác giả):
+    # Resize(256) → CenterCrop(224) → Normalize(ImageNet). Bản trước crop thẳng
+    # 224 và chuẩn hoá [0.5] — lệch cả hai bước, tức là lệch số âm thầm.
+    tf = T.Compose([T.Resize(RESIZE), T.CenterCrop(CROP), T.ToTensor(),
+                    T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
     x = tf(image.convert("RGB")).unsqueeze(0)
     with torch.inference_mode():
         logits = _state["model"](x)
-        probs = torch.softmax(logits, dim=1)[0].tolist()
-
-    p_real, p_fake = probs[0], probs[1]
+        if _state.get("n_out") == 1:
+            # 1 logit + BCE ⇒ sigmoid chính là P(fake) (nhãn dương = 1_fake).
+            p_fake = float(torch.sigmoid(logits)[0][0])
+            p_real = 1.0 - p_fake
+        else:
+            probs = torch.softmax(logits, dim=1)[0].tolist()
+            p_real, p_fake = probs[0], probs[1]
     verdict = "FAKE (ảnh do AI sinh)" if p_fake > p_real else "REAL (ảnh thật)"
     note = (
         f"**Kết luận: {verdict}**\n\n"
