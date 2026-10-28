@@ -793,6 +793,39 @@ nên lệnh chết — và thông báo lỗi còn in ra đường dẫn đã b�
 |---|---|
 | shell | `export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'` trong `scripts/lib.sh`, `scripts/check.sh`, mọi `tools/*.sh` (Linux/macOS bỏ qua hai biến này) |
 | Python | `_demangle()` trong `download.py` sửa `C:/…/Git/raw/…` → `/raw/…` cho `tree`, `ls_remote`, `audit`, `probe_pair`, `--paths` |
+| binary native | `native_path()` trong `tools/lib/native_path.sh`: `/d/…` → `D:/…` cho **manim**, **ffmpeg**, và biến `PYTHONPATH` (MSYS không đổi hộ biến môi trường) |
+
+### Chiều ngược lại: khi tắt conversion thì phải tự đổi
+
+`MSYS_NO_PATHCONV=1` là bắt buộc để `/raw` tới được container. Nhưng nó **tắt
+luôn** việc đổi đường dẫn cho các chương trình **Windows thật** trên máy bạn.
+Sự cố 2026-10-28:
+
+```
+$ bash tools/manim/render.sh --quality l
+FileNotFoundError: D:\d\Documents\Code\dire-modal\tools\manim\scenes.py not found
+                          ^^^ thêm một tầng thư mục KHÔNG tồn tại
+```
+
+`/d/Documents/…` là dạng POSIX của Git Bash. Windows đọc nguyên chuỗi đó thành
+"ổ đang dùng + thư mục tên `d`" ⇒ `D:\d\Documents\…`. Không có thông báo nào
+nói "đây là lỗi đường dẫn"; chỉ có `FileNotFoundError` với đường dẫn *trông gần
+đúng* — nên rất dễ đi tìm bug ở chỗ khác.
+
+Cách chữa, theo thứ tự ưu tiên:
+
+1. **Truyền đường dẫn tương đối** cho binary native (`tools/manim/scenes.py`):
+   không có tiền tố `/` nào để hiểu nhầm, và đúng trên mọi hệ điều hành.
+2. Đường dẫn tuyệt đối bắt buộc (thư mục output, `PYTHONPATH`) ⇒ đi qua
+   `native_path()`:
+
+```bash
+bash -c '. tools/lib/native_path.sh; native_path "$PWD"'
+# Git Bash: D:/Documents/Code/dire-modal      Linux: /home/user/dire-modal
+```
+
+⚠ **Đừng** dùng `native_path()` cho đối số của `modal` (`--path /raw`): những
+đường dẫn đó phải giữ `/raw`. Đó là lý do tồn tại `download._demangle()`.
 
 Gõ tay thì thêm biến vào trước lệnh:
 

@@ -30,6 +30,9 @@ export MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*'
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# shellcheck source=tools/lib/native_path.sh
+. "$REPO_ROOT/tools/lib/native_path.sh"
+
 PY="${PYTHON:-python3}"
 command -v "$PY" >/dev/null 2>&1 || PY=python
 command -v "$PY" >/dev/null 2>&1 || { echo "[STOP] thiếu python3/python" >&2; exit 1; }
@@ -45,5 +48,8 @@ echo "   Ctrl+C bất cứ lúc nào: phần đã tải nằm trong $DEST/.stagi
 echo
 
 # PYTHONPATH để chạy được cả khi chưa `pip install -e .`
-PYTHONPATH="$REPO_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
+# PYTHONPATH là BIẾN MÔI TRƯỜNG nên MSYS không đổi hộ: trên Git Bash
+# `$REPO_ROOT` là `/d/...`, python.exe của Windows sẽ tìm `D:\d\...` và báo
+# "No module named dire_modal" — trông y như chưa cài package.
+PYTHONPATH="$(native_path "$REPO_ROOT/src")${PYTHONPATH:+:$PYTHONPATH}" \
   "$PY" -m dire_modal.local_fetch --tiers "$TIERS" --dest "$DEST" "$@"
