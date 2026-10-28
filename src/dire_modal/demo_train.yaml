@@ -1,0 +1,51 @@
+# src/dire_modal/demo_train.yaml
+#
+# Siêu tham số cho demo_train — CHÉP từ tác giả, không đoán.
+#   nguồn: vendor/utils/config.py (class DefaultConfigs) + vendor/utils/trainer.py
+#   test:  tests/test_demo_train.py::test_config_matches_the_authors_source
+#
+# Vì sao nằm cạnh module chứ không ở configs/ ở gốc repo: Modal chỉ đóng gói
+# thư mục module (src/dire_modal/), nên file ở gốc repo KHÔNG có trong container.
+# `tiers.yaml` nằm ở đây vì đúng lý do đó.
+
+# --- model: 1 logit, BCE (KHÔNG phải 2 lớp + softmax) ----------------------
+seed: 3407
+arch: resnet50
+pretrained: true
+mode: binary
+n_out: 1
+loss: bce_with_logits
+
+# --- tối ưu ---------------------------------------------------------------
+optim: adam
+lr: 0.0001
+beta1: 0.9
+batch_size: 64
+
+# --- tiền xử lý -----------------------------------------------------------
+load_size: 256
+crop_size: 224
+
+# --- aug: tác giả bật hình học, TẮT quang học ----------------------------
+aug:
+  resize: true
+  crop: true
+  flip: true
+  blur_prob: 0.0
+  jpg_prob: 0.0
+  gray_prob: 0.0
+
+# --- quy mô demo (KHÔNG phải của tác giả) --------------------------------
+# Tác giả: 400 epoch + earlystop 5. Demo: 5 epoch, 2 000 ảnh — đủ để có một
+# đường loss thật, không đủ để so với 99.9% của paper.
+epochs: 5
+images: 2000
+val_images: 200
+log_every: 10
+
+# --- ngân sách ------------------------------------------------------------
+gpu: L4
+usd_per_gpu_hour: 0.80
+sec_per_step: 0.35      # ước lượng, CHƯA đo — truyền --sec-per-step sau khi đo
+max_minutes: 15
+max_images: 2000

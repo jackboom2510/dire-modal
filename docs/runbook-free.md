@@ -597,6 +597,32 @@ nhưng **nói rõ** "CHƯA đối chiếu sha256" chứ không gọi đó là "k
 cache theo `(size, mtime_ns)` trong `/raw/.state` nên không băm lại 1.6 GB mỗi
 lần chạy.
 
+### 7b. Ngoại lệ có kiểm soát: `demo_train` (để quay video, KHÔNG để lấy số)
+
+`src/dire_modal/demo_train.py` train ResNet50 **2 000 ảnh × 5 epoch** trên L4 để
+có một đường loss **thật** cho video manim. Xem `docs/adr-0003-demo-training.md`
+— đây không phải "train lại", và nó bị cấm ghi vào `/ckpt/results/**`.
+
+```bash
+# 0 credit: in tiền/thời gian rồi thoát (đây là MẶC ĐỊNH)
+modal run -m dire_modal.demo_train::main
+# [tiền] 2000 ảnh × 5 epoch = 160 step (+20 step val) ≈ 1.0 phút ≈ $0.013
+# [demo] demo — KHÔNG phải số của paper
+# [plan] chưa train gì. Thêm --mode run để chạy thật.
+
+# train thật (cần tier `train`: 4 file · 5.74 GB, ~20–22 h ở 76.6 KiB/s)
+modal run -m dire_modal.download::main --tiers train --mode fetch
+modal run -m dire_modal.demo_train::main --mode run --images 2000 --epochs 5
+modal volume get dire-ckpt demo_train/demo_train ./demo_train_out
+```
+
+Đầu ra: `loss_log.json` (nguồn số duy nhất cho scene manim) +
+`demo_resnet50.pth` với `fc.weight [1, 2048]` — nạp được bằng **đúng**
+`eval.load_detector`, nên nó cũng là phép thử khép vòng cho bản vá `fc.weight`.
+
+Dữ liệu train/val lấy từ split `train`/`val` của tác giả, **không** phải test
+split: train trên test là leakage và mọi con số sau đó vô nghĩa.
+
 ---
 
 ## 8. Eval 15 generator (~$0 compute, chỉ CPU)
