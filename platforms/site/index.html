@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIRE — phát hiện ảnh do AI sinh ra · demo sản phẩm</title>
+<meta name="description" content="Tái lập DIRE (Diffusion Reconstruction Error, ICCV 2023) theo hướng serverless, chi phí gần 0. Trang giới thiệu: cơ chế, bằng chứng, trạng thái thật và việc còn thiếu.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Thanh tiến trình + số trang: luôn hiện, để người xem biết còn bao nhiêu slide. -->
+<div class="chrome" aria-hidden="true">
+  <div class="bar"><i id="progress"></i></div>
+  <div class="counter"><span id="idx">1</span><span class="sep">/</span><span id="total">·</span></div>
+</div>
+
+<main id="deck" aria-live="polite">
+
+  <!-- 1 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide slide--cover" data-slide="cover">
+    <p class="kicker">demo sản phẩm · <span id="cover-date">2026</span></p>
+    <h1>Một ảnh do AI sinh ra<br><em>để lại dấu vết.</em></h1>
+    <p class="lede">
+      Dự án tái lập <b>DIRE</b> — <span class="dim">Diffusion Reconstruction Error</span> —
+      của Wang và cộng sự (ICCV 2023), theo hướng serverless và chi phí gần 0.
+      Mục tiêu không phải “train lại cho giống paper”, mà là <b>dựng đúng đường đo</b>,
+      rồi mở rộng nó.
+    </p>
+    <div class="cover-meta">
+      <div class="pill pill--warn" data-bind="honesty.pill">đang tải…</div>
+      <div class="pill pill--ghost">0 ₫ — chỉ free tier</div>
+      <div class="pill pill--ghost">chạy trên Modal · HF Spaces · Kaggle</div>
+    </div>
+    <p class="hint">← → để chuyển slide · nhấn <kbd>?</kbd> để xem phím tắt</p>
+  </section>
+
+  <!-- 2 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="problem">
+    <p class="eyebrow">Vấn đề</p>
+    <h2>Mắt người đã thua.</h2>
+    <div class="cols">
+      <div>
+        <p class="big-quote">“Ảnh do diffusion sinh ra không còn lỗi nhìn thấy được —
+        mọi dấu vết đều nằm ở tầng thống kê.”</p>
+        <p class="dim">Với ảnh 224×224, mắt người gần như không phân biệt được ảnh
+        LSUN thật và ảnh do ADM sinh. Kiểm tra bằng mắt không còn là một phương án,
+        nên cần một <b>detector</b> — và một detector cần một <b>đường đo</b> đáng tin.</p>
+      </div>
+      <ul class="facts">
+        <li><span class="tick">→</span> Không thể “nhìn kỹ hơn”.</li>
+        <li><span class="tick">→</span> Không thể tin vào cảm giác.</li>
+        <li><span class="tick">→</span> Cần số, và cần biết số đó từ đâu ra.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 3 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="idea">
+    <p class="eyebrow">Ý tưởng · DIRE</p>
+    <h2>Model nào sinh ra ảnh,<br>thì tái tạo ảnh đó <em>tốt hơn</em>.</h2>
+    <div class="flow">
+      <div class="step"><span class="num">1</span><b>Thêm nhiễu</b>
+        <code>x₀ → x₁ … x_T</code><small>forward, quá trình Markov</small></div>
+      <div class="step"><span class="num">2</span><b>Đảo ngược</b>
+        <code>x → z_T</code><small>DDIM — <b>tất định</b>, nên mới đảo được</small></div>
+      <div class="step"><span class="num">3</span><b>Tái tạo</b>
+        <code>z_T → x̂</code><small>cùng model, cùng số bước</small></div>
+      <div class="step"><span class="num">4</span><b>Lấy hiệu</b>
+        <code>|x − x̂|</code><small>3 kênh → “DIRE map”</small></div>
+    </div>
+    <div class="callout">
+      <p><b>Vì sao hiệu này là dấu vết:</b> ảnh do model sinh ra nằm <em>trên</em>
+      manifold của chính model đó → tái tạo gần như trùng → hiệu <b>nhỏ</b>.
+      Ảnh thật nằm lệch manifold → bị kéo về → hiệu <b>lớn</b>.</p>
+      <p class="fine">Đây là trực giác hình học. Paper đo bằng thực nghiệm trên
+      nhiều generator, không chứng minh bằng lý thuyết.</p>
+    </div>
+  </section>
+
+  <!-- 4 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="detector">
+    <p class="eyebrow">Detector</p>
+    <h2>Từ ảnh tới một con số.</h2>
+    <div class="chain">
+      <div class="node">ảnh RGB</div><i class="arrow">→</i>
+      <div class="node node--map">DIRE map</div><i class="arrow">→</i>
+      <div class="node node--net">ResNet-50</div><i class="arrow">→</i>
+      <div class="node node--out">1 logit</div><i class="arrow">→</i>
+      <div class="node node--prob">sigmoid → P(fake)</div>
+    </div>
+    <div class="cols cols--tight">
+      <div class="card card--ok">
+        <h3>Ba chi tiết quyết định</h3>
+        <ul>
+          <li><b>1 logit, không phải 2 lớp.</b> Checkpoint của tác giả train bằng
+            <code>BCEWithLogitsLoss</code> ⇒ <code>fc.weight</code> là
+            <code data-bind="measured.fc_weight.paper_shape">·</code>. Code cũ dựng
+            2 lớp ⇒ <code data-bind="measured.fc_weight.old_code_shape">·</code>
+            ⇒ <code>load_state_dict</code> từ chối.</li>
+          <li><b>Tiền xử lý cố định:</b> Resize 256 → CenterCrop 224 → Normalize ImageNet.</li>
+          <li><b>Không có bước DIRE thì không phải detector này.</b> Demo HF Spaces
+            chạy ResNet trực tiếp trên ảnh, nên độ chính xác của demo
+            <em>không phải</em> của detector trong paper.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Điều dự án này không làm</h3>
+        <p>Không train lại detector. Ràng buộc N1: <b>chỉ cải thiện, không train lại</b>
+        — nên toàn bộ phần tái lập dùng checkpoint có sẵn của tác giả.</p>
+        <p class="fine">Ngoại lệ duy nhất là <code>demo_train</code> — một bản
+        train cỡ demo để <em>quay video</em>, và nó bị cấm ghi vào chỗ của số thật.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="evidence">
+    <p class="eyebrow">Bằng chứng</p>
+    <h2>Table 2 của paper.</h2>
+    <div class="banner banner--warn" data-bind="labels.paper">·</div>
+    <div class="table-wrap">
+      <table class="nums" id="paper-table">
+        <thead><tr><th>Generator</th><th>ACC</th><th>AP</th></tr></thead>
+        <tbody><!-- render từ data.json --></tbody>
+      </table>
+      <div class="side">
+        <h3>Bốn detector, bốn cách train</h3>
+        <ul class="det-list" id="det-list"><!-- render --></ul>
+        <p class="fine" data-bind="paper.source">·</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="pipeline">
+    <p class="eyebrow">Đường đi của dữ liệu</p>
+    <h2>Từ Baidu tới bảng ACC.</h2>
+    <div class="stat-row">
+      <div class="stat"><b data-bind="measured.baidu_kib_s.text">·</b>
+        <small>tốc độ tải</small><em data-bind="measured.baidu_kib_s.note">·</em></div>
+      <div class="stat"><b data-bind="pipeline.pairs">·</b>
+        <small>cặp fake-vs-real</small><em>tar giả, KHÔNG đếm <code>real</code></em></div>
+      <div class="stat"><b data-bind="pipeline.detectors_count">·</b>
+        <small>detector</small><em>4 hàng của Table 2</em></div>
+      <div class="stat stat--hi"><b data-bind="pipeline.containers">·</b>
+        <small>container eval</small><em>cặp × detector — tính, không gõ</em></div>
+    </div>
+    <div class="chain chain--small">
+      <div class="node">Baidu Netdisk</div><i class="arrow">→</i>
+      <div class="node">staging (máy)</div><i class="arrow">→</i>
+      <div class="node">volume put</div><i class="arrow">→</i>
+      <div class="node node--ok">verify: gzip -t + sha256</div><i class="arrow">→</i>
+      <div class="node node--warn">eval</div>
+    </div>
+    <p class="fine" data-bind="pipeline.source">·</p>
+  </section>
+
+  <!-- 7 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="incidents">
+    <p class="eyebrow">Những cái bẫy đã gặp</p>
+    <h2>Ba lỗi thật, ba bài học.</h2>
+    <div class="cards-3">
+      <div class="card">
+        <h3>Làm tròn là sai số</h3>
+        <p><code>ls -l</code> in <b data-bind="measured.ls_rounding.shown">·</b>.
+        Quy đổi ngược ra <b data-bind="measured.ls_rounding.reversed_bytes">·</b> B,
+        file thật <b data-bind="measured.ls_rounding.real_bytes">·</b> B — lệch
+        <b data-bind="measured.ls_rounding.delta_bytes">·</b> B.</p>
+        <p class="fine">Đòi khớp từng byte với con số làm tròn ⇒ báo “tải dở dang”
+        cho file đã tải đủ 100 %. Nay sai số được mang trong kiểu dữ liệu.</p>
+      </div>
+      <div class="card">
+        <h3>Hai quy ước lớp cuối</h3>
+        <p><code>size mismatch for fc.weight</code>:
+        <b data-bind="measured.fc_weight.paper_shape">·</b> so với
+        <b data-bind="measured.fc_weight.old_code_shape">·</b>.</p>
+        <p class="fine">Không phải dữ liệu hỏng. Và vì nó nằm trong <code>.map()</code>,
+        một cặp lỗi làm hỏng cả lượt chấm — nay lỗi được ghi vào CSV, không raise.</p>
+      </div>
+      <div class="card">
+        <h3>Hai chiều của MSYS</h3>
+        <p>Git Bash đổi <code>/raw</code> thành <code>C:/Program Files/Git/raw</code>.
+        Tắt việc đó đi thì tới lượt binary Windows nhận <code>/d/…</code> và đọc thành
+        <code>D:\d\…</code>.</p>
+        <p class="fine">Một helper <code>native_path()</code> cho một chiều, biến môi
+        trường tắt cho chiều kia.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="status">
+    <p class="eyebrow">Trạng thái thật</p>
+    <h2>Chỗ nào xong, chỗ nào chưa.</h2>
+    <div class="status-legend">
+      <span class="dot dot--run"></span> code xong, <b>chưa chạy thật</b>
+      <span class="dot dot--todo"></span> chưa có
+      <span class="dot dot--out"></span> ngoài phạm vi
+    </div>
+    <ul class="status-list" id="status-list"><!-- render --></ul>
+    <p class="fine">Không có mục nào được đánh “xong” nếu chưa chạy thật trên dữ liệu
+    đầy đủ — kể cả khi code đã có test xanh. Test xanh chỉ chứng minh code
+    <em>không hỏng</em>, không chứng minh nó <em>đã chạy</em>.</p>
+  </section>
+
+  <!-- 9 ─────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="demo-train">
+    <p class="eyebrow">Một thứ chạy được ngay</p>
+    <h2><code>demo_train</code> — train thật, nhưng có nhãn.</h2>
+    <div class="cols cols--tight">
+      <div class="card">
+        <h3>Tham số</h3>
+        <dl class="kv">
+          <dt>seed</dt><dd data-bind="demo.seed">·</dd>
+          <dt>arch</dt><dd data-bind="demo.arch">·</dd>
+          <dt>lớp cuối</dt><dd><span data-bind="demo.n_out">·</span> logit</dd>
+          <dt>loss</dt><dd data-bind="demo.loss">·</dd>
+          <dt>batch</dt><dd data-bind="demo.batch_size">·</dd>
+          <dt>lr</dt><dd data-bind="demo.lr">·</dd>
+          <dt>quy mô</dt>
+          <dd data-bind="demo.images_epochs">·</dd>
+        </dl>
+        <p class="fine">Chép từ <code>vendor/utils/config.py</code> của tác giả và
+        được test đối chiếu từng số.</p>
+      </div>
+      <div class="card card--accent">
+        <h3>Chi phí</h3>
+        <p class="mega"><span data-bind="demo.steps">·</span> step</p>
+        <p class="dim">trên <b data-bind="demo.gpu">·</b>, khoảng
+        <b data-bind="demo.usd">·</b> USD.</p>
+        <p class="fine"><code>sec/step</code> là <b>ước lượng, chưa đo</b> —
+        đo rồi truyền lại để con số tiền có nghĩa.</p>
+        <div class="banner banner--warn" data-bind="demo.labels">·</div>
+        <p class="fine">Train <span data-bind="demo.images_epochs">·</span> (ảnh ×
+        epoch) không thể so với <span data-bind="demo.paper_epochs">·</span> epoch của
+        tác giả. Nó tồn tại để có một đường loss <em>thật</em> cho video — một
+        đường loss bịa trông y hệt đường thật.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 ────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="roadmap">
+    <p class="eyebrow">Việc còn thiếu</p>
+    <h2>Cái gì chặn cái gì.</h2>
+    <ol class="roadmap" id="roadmap"><!-- render --></ol>
+    <p class="fine">Thứ tự này xếp theo “chặn nhiều thứ nhất trước”, không theo
+    độ thú vị. Việc đầu tiên sửa một lỗi tiền thật: <code>eval --tiers</code>
+    đang bị bỏ qua.</p>
+  </section>
+
+  <!-- 11 ────────────────────────────────────────────────────────────── -->
+  <section class="slide" data-slide="limits">
+    <p class="eyebrow">Giới hạn</p>
+    <h2>Trang này <em>không</em> chứng minh gì.</h2>
+    <ul class="honest">
+      <li><b>Chưa có số của dự án.</b> Mọi con số ACC/AP ở slide 5 là của paper,
+      lấy từ <code>paper_table2.tsv</code>. Khi có số thật, nó sẽ nằm ở
+      <code>eval::report</code> kèm Δ so với paper.</li>
+      <li><b>Chưa có AEROBLADE, chưa có fusion.</b> Phần “cải thiện” — thứ duy nhất
+      dự án này định làm mới — hiện là hai file chưa tồn tại.</li>
+      <li><b>Video giải thích chưa render.</b> 5 scene đã có code; chưa có khung
+      hình nào vì máy render cần cairo/pango.</li>
+      <li><b>Một chỗ trống được ghi đúng</b> thì tốt hơn một con số đẹp không nguồn.</li>
+    </ul>
+  </section>
+
+  <!-- 12 ────────────────────────────────────────────────────────────── -->
+  <section class="slide slide--end" data-slide="end">
+    <h2>Chạy thử trong ba lệnh.</h2>
+    <pre class="term"><code><span class="c"># 1. kiểm môi trường + test (0 credit)</span>
+bash scripts/check.sh
+
+<span class="c"># 2. tải dữ liệu tối thiểu rồi verify</span>
+modal run -m dire_modal.download::main --tiers e2min --mode fetch
+modal run -m dire_modal.download::verify
+
+<span class="c"># 3. eval bằng checkpoint của tác giả — in CỔNG S2</span>
+modal run -m dire_modal.eval::main --tiers e2min</code></pre>
+    <div class="end-links">
+      <a class="btn" href="https://github.com/jackboom2510/dire-modal">repo trên GitHub</a>
+      <a class="btn btn--ghost" href="../../docs/runbook-free.md">runbook đầy đủ</a>
+      <a class="btn btn--ghost" href="../../docs/manim-video-plan.md">kế hoạch video</a>
+    </div>
+    <p class="fine">Trang tĩnh, không phụ thuộc CDN, không gửi dữ liệu đi đâu.
+    Số liệu do <code>platforms/site/build.py</code> sinh ra từ chính repo.</p>
+  </section>
+
+</main>
+
+<nav class="nav" aria-label="điều hướng slide">
+  <button id="prev" aria-label="slide trước">‹</button>
+  <div class="dots" id="dots"></div>
+  <button id="next" aria-label="slide sau">›</button>
+</nav>
+
+<dialog id="help">
+  <h3>Phím tắt</h3>
+  <ul>
+    <li><kbd>→</kbd> <kbd>Space</kbd> slide sau</li>
+    <li><kbd>←</kbd> slide trước</li>
+    <li><kbd>Home</kbd> / <kbd>End</kbd> đầu / cuối</li>
+    <li><kbd>?</kbd> mở/đóng bảng này</li>
+    <li><kbd>o</kbd> xem tất cả slide trên một trang (để in)</li>
+  </ul>
+  <p class="fine">Cuộn chuột cũng chuyển slide.</p>
+  <form method="dialog"><button>đóng</button></form>
+</dialog>
+
+<script src="deck.js"></script>
+</body>
+</html>

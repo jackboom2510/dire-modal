@@ -1,0 +1,296 @@
+{
+  "schema": 1,
+  "labels": {
+    "paper": "số của paper (ICCV 2023) — CHƯA phải số đo của mình",
+    "measured": "số ĐO của repo · xem nguồn từng ô",
+    "demo": "demo — KHÔNG phải số của paper"
+  },
+  "honesty": {
+    "pill": "code xong: 6 · chưa có: 3 · số của dự án: chưa có"
+  },
+  "generated_by": "platforms/site/build.py",
+  "sources": {
+    "paper": "src/dire_modal/paper_table2.tsv",
+    "manifest": "src/dire_modal/manifest.py (tier e2)",
+    "demo": "src/dire_modal/demo_train.yaml",
+    "measured": "docs/runbook-free.md (số đo 2026-10-25/28)"
+  },
+  "paper": {
+    "generators": [
+      "adm",
+      "ddpm",
+      "iddpm",
+      "pndm",
+      "sdv1",
+      "sdv2",
+      "ldm",
+      "vqdiffusion"
+    ],
+    "detectors": [
+      {
+        "id": "lsun_adm",
+        "label": "ADM",
+        "acc": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 99.7,
+          "sdv1": 99.7,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "ap": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 100.0,
+          "sdv1": 100.0,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "mean_acc": 99.92,
+        "mean_ap": 100.0,
+        "avg_row": {
+          "acc": 99.9,
+          "ap": 100.0
+        }
+      },
+      {
+        "id": "lsun_pndm",
+        "label": "PNDM",
+        "acc": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 100.0,
+          "sdv1": 89.4,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "ap": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 100.0,
+          "sdv1": 99.9,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "mean_acc": 98.67,
+        "mean_ap": 99.99,
+        "avg_row": {
+          "acc": 98.7,
+          "ap": 100.0
+        }
+      },
+      {
+        "id": "lsun_iddpm",
+        "label": "iDDPM",
+        "acc": {
+          "adm": 99.6,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 89.7,
+          "sdv1": 99.7,
+          "sdv2": 100.0,
+          "ldm": 99.9,
+          "vqdiffusion": 99.9
+        },
+        "ap": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 99.8,
+          "sdv1": 100.0,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "mean_acc": 98.6,
+        "mean_ap": 99.97,
+        "avg_row": {
+          "acc": 98.6,
+          "ap": 100.0
+        }
+      },
+      {
+        "id": "lsun_stylegan",
+        "label": "StyleGAN",
+        "acc": {
+          "adm": 98.8,
+          "ddpm": 99.8,
+          "iddpm": 99.9,
+          "pndm": 89.6,
+          "sdv1": 95.2,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "ap": {
+          "adm": 100.0,
+          "ddpm": 100.0,
+          "iddpm": 100.0,
+          "pndm": 100.0,
+          "sdv1": 100.0,
+          "sdv2": 100.0,
+          "ldm": 100.0,
+          "vqdiffusion": 100.0
+        },
+        "mean_acc": 97.91,
+        "mean_ap": 100.0,
+        "avg_row": {
+          "acc": 97.9,
+          "ap": 100.0
+        }
+      }
+    ],
+    "source": "src/dire_modal/paper_table2.tsv · ICCV 2023, Table 2"
+  },
+  "pipeline": {
+    "tier": "e2",
+    "items": 17,
+    "tars": 16,
+    "pairs": 15,
+    "checkpoints": 1,
+    "source": "manifest tier `e2` — đếm tar, KHÔNG đếm `real` là generator",
+    "containers": 60,
+    "detectors_count": 4
+  },
+  "demo": {
+    "labels": "demo — KHÔNG phải số của paper",
+    "images_epochs": "2000 × 5",
+    "seed": 3407,
+    "arch": "resnet50",
+    "n_out": 1,
+    "loss": "bce_with_logits",
+    "batch_size": 64,
+    "lr": 0.0001,
+    "epochs": 5,
+    "images": 2000,
+    "paper_epochs": 400,
+    "steps": 160,
+    "val_steps": 20,
+    "gpu_seconds": 58.333,
+    "usd": 0.01296,
+    "gpu": "L4",
+    "sec_per_step": 0.35,
+    "measured": false,
+    "source": "src/dire_modal/demo_train.yaml · docs/adr-0003-demo-training.md"
+  },
+  "measured": {
+    "baidu_kib_s": {
+      "value": 76.6,
+      "text": "76.6 KiB/s",
+      "source": "đo 2026-10-25 · docs/runbook-free.md §2",
+      "note": "trần của TÀI KHOẢN free, không phải của container"
+    },
+    "ls_rounding": {
+      "shown": "119.22MB",
+      "reversed_bytes": 125011230,
+      "real_bytes": 125015131,
+      "delta_bytes": 3901,
+      "source": "log thật 2026-10-25 · docs/runbook-free.md §Sự cố 2026-10-25"
+    },
+    "fc_weight": {
+      "paper_shape": "[1, 2048]",
+      "old_code_shape": "[2, 2048]",
+      "source": "sự cố 2026-10-28 · PR #18"
+    }
+  },
+  "status": {
+    "counts": {
+      "done": 0,
+      "run": 6,
+      "todo": 3,
+      "out": 1
+    },
+    "items": [
+      {
+        "name": "Tải + verify dữ liệu",
+        "state": "run",
+        "note": "code + test xong; chưa chạy trọn trong CI",
+        "ref": "download.py"
+      },
+      {
+        "name": "Eval bằng checkpoint tác giả",
+        "state": "run",
+        "note": "code + test xong; **số của mình chưa có**",
+        "ref": "eval.py"
+      },
+      {
+        "name": "Tái lập Table 2",
+        "state": "run",
+        "note": "quy trình `scripts/01_repro.sh` sẵn sàng, chờ chạy",
+        "ref": "01_repro.sh"
+      },
+      {
+        "name": "Mirror HF / Kaggle + sha256",
+        "state": "todo",
+        "note": "code có; `manifests/*_sha256.tsv` còn trống ⇒ CỔNG 3 chưa đóng",
+        "ref": "archive.py"
+      },
+      {
+        "name": "AEROBLADE (FR-3)",
+        "state": "todo",
+        "note": "`src/dire_modal/aero.py` chưa tồn tại",
+        "ref": "spec.md FR-3"
+      },
+      {
+        "name": "Fusion DIRE ⊕ AEROBLADE (FR-5)",
+        "state": "todo",
+        "note": "`fusion.py` chưa có; phụ thuộc FR-3",
+        "ref": "spec.md FR-5"
+      },
+      {
+        "name": "Demo HF Spaces",
+        "state": "run",
+        "note": "code + hướng dẫn; chờ checkpoint & gallery",
+        "ref": "platforms/hf-spaces"
+      },
+      {
+        "name": "Video giải thích (manim)",
+        "state": "run",
+        "note": "5 scene + kế hoạch 8 chương; **chưa render**",
+        "ref": "tools/manim"
+      },
+      {
+        "name": "Train lại detector",
+        "state": "out",
+        "note": "ngoài phạm vi: N1 — chỉ cải thiện, không train lại",
+        "ref": "spec.md N1"
+      },
+      {
+        "name": "Stage-2: compute DIRE toàn bộ",
+        "state": "run",
+        "note": "30–60 A100-h ⇒ ngoài ngân sách free tier",
+        "ref": "compute_dire.py"
+      }
+    ]
+  },
+  "roadmap": [
+    {
+      "what": "Sửa `eval --tiers` để lọc thật",
+      "why": "tham số đang bị bỏ qua (`eval.py:869` dùng `rglob` cả `/raw/dire/test`) ⇒ `--tiers e2` vẫn chấm 24 cặp: tốn tiền và bẩn số",
+      "cost": "~30 phút"
+    },
+    {
+      "what": "`aero.py` (FR-3)",
+      "why": "chưa có ⇒ toàn bộ phần \"cải thiện\" của dự án không tồn tại",
+      "cost": "1 PR"
+    },
+    {
+      "what": "`fusion.py` (FR-5)",
+      "why": "đóng góp riêng; cần FR-3 xong",
+      "cost": "sau FR-3"
+    },
+    {
+      "what": "`manifests/*_sha256.tsv`",
+      "why": "`verify` đang in \"CHƯA đối chiếu sha256\" ⇒ CỔNG 3 chưa đóng",
+      "cost": "1 lần chạy"
+    }
+  ]
+}
