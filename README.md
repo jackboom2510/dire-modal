@@ -259,6 +259,7 @@ tools/              # free_quota.py, storage_cost.py (thuần stdlib) + tiện �
                     #   manim/ = video giải thích (5 scene, số đọc từ repo)
 scripts/            # ĐÚNG 2 quy trình: 01_repro.sh · 02_improve.sh (+ setup/check/lib)
 platforms/          # bootstrap cho kaggle / runpod / vast / hf-spaces
+                    #   site/ = trang pitch deck tĩnh (12 slide, số do build.py sinh)
 docs/               # runbook, so sánh, ADR
 manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 ```
@@ -278,6 +279,23 @@ manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 | Train lại | ⛔ ngoài phạm vi (spec.md N1: chỉ cải thiện, không train lại) |
 | Stage-2 (compute DIRE toàn dataset) | ⏳ code viết theo API guided-diffusion, **chưa chạy thử**; cần ~30–60 A100-h |
 | Demo HF Spaces | ✅ code + hướng dẫn; ⏳ chờ checkpoint & gallery |
+
+## Trang giới thiệu (pitch deck)
+
+`platforms/site/` — trang tĩnh 12 slide để thuyết trình: vấn đề → ý tưởng DIRE →
+bằng chứng của paper → **trạng thái thật** → việc còn thiếu → giới hạn. Không CDN,
+không build step, chạy offline.
+
+```bash
+python3 platforms/site/build.py        # sinh data.json từ TSV/manifest/demo_train
+python3 -m http.server 8000 --bind 0.0.0.0 --directory platforms/site
+```
+
+HTML **không chứa con số nào** — mỗi số là một `[data-bind]` trỏ vào `data.json`,
+mà `data.json` lại đọc từ `paper_table2.tsv`, manifest tier `e2` và
+`demo_train.yaml`. Sửa dữ liệu mà quên build ⇒ `tests/test_site.py` đỏ. Ba tầng số
+(*của paper* · *đo được* · *ước lượng demo*) luôn được in nhãn ngay cạnh số.
+Chi tiết: [`platforms/site/README.md`](platforms/site/README.md).
 
 ## Cảnh báo
 
