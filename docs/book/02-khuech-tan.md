@@ -292,9 +292,9 @@ và `β_t = 1 − ᾱ_t/ᾱ_{t−1}`.
 
 | `t` | `ᾱ_t` tuyến tính | `ᾱ_t` cosine |
 |---|---|---|
-| 250 | 0,521 | 0,816 |
+| 250 | 0,521 | 0,847 |
 | 500 | 0,078 | 0,494 |
-| 750 | 0,0033 | 0,164 |
+| 750 | 0,0033 | 0,144 |
 
 Đọc bảng: lịch tuyến tính **phá ảnh quá nhanh ở nửa đầu** — đến `t = 500` đã mất
 92% tín hiệu — rồi dành nửa sau cho việc "dọn" gần như không còn gì. Cosine giữ

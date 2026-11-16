@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIRE — lịch nhiễu & chi phí, bảng tương tác</title>
+<style>
+  :root{
+    --ink:#1c2b33; --muted:#5f7280; --accent:#0f4c5c; --rule:#d7e0e6;
+    --bg:#fbfcfd; --panel:#f2f6f8; --code:#8a3a1e; --warn:#8a5a00; --ok:#1c6b4a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+    font-size:16px; line-height:1.6;
+  }
+  .wrap{max-width:1080px; margin:0 auto; padding:40px 28px 80px}
+  .kicker{font-family:ui-sans-serif,system-ui,"Segoe UI",sans-serif; font-size:11px;
+    letter-spacing:.16em; text-transform:uppercase; color:#7a8a94; margin:0 0 10px}
+  h1{font-size:32px; line-height:1.2; margin:0 0 8px; color:var(--accent); font-weight:700}
+  .sub{color:var(--muted); font-style:italic; margin:0 0 22px; font-size:16.5px}
+  .rule{height:2.5px; background:var(--accent); margin:0 0 28px}
+  h2{font-family:ui-sans-serif,system-ui,"Segoe UI",sans-serif; font-size:15px;
+     letter-spacing:.02em; color:#123b4a; margin:34px 0 12px}
+  h2 .num{color:#9aacb6; margin-right:8px; font-variant-numeric:tabular-nums}
+  p{margin:0 0 12px}
+  .panel{background:var(--panel); border-left:3px solid var(--accent);
+         padding:16px 18px; margin:0 0 18px}
+  .panel p:last-child{margin-bottom:0}
+  code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace; font-size:.88em;
+       color:var(--code); background:#f6efec; padding:1px 5px; border-radius:3px}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:16px}
+  label.ctl{display:block; font-family:ui-sans-serif,system-ui,sans-serif; font-size:12px;
+    color:var(--muted); margin-bottom:6px; letter-spacing:.03em}
+  .ctl-row{display:flex; align-items:center; gap:10px}
+  input[type=range]{width:100%; accent-color:var(--accent)}
+  .val{font-family:ui-monospace,monospace; font-size:13px; color:var(--ink);
+       min-width:62px; text-align:right; font-variant-numeric:tabular-nums}
+  .seg{display:inline-flex; border:1px solid var(--rule); border-radius:999px; overflow:hidden;
+       font-family:ui-sans-serif,system-ui,sans-serif; font-size:12.5px}
+  .seg button{border:0; background:#fff; padding:7px 15px; cursor:pointer; color:var(--muted)}
+  .seg button[aria-pressed=true]{background:var(--accent); color:#fff}
+  .seg button + button{border-left:1px solid var(--rule)}
+  table{width:100%; border-collapse:collapse; font-size:13.5px; margin:6px 0 8px}
+  th{background:var(--accent); color:#fff; text-align:left; padding:8px 10px;
+     font-family:ui-sans-serif,system-ui,sans-serif; font-size:12.5px; font-weight:600}
+  td{padding:7px 10px; border-bottom:.5px solid var(--rule); font-variant-numeric:tabular-nums}
+  tr.hi td{background:#eef6f2}
+  td.n{font-family:ui-monospace,monospace; color:var(--code)}
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:14px 0 4px}
+  .card{background:#fff; border:1px solid var(--rule); border-radius:6px; padding:12px 14px}
+  .card .k{font-family:ui-sans-serif,system-ui,sans-serif; font-size:11px; color:var(--muted);
+     text-transform:uppercase; letter-spacing:.08em}
+  .card .v{font-size:23px; font-weight:700; color:var(--accent); margin-top:4px;
+     font-variant-numeric:tabular-nums}
+  .card .u{font-size:12px; color:var(--muted); font-weight:400; margin-left:3px}
+  svg{display:block; width:100%; height:auto; background:#fff; border:1px solid var(--rule); border-radius:6px}
+  .legend{display:flex; gap:18px; font-family:ui-sans-serif,system-ui,sans-serif;
+     font-size:12px; color:var(--muted); margin:8px 0 0; flex-wrap:wrap}
+  .legend i{display:inline-block; width:18px; height:2.5px; vertical-align:middle; margin-right:6px}
+  .note{font-size:13.5px; color:var(--muted)}
+  .warn{border-left-color:#d08b00; background:#fdf6e6}
+  ul{margin:0 0 12px; padding-left:22px} li{margin:4px 0}
+  .foot{margin-top:44px; padding-top:14px; border-top:1px solid var(--rule);
+        font-size:12.5px; color:var(--muted)}
+  .chips{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 0}
+  .chip{font-family:ui-monospace,monospace; font-size:12px; background:#fff;
+    border:1px solid var(--rule); border-radius:999px; padding:3px 10px; color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">Giáo trình DIRE · bảng tương tác</p>
+  <h1>Lịch nhiễu, mốc respacing và hoá đơn NFE</h1>
+  <p class="sub">Kéo tham số để thấy vì sao “chỉ 20 bước” vẫn là 40 lượt chạy mạng, và vì sao
+  DIRE của hai mô hình khác lịch nhiễu không so sánh trực tiếp được.</p>
+  <div class="rule"></div>
+
+  <div class="panel">
+    <p><strong>Quy ước.</strong> Với <code>β_t</code> đã chọn, đặt <code>α_t = 1 − β_t</code> và
+    <code>ᾱ_t = ∏ α_s</code>. Một ảnh đi qua DIRE tốn <code>S</code> bước đảo ngược
+    <em>cộng</em> <code>S</code> bước tái tạo ⇒ <code>NFE = 2S</code>. Số dưới đây tính trực tiếp
+    từ công thức, không lấy từ bài báo.</p>
+  </div>
+
+  <h2><span class="num">01</span>Chọn lịch nhiễu</h2>
+  <div class="grid">
+    <div>
+      <label class="ctl" for="mode">Họ lịch</label>
+      <div class="seg" id="mode">
+        <button data-mode="linear" aria-pressed="true">Tuyến tính (DDPM/ADM)</button>
+        <button data-mode="cosine" aria-pressed="false">Cosine (iDDPM)</button>
+      </div>
+    </div>
+    <div>
+      <label class="ctl" for="T">Số bước huấn luyện T <span class="val" id="Tv">1000</span></label>
+      <div class="ctl-row"><input id="T" type="range" min="100" max="2000" step="50" value="1000"></div>
+    </div>
+    <div>
+      <label class="ctl" for="S">Số bước sinh S <span class="val" id="Sv">20</span></label>
+      <div class="ctl-row"><input id="S" type="range" min="5" max="100" step="5" value="20"></div>
+    </div>
+    <div id="lin-only">
+      <label class="ctl" for="bmin">β_min <span class="val" id="bminv">1e-4</span></label>
+      <div class="ctl-row"><input id="bmin" type="range" min="-6" max="-2" step="0.5" value="-4"></div>
+    </div>
+    <div id="lin-only2">
+      <label class="ctl" for="bmax">β_max <span class="val" id="bmaxv">0.02</span></label>
+      <div class="ctl-row"><input id="bmax" type="range" min="-2" max="-0.5" step="0.1" value="-1.7"></div>
+    </div>
+  </div>
+
+  <h2><span class="num">02</span>Đường cong tích luỹ <code>ᾱ_t</code> (thang log)</h2>
+  <svg id="chart" viewBox="0 0 900 320" role="img" aria-label="Đồ thị a-bar theo t"></svg>
+  <div class="legend">
+    <span><i style="background:#0f4c5c"></i>ᾱ_t của lịch đang chọn</span>
+    <span><i style="background:#c8a24a"></i>lịch còn lại (để so sánh)</span>
+    <span><i style="background:#b3452f"></i>mốc bắt đầu tái tạo <code>t = T − T/S</code></span>
+  </div>
+
+  <h2><span class="num">03</span>Con số quyết định</h2>
+  <div class="cards">
+    <div class="card"><div class="k">NFE mỗi ảnh</div><div class="v" id="nfe">40</div></div>
+    <div class="card"><div class="k">√ᾱ tại mốc cuối</div><div class="v" id="sq">0.0103</div></div>
+    <div class="card"><div class="k">Tín hiệu còn lại</div><div class="v" id="sig">1.03<span class="u">%</span></div></div>
+    <div class="card"><div class="k">So với ResNet-50 (1 NFE)</div><div class="v" id="ratio">40<span class="u">×</span></div></div>
+  </div>
+
+  <p class="note" id="verdict"></p>
+
+  <h2><span class="num">04</span>Bảng mốc của tập respacing</h2>
+  <p class="note">Cột “bước” là chỉ số bước suy luận; cột “t” là mốc thật trong lịch
+  <code>T</code> bước. Với <code>T = 1000, S = 20</code>, stride = 50 nên mốc là
+  <code>{0, 50, …, 950}</code> — <strong>không</strong> phải 999.</p>
+  <table id="tbl">
+    <thead><tr><th>Bước k</th><th>t</th><th>ᾱ_t</th><th>√ᾱ_t</th><th>1 − ᾱ_t</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h2><span class="num">05</span>Vì sao chuyện này ảnh hưởng tới kết quả</h2>
+  <ul>
+    <li><strong>Điểm bắt đầu tái tạo đổi theo lịch.</strong> Cùng <code>S = 20</code> nhưng
+      lịch cosine giữ tín hiệu lâu hơn, nên <code>x<sub>t</sub></code> ở mốc cuối còn “ảnh” nhiều
+      hơn ⇒ phép đảo ngược dễ hơn ⇒ DIRE có xu hướng <em>nhỏ hơn</em> trên mọi ảnh.</li>
+    <li><strong>Thang đo không bất biến.</strong> DIRE của ADM (tuyến tính) và của iDDPM
+      (cosine) khác thang, nên detector đã train trên map này <em>không</em> dùng lại được cho map kia.</li>
+    <li><strong>Đừng tính lại β sau khi respacing.</strong> <code>SpacedDiffusion</code> chỉ
+      <em>chọn</em> các mốc từ lịch đã tính ở <code>T = 1000</code>. Tính lại β cho 20 bước là
+      một quỹ đạo khác hẳn.</li>
+    <li><strong>Chi phí là bội số của S, không phải hằng số.</strong> S = 20 ⇒ 40 NFE;
+      S = 50 ⇒ 100 NFE. Đây là lý do bài báo dừng ở 20 dù 50 vẫn tăng điểm.</li>
+  </ul>
+
+  <h2><span class="num">06</span>Đối chiếu nhanh (giá trị mặc định)</h2>
+  <table>
+    <thead><tr><th>Mốc t</th><th>ᾱ tuyến tính</th><th>ᾱ cosine</th></tr></thead>
+    <tbody>
+      <tr><td class="n">250</td><td class="n">0,521</td><td class="n">0,847</td></tr>
+      <tr><td class="n">500</td><td class="n">0,078</td><td class="n">0,494</td></tr>
+      <tr><td class="n">750</td><td class="n">0,0033</td><td class="n">0,144</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Số trong bảng này là hằng số của hai lịch chuẩn (T = 1000), không đổi theo
+  thanh trượt ở trên — dùng để thấy lịch tuyến tính phá ảnh nhanh gấp nhiều lần ở nửa đầu.</p>
+
+  <div class="panel warn" style="margin-top:26px">
+    <p><strong>Lưu ý về nguồn.</strong> Bài báo DIRE không nêu lịch nhiễu trong phần phương pháp;
+  đặc tả tuyến tính chỉ đọc được từ mã (<code>guided-diffusion</code>, mặc định
+  <code>make_beta_schedule("linear")</code>). Mọi con số ở đây là <em>suy ra từ công thức</em>,
+  không phải số đo trên GPU — đừng trích chúng như kết quả thực nghiệm.</p>
+  </div>
+
+  <div class="chips">
+    <span class="chip">docs/book/02-khuech-tan.md §5.6–5.7</span>
+    <span class="chip">gaussian_diffusion.py</span>
+    <span class="chip">compute_dire.py</span>
+  </div>
+
+  <p class="foot">Bảng tương tác dựng kèm giáo trình <em>DIRE — từ số 0</em>. Toàn bộ tính toán
+  chạy trong trang, không gọi mạng. Công thức và nhận định khớp với Phần 0 §0.9, Phần 5 §5.6–5.7
+  và Phần 7 §7.5 của giáo trình.</p>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const fmt = (x, d=3) => x.toFixed(d).replace(".", ",");
+
+let mode = "linear";
+
+function abar(T, kind, bmin, bmax){
+  // a[t] = ᾱ_t cho t = 0..T (a[0] = 1, chưa thêm nhiễu)
+  const a = [1];
+  if (kind === "cosine"){
+    // iDDPM: ᾱ_t = f(t)/f(0) — tính trực tiếp, không đi vòng qua β
+    const s = 0.008;
+    const f = t => Math.cos(((t / T) + s) / (1 + s) * Math.PI / 2) ** 2;
+    const f0 = f(0);
+    for (let t = 1; t <= T; t++) a.push(f(t) / f0);
+    return a;
+  }
+  // tuyến tính, khớp giáo trình (Phần 5 §5.7): β_t với t = 1..T
+  for (let t = 1; t <= T; t++){
+    const b = bmin + (t / (T - 1)) * (bmax - bmin);
+    a.push(a[t - 1] * (1 - b));
+  }
+  return a;
+}
+
+function state(){
+  return {
+    T: +$("#T").value,
+    S: +$("#S").value,
+    bmin: Math.pow(10, +$("#bmin").value),
+    bmax: Math.pow(10, +$("#bmax").value),
+  };
+}
+
+function draw(){
+  const {T, S, bmin, bmax} = state();
+  $("#Tv").textContent = T;
+  $("#Sv").textContent = S;
+  $("#bminv").textContent = bmin.toExponential(0);
+  $("#bmaxv").textContent = bmax.toFixed(3).replace(".", ",");
+
+  const other = mode === "linear" ? "cosine" : "linear";
+  const cur = abar(T, mode, bmin, bmax);
+  const alt = abar(T, other, bmin, bmax);
+
+  const W = 900, H = 320, L = 62, R = 18, TP = 16, B = 40;
+  const x = t => L + (W - L - R) * t / (T - 1);
+  // trục dọc: log10(ᾱ) từ 0 (dưới) xuống −6 (trên)
+  const yl = v => TP + (H - TP - B) * (Math.log10(Math.max(v, 1e-6)) + 6) / 6;
+
+  let g = "";
+  for (let e = 0; e >= -6; e--){
+    const yy = TP + (H - TP - B) * (e + 6) / 6;
+    g += `<line x1="${L}" x2="${W - R}" y1="${yy}" y2="${yy}" stroke="#e7edf1" stroke-width="1"/>`;
+    g += `<text x="${L - 10}" y="${yy + 4}" font-size="11" fill="#7a8a94" text-anchor="end">10^${e}</text>`;
+  }
+  const step = Math.max(1, Math.round(T / 10));
+  for (let t = 0; t < T; t += step){
+    g += `<line x1="${x(t)}" x2="${x(t)}" y1="${H - B}" y2="${H - B + 4}" stroke="#b9c7cf"/>`;
+    g += `<text x="${x(t)}" y="${H - B + 18}" font-size="11" fill="#7a8a94" text-anchor="middle">${t}</text>`;
+  }
+  const path = arr => arr.map((v, t) => `${t ? "L" : "M"}${x(t).toFixed(1)},${yl(v).toFixed(1)}`).join("");
+  g += `<path d="${path(alt)}" fill="none" stroke="#c8a24a" stroke-width="1.8" stroke-dasharray="5 4"/>`;
+  g += `<path d="${path(cur)}" fill="none" stroke="#0f4c5c" stroke-width="2.4"/>`;
+
+  const stride = T / S, tEnd = Math.round(T - stride);
+  g += `<line x1="${x(tEnd)}" x2="${x(tEnd)}" y1="${TP}" y2="${H - B}" stroke="#b3452f" stroke-width="1.2" stroke-dasharray="3 3"/>`;
+  g += `<circle cx="${x(tEnd)}" cy="${yl(cur[tEnd])}" r="4" fill="#b3452f"/>`;
+  g += `<text x="${x(tEnd) - 6}" y="${TP + 13}" font-size="11" fill="#b3452f" text-anchor="end">mốc cuối t=${tEnd}</text>`;
+  g += `<text x="${(L + W - R) / 2}" y="${H - 6}" font-size="11" fill="#7a8a94" text-anchor="middle">t (bước huấn luyện)</text>`;
+  $("#chart").innerHTML = g;
+
+  const vEnd = cur[tEnd];
+  const sq = Math.sqrt(vEnd);
+  $("#nfe").textContent = 2 * S;
+  $("#ratio").innerHTML = (2 * S) + '<span class="u">×</span>';
+  $("#sq").textContent = sq < 0.01 ? sq.toExponential(1).replace("e-","·10⁻") : fmt(sq, 4);
+  $("#sig").innerHTML = fmt(sq * 100, 2) + '<span class="u">%</span>';
+
+  const baseSq = Math.sqrt(abar(1000, "linear", 1e-4, 0.02)[950]);
+  const d = sq / baseSq;
+  let msg;
+  if (mode === "linear" && Math.abs(d - 1) < 0.05){
+    msg = "Đây đúng là cấu hình của bài báo: lịch tuyến tính, T = 1000, mốc cuối 950.";
+  } else if (d > 1.2){
+    msg = "Mốc cuối còn giữ nhiều tín hiệu hơn cấu hình bài báo " + fmt(d, 2) +
+          " lần ⇒ phép đảo ngược “dễ” hơn, DIRE sẽ nhỏ hơn và detector cũ không còn đúng thang.";
+  } else if (d < 0.8){
+    msg = "Mốc cuối đã gần như thuần nhiễu (chỉ còn " + fmt(sq * 100, 2) +
+          "% tín hiệu) ⇒ tái tạo gần như sinh mới, DIRE mất tính “tái tạo”.";
+  } else {
+    msg = "Cấu hình lệch " + fmt(d, 2) + " lần so với bài báo — đủ để số liệu không so sánh trực tiếp được.";
+  }
+  $("#verdict").textContent = msg;
+
+  const rows = [];
+  const kn = Math.min(S, 25);
+  for (let k = 0; k < kn; k++){
+    const tt = Math.max(0, Math.min(T - 1, Math.round(k * stride)));
+    const a = cur[tt];
+    rows.push(`<tr${k === kn - 1 ? ' class="hi"' : ''}><td class="n">${k}</td><td class="n">${tt}</td>
+      <td class="n">${a >= 0.01 ? fmt(a, 4) : a.toExponential(2).replace("e-","·10⁻")}</td>
+      <td class="n">${fmt(Math.sqrt(a), 4)}</td><td class="n">${fmt(1 - a, 4)}</td></tr>`);
+  }
+  $("#tbl").querySelector("tbody").innerHTML = rows.join("");
+}
+
+document.querySelectorAll("#mode button").forEach(b => {
+  b.addEventListener("click", () => {
+    mode = b.dataset.mode;
+    document.querySelectorAll("#mode button").forEach(x => x.setAttribute("aria-pressed", x === b));
+    const lin = mode === "linear" ? "" : "none";
+    $("#lin-only").style.opacity = mode === "linear" ? 1 : .35;
+    $("#lin-only2").style.opacity = mode === "linear" ? 1 : .35;
+    $("#bmin").disabled = mode !== "linear";
+    $("#bmax").disabled = mode !== "linear";
+    draw();
+  });
+});
+["#T", "#S", "#bmin", "#bmax"].forEach(s => $(s).addEventListener("input", draw));
+draw();
+</script>
+</body>
+</html>
