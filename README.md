@@ -1,10 +1,18 @@
 # dire-modal
 
-Tái lập **DIRE — Diffusion Reconstruction Error** (Wang et al., ICCV 2023) theo hướng
-*serverless-first, chi phí gần 0*, chạy được trên nhiều nền tảng IaaS.
+Chạy lại **DIRE — Diffusion Reconstruction Error** (Wang et al., ICCV 2023) theo
+hướng *serverless-first, chi phí gần 0*, trên nhiều nền tảng IaaS.
 
-> Mục tiêu: từ máy tính cá nhân + **0 ₫** (chỉ free tier) → có detector, có bảng eval, có demo công khai,
-> và có mirror dữ liệu để người khác tái lập.
+> Mục tiêu: từ máy tính cá nhân + **0 ₫** (chỉ free tier) → có detector, có bảng
+> eval, có demo công khai, và có mirror dữ liệu để người khác kiểm lại.
+
+**Nói đúng mức bằng chứng.** Đường eval mặc định dùng lại **cả hai** thứ quyết
+định phép đo: DIRE map do tác giả tính (`dire/`) và detector do tác giả train
+(`checkpoints/`). Vì thế nó là **chấm lại (R0)** — kiểm đường đo của mình khớp
+đường đo của họ — **không phải** tái lập thí nghiệm. Tự tính map (R1), tự train
+lại detector (R2), tự sinh ảnh gốc (R3) là ba trục **độc lập**, hiện **chưa
+làm**. Nhãn này được ghi tự động vào `run.json` + cột `data_source` của CSV, và
+in ở đầu mọi báo cáo — xem `src/dire_core/provenance.py`.
 
 ## Chạy trên máy nhà (không cần Modal)
 
@@ -73,15 +81,21 @@ một bước trong dãy 00…10 như trước. Chi tiết: [`scripts/README.md`
 
 | Quy trình | Câu hỏi | File | Chi phí |
 |---|---|---|---|
-| **1 — Tái lập** | "Có tái tạo được số của paper không?" | `scripts/01_repro.sh` | ~$0.2 (CPU) |
+| **1 — Chấm lại** | "Đường đo của mình có ra đúng số paper trên cùng đặc trưng không?" (R0) | `scripts/01_repro.sh` | ~$0.2 (CPU) |
 | **2 — Cải thiện** | "Training-free, làm tốt hơn DIRE được không?" | `scripts/02_improve.sh` | ~$0–20 theo FR |
 
-### Quy trình 1 — tái lập Table 2 của paper
+### Quy trình 1 — chấm lại Table 2 của paper (R0)
 
 Khối **DIRE (ours)** trong Table 2 (ICCV 2023): **4 detector × 8 generator =
 32 ô**, headline `Avg 99.9 ACC / 100 AP`. Không train gì — nhánh `dire/` đã có
 DIRE map tác giả tính sẵn (ADM-LSUN, DDIM S=20), nên chỉ cần ResNet-50 forward
 trên CPU.
+
+⚠ Vì cả map lẫn trọng số đều của tác giả, bảng khớp `32/32` chỉ chứng minh
+**harness eval** của mình đúng (tiền xử lý, cách đọc `fc.weight`, logit →
+`P(fake)`, ACC/AP). Nó **không** chứng minh DIRE map đúng, **không** chứng minh
+detector train lại được. Muốn nói "tái lập" thì phải làm R1/R2 — xem
+`src/dire_core/provenance.py`.
 
 ```bash
 bash scripts/01_repro.sh --quick        # e2min: 3 file ≈ 1.5 h → 1 ô + cổng S2
@@ -180,7 +194,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 |---|---|
 | `bash scripts/check.sh` | **CỔNG 0**: import bằng `modal` THẬT + toàn bộ test + pyflakes. 0 credit, chạy trước mọi lệnh khác |
 | `bash scripts/setup.sh` | Điều kiện tiên quyết, một lần: tạo secret trên Modal từ `.env` |
-| `bash scripts/01_repro.sh` | **QUY TRÌNH 1** — tái lập Table 2: data → eval 4 detector → báo cáo Δ so với paper |
+| `bash scripts/01_repro.sh` | **QUY TRÌNH 1** — chấm lại Table 2 (R0): data → eval 4 detector → báo cáo Δ so với paper |
 | `bash scripts/01_repro.sh --quick` | Bản nhanh: `e2min` (3 file) → 1 ô + cổng S2 |
 | `bash scripts/01_repro.sh --stage report` | Chỉ in bảng so sánh với paper (`eval::report`) |
 | `bash scripts/02_improve.sh --stage plan` | **QUY TRÌNH 2** — lộ trình cải thiện FR-2…FR-6 (AEROBLADE + đề xuất của dự án) |

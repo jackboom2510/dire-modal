@@ -32,10 +32,13 @@ from .batch import Detector, batch_logits
 from .detector import fc_out_features, load_detector, unwrap_state
 from .labels import FAKE, REAL, label_of
 from .preprocess import CROP, MEAN, PREPROC, RESIZE, STD, build_transform, preprocess
+from .provenance import COMPONENTS, Claim, claim, banner
 from .score import prob_fake, sigmoid
 
 __all__ = [
+    "COMPONENTS",
     "CROP",
+    "Claim",
     "Detector",
     "FAKE",
     "MEAN",
@@ -43,7 +46,9 @@ __all__ = [
     "REAL",
     "RESIZE",
     "STD",
+    "banner",
     "batch_logits",
+    "claim",
     "build_transform",
     "fc_out_features",
     "label_of",

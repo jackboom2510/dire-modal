@@ -24,7 +24,7 @@ Không train ResNet50. Nạp `lsun_adm.pth` của tác giả rồi eval:
 `scripts/` giờ chỉ có **đúng 2 quy trình** (xem `scripts/README.md`):
 
 ```bash
-# QUY TRÌNH 1 — tái lập Table 2 (4 detector × 8 generator = 32 ô)
+# QUY TRÌNH 1 — chấm lại Table 2 (R0: dùng map + trọng số của tác giả)
 bash scripts/01_repro.sh --quick   # e2min: 3 file ~0.40 GB ~1.5 h → 1 ô + cổng S2
 bash scripts/01_repro.sh           # e2,ckpts: 22 file ~3.25 GB ~12.4 h → cả 32 ô
 bash scripts/01_repro.sh --stage report   # Δ từng ô so với src/dire_modal/paper_table2.tsv
@@ -172,13 +172,28 @@ hardcode `.venv/bin/python`, và ép `PYTHONIOENCODING=utf-8` để hết lỗi 
 **Còn lại của hướng này (không chặn gì):** S2 batch async (`/v1/jobs`), mặt tiền
 HF Spaces gọi API, rate limit theo key.
 
-### 7b. Tái lập Table 2 — quy trình đã xong, SỐ thì chưa
+### 7b. Chấm lại Table 2 (R0) — quy trình đã xong, SỐ thì chưa
 
 `bash scripts/01_repro.sh` (mặc định `e2,ckpts` = 22 file / 3.25 GB / ~12.4 h)
 chạy 4 detector × 8 generator rồi `eval::report` in Δ so với
 `src/dire_modal/paper_table2.tsv`. Cần chạy thật để có cột Δ — đó là cổng **S7**.
 
 **Xong khi:** S7 đạt (|ΔACC| ≤ 0.5 ở mọi ô) và số được ghi vào báo cáo.
+
+⚠ **S7 xong vẫn chỉ là R0** (ADR-0006): map lẫn trọng số đều của tác giả, nên
+nó chứng minh harness eval đúng — không chứng minh DIRE map đúng. Bảng của
+`report` in nhãn này ở đầu; CSV có cột `data_source`.
+
+Lên mức, nếu sau này cần (chưa nằm trong kế hoạch, đều **chưa** làm):
+
+| Muốn | Việc | Giá |
+|---|---|---|
+| **R2** | FR-8: train lại detector trên map phát hành (§7 khối FR-8) | $4–56 |
+| **R1** | tự tính DIRE: `lsun_bedroom.pt` 2,5 GB (đang NEVER) + DDIM S=20 + GPU | $22–150 |
+| **R3** | sinh lại ảnh gốc: `rawx` 4,48 GB + generator; 3 generator API đóng ⇒ `null` + lý do | — |
+
+Điểm cần nói trước với người đọc: **R1 là mức duy nhất** trả lời được "cách
+tính DIRE có đúng không". R0/R2 đều đứng trên map của tác giả.
 
 ### 7c. ✅ Sửa lỗi "tải dở dang" trên file đã tải đủ (2026-10-25)
 

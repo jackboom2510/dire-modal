@@ -756,6 +756,12 @@ batch / DIRE map.
 
 ## 8. Eval 15 generator (~$0 compute, chỉ CPU)
 
+> ⚠ **Mức tái lập = R0 (chấm lại).** Cả DIRE map (`dire/`) và trọng số
+> (`checkpoints/`) đều của tác giả. Bảng khớp `32/32` chứng minh *đường đo* của
+> mình đúng, **không** chứng minh DIRE map đúng và **không** chứng minh detector
+> train lại được. Đừng viết "tái lập DIRE" cho kết quả R0; nhãn này in ở đầu
+> báo cáo và ghi trong `run.json → reproduction` (`dire_core/provenance.py`).
+
 ```bash
 bash scripts/01_repro.sh --quick          # e2min: 3 file → eval → in CỔNG S2
 # hoặc đầy đủ 32 ô của Table 2 (4 detector × 8 generator):
