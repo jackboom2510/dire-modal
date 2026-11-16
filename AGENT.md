@@ -139,6 +139,18 @@ container. Sửa policy mà chỉ sửa `configs/` là sửa vào chỗ vô tác
 - Con số trong tài liệu phải là **số đo được**, không phải ước lượng — hoặc ghi
   rõ là ước lượng. Nhiều lỗi tài liệu trong repo này đến từ chỗ đó.
 
+## Quy ước Git
+
+- **Merge PR bằng rebase**: `gh pr merge <n> --rebase`. Không dùng `--merge`,
+  không `--squash` — `main` phải tuyến tính.
+- Nếu nhánh đã từng `git merge main` vào thì `git rebase origin/main` trước, không
+  thì GitHub từ chối rebase merge.
+- Xoá nhánh sau khi merge (`gh api -X DELETE …/git/refs/heads/<branch>`); chỉ xoá
+  nhánh đã kiểm `compare/main...<branch>` cho `ahead_by = 0`.
+- **Nợ lịch sử**: PR #30–#36 merge bằng `--merge` ⇒ `main` có merge commit tới
+  `63b29f7`. Không viết lại lịch sử để "sửa": nó phá mọi clone đã pull mà không
+  làm `main` thẳng lại được (còn 6 merge commit khác). Quy ước áp dụng **từ #37**.
+
 ## Bắt đầu từ đâu
 
 - Muốn biết **sẽ xây cái gì và tại sao** → [spec.md](spec.md), rồi [plan.md](plan.md)
