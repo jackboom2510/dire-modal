@@ -237,6 +237,6 @@ phải báo giá.
 
 Phần torch (`ddim.py`, `scratch_gen.py`, `scratch_train.py`, `scratch_verify.py`)
 **chưa chạy trên GPU thật** — sandbox soạn code không có CUDA. Phần quyết định
-đúng/sai và tiền (lịch, mốc 950, NFE, seed, cổng, tải tay) thì có 459 test chạy
+đúng/sai và tiền (lịch, mốc 950, NFE, seed, cổng, tải tay) thì có 462 test chạy
 mỗi commit. Lần chạy đầu nên để ý: tên tham số U-Net khớp checkpoint,
 `invert` trả đúng shape, VRAM ở batch 1.
