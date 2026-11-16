@@ -70,7 +70,7 @@ sẵn hai ca "phá" (`test_bijection_catches_a_missing_block`,
 Nạp **cùng bộ trọng số** vào hai mô hình rồi so đầu ra từng phần tử:
 
 ```text
-$ DIRE_REFRENCE_UNET=… pytest tests/test_zero_unet.py -k parity
+$ DIRE_REFERENCE_UNET=… pytest tests/test_zero_unet.py -k parity
 max abs diff = 0.0
 ```
 
@@ -141,7 +141,25 @@ python -m dire_zero selftest      # chạy trọn 4 bước trên U-Net 32×32, 
 `modal_app` gọi, chỉ khác kích thước. Xanh ở đây thì lỗi còn lại chỉ có thể là
 môi trường.
 
-### 4.2 Trên Modal
+### 4.2 Dùng dataset riêng (ổ `F:`) thay vì tải LSUN
+
+Nếu bạn đã có cây `DiffusionForensics` trên ổ, không cần tải lại gì:
+
+```bash
+python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
+python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm --license research-only
+```
+
+`dataset` in bảng `split × generator`, cảnh báo bất đối xứng, và **dừng** nếu
+thiếu giấy phép hoặc nếu dataset không cùng phân bố với ADM. `ingest` đổ tar.gz
+ra PNG 256², tên file theo sha256 pixel, kèm manifest + `data_card.json`.
+
+Nhãn phụ thuộc **ảnh giả lấy từ đâu**: `--fake-source author` (dùng ảnh của tác
+giả) ⇒ tối đa `R1+R2`; `--fake-source gen` (tự sinh) ⇒ `R1+R2+R3`.
+Chi tiết + phát hiện "ảnh ADM test chưa từng được phát hành":
+[`docs/dataset-own.md`](dataset-own.md).
+
+### 4.3 Trên Modal
 
 ```bash
 # 0. đẩy checkpoint (2,5 GB) — dùng lại bản đã tải tay cho đường cũ
@@ -171,7 +189,7 @@ bước rồi tính DIRE bằng 20 bước. Dùng chung một số cho cả hai 
 lệch giao thức — sai lệch này không làm chương trình hỏng, chỉ làm con số không
 so được với bài báo.
 
-### 4.3 Chi phí
+### 4.4 Chi phí
 
 `dire_zero` không tự đoán giá. Hai cổng cứng, cả hai đều **dừng** chương trình:
 

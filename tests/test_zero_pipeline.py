@@ -40,9 +40,16 @@ def tmp_run(tmp_path: Path):
     f = ModelCounter(model)
     meta = RunMeta("a" * 64, steps=3)
     gen = generate(f, n=10, out_dir=tmp_path / "gen", meta=meta, seed_base=100, size=32)
-    items = [(str(tmp_path / "gen" / n), 1) for n in gen["names"]]
+    items = [
+        (str(tmp_path / "gen" / n), 1, "train" if n in gen["split"]["train"] else "test", "ours_adm")
+        for n in gen["names"]
+    ]
     maps = compute_maps(f, items, tmp_path / "maps", meta, size=32)
-    rows = [{"name": x["name"], "path": str(tmp_path / "maps" / x["name"]), "label": x["label"]} for x in maps["items"]]
+    rows = [
+        {"name": x["name"], "path": str(tmp_path / "maps" / x["path"]),
+         "label": x["label"], "split": x["split"], "generator": x["generator"]}
+        for x in maps["items"]
+    ]
     return tmp_path, gen, maps, rows, f
 
 
@@ -88,7 +95,7 @@ def test_maps_are_float16_in_range(tmp_run):
     import numpy as np
 
     tmp, _, maps, _, _ = tmp_run
-    arr = np.load(tmp / "maps" / maps["items"][0]["name"])
+    arr = np.load(tmp / "maps" / maps["items"][0]["path"])
     assert arr.dtype == np.float16 and arr.shape == (3, 32, 32)
     assert float(arr.min()) >= 0.0 and float(arr.max()) <= 2.0
 
@@ -128,16 +135,19 @@ def test_train_json_is_honest_about_what_it_is(tmp_run):
     assert payload["test"]["n"] == out["split"]["n_test"]
 
 
-def test_collect_maps_labels_by_directory(tmp_path):
+def test_collect_maps_reads_label_from_generator_dir(tmp_path):
+    """Nhãn đến từ **tên thư mục**, không từ tham số — không thể truyền nhầm."""
     import numpy as np
 
-    for sub, label in (("real", 0), ("fake", 1)):
-        d = tmp_path / sub
-        d.mkdir()
+    for split, gen in (("train", "real"), ("train", "adm"), ("test", "real"), ("test", "pndm")):
+        d = tmp_path / split / gen
+        d.mkdir(parents=True)
         np.save(d / "a.npy", np.zeros((3, 4, 4), dtype="float16"))
-    rows = collect_maps([tmp_path / "real", tmp_path / "fake"], [0, 1])
-    assert {r["label"] for r in rows} == {0, 1}
-    assert len(rows) == 2
+    rows = collect_maps(tmp_path)
+    assert len(rows) == 4
+    assert {(r["split"], r["generator"], r["label"]) for r in rows} == {
+        ("train", "real", 0), ("train", "adm", 1), ("test", "real", 0), ("test", "pndm", 1)
+    }
 
 
 def test_split_is_stable_across_calls(tmp_run):

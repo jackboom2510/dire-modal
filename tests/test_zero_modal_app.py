@@ -33,7 +33,7 @@ def test_documented_entrypoints_exist():
 
 
 def test_paths_do_not_collide_with_the_old_scratch_path():
-    for value in (modal_app.CKPT, modal_app.REAL, modal_app.GEN, modal_app.MAPS_REAL, modal_app.MAPS_FAKE, modal_app.OUT):
+    for value in (modal_app.CKPT, modal_app.DATA, modal_app.GEN, modal_app.MAPS, modal_app.OUT):
         assert value.startswith(("/raw/zero", "/ckpt/zero")), value
         assert "/scratch" not in value
 

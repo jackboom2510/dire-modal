@@ -177,7 +177,14 @@ python -m dire_zero keys        # đối chiếu 566 key với fixture (không c
 python -m dire_zero selftest    # gen → dire → train trên U-Net 32×32, ~20 giây
 ```
 
-Trên Modal: `modal run -m dire_zero.modal_app::selfcheck|bench|gen|dire|train|report`.
+Dùng **dataset riêng trên ổ** (cây `DiffusionForensics`, tar.gz) thay vì tải LSUN:
+
+```bash
+python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
+python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm   # PNG 256² + manifest
+```
+
+Trên Modal: `modal run -m dire_zero.modal_app::checkdata|selfcheck|bench|gen|dire|train|report`.
 Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md).
 
 ## Tài liệu
@@ -186,6 +193,7 @@ Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-roo
 |---|---|
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
 | [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
+| [`docs/dataset-own.md`](docs/dataset-own.md) | Dùng **dataset riêng trên ổ** (`DiffusionForensics`): đọc tar.gz, nhãn theo generator, chặn rò rỉ, `dire/` bị từ chối, nhãn `R1+R2` vs `R1+R2+R3` |
 | [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md) | **Clean-room**: viết lại U-Net/DDIM/DIRE/ResNet-50 từ công thức, không dùng một dòng code tác giả — 4 lớp chứng minh, 3 lỗi tìm được trong code cũ, cách chạy và đọc số |
 | [`docs/download-manual.md`](docs/download-manual.md) | Tải dữ liệu **bằng tay**: danh sách file, vị trí dưới `data/raw/`, tên dễ sai, kiểm offline, đẩy lên Volume |
 | [`docs/runbook-local-manual.md`](docs/runbook-local-manual.md) | Runbook 11 bước trên **máy cá nhân**: kiểm máy → tải tay → ingest → bench → gen → dire → train, kèm tiền và cách sửa lỗi |

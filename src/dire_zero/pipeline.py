@@ -18,7 +18,7 @@ import datetime as _dt
 import json
 import time
 from pathlib import Path
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Sequence
 
 import torch
 from torch import Tensor
@@ -131,14 +131,20 @@ def generate(
 
 def compute_maps(
     f: ModelCounter,
-    items: Sequence[tuple[str, int]],
+    items: Sequence[tuple],
     out_dir: str | Path,
     meta: RunMeta,
     limit: int | None = None,
     size: int = 256,
     progress: Callable[[int], None] | None = None,
 ) -> dict:
-    """R1 — tính DIRE map cho ``items`` (đường dẫn, nhãn). Lưu float16, thang ``[0, 2]``.
+    """R1 — tính DIRE map cho ``items``; mỗi item là dict hoặc tuple.
+
+    Tuple: ``(path, label[, split[, generator]])``. Split **được ghi lại**, không
+    tính lại: cây DiffusionForensics đã có ``train``/``val``/``test`` do người
+    đóng gói quyết định, chia lại theo hash là bỏ quyết định đó và tự tạo rò rỉ.
+
+    Lưu float16, thang ``[0, 2]``.
 
     Lưu float16 chứ không uint8: thang ``[0, 2]`` chỉ có 256 mức trong uint8, và
     DIRE sống ở **biên độ nhỏ** — lượng tử hoá 8-bit làm mất đúng phần tín hiệu
@@ -152,17 +158,31 @@ def compute_maps(
     t0 = time.time()
     made = []
     skipped = 0
-    for i, (path, label) in enumerate(used, start=1):
-        img = load_image(path)
+    for i, raw in enumerate(used, start=1):
+        item = _as_item(raw)
+        img = load_image(item["path"])
         if img.shape[-1] != size or img.shape[-2] != size:
             skipped += 1
             continue
         dm, _recon = dire_map(f, img, sched)
-        name = Path(path).stem + ".npy"
+        # <split>/<generator>/<tên>.npy — nhãn và split đi cùng dữ liệu, không
+        # suy lại từ tên file (tên PNG là sha, không mang thông tin)
+        rel = Path(item["split"] or "all") / item["generator"] / (Path(item["path"]).stem + ".npy")
+        (out / rel).parent.mkdir(parents=True, exist_ok=True)
         import numpy as np  # noqa: PLC0415
 
-        np.save(out / name, dm.squeeze(0).to(torch.float16).numpy())
-        made.append({"name": name, "label": int(label), "source": str(path)})
+        np.save(out / rel, dm.squeeze(0).to(torch.float16).numpy())
+        made.append(
+            {
+                "name": rel.name,
+                "path": rel.as_posix(),
+                "abs": str(out / rel),
+                "label": int(item["label"]),
+                "split": item["split"],
+                "generator": item["generator"],
+                "source": item["path"],
+            }
+        )
         if progress and i % 50 == 0:
             progress(i)
 
@@ -179,10 +199,32 @@ def compute_maps(
     return payload
 
 
+def _as_item(raw) -> dict:
+    """Chuẩn hoá item: dict, hoặc tuple ``(path, label[, split[, generator]])``."""
+    if isinstance(raw, dict):
+        d = dict(raw)
+    else:
+        seq = tuple(raw)
+        d = {
+            "path": seq[0],
+            "label": seq[1],
+            "split": seq[2] if len(seq) > 2 else "",
+            "generator": seq[3] if len(seq) > 3 else "",
+        }
+    d.setdefault("split", "")
+    if not d.get("generator"):
+        d["generator"] = "real" if int(d.get("label", 0)) == 0 else "fake"
+    return d
+
+
 def _split_maps(items: list[dict], seed: int = 3407, frac_train: float = 0.8) -> dict[str, list[dict]]:
+    """Ưu tiên split **đã ghi** trong `dire.json`; chỉ chia theo hash khi không có."""
+    labelled = [it for it in items if it.get("split") in ("train", "val", "test")]
+    if labelled and len(labelled) == len(items):
+        return {k: [it for it in items if it["split"] == k] for k in ("train", "val", "test")}
     names = [it["name"] for it in items]
     idx = data_mod.split_indices(names, seed=seed, frac_train=frac_train)
-    return {k: [items[i] for i in v] for k, v in idx.items()}
+    return {"train": [items[i] for i in idx["train"]], "val": [], "test": [items[i] for i in idx["test"]]}
 
 
 def _batch(maps: list[Path], labels: list[int], bs: int, crop: int, train: bool, gen: torch.Generator):
@@ -249,11 +291,14 @@ def train(
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
     parts = _split_maps(maps, split_seed)
-    # val lấy từ train, để test không bao giờ được nhìn
-    inner = data_mod.split_indices([m["name"] for m in parts["train"]], seed=split_seed + 1, frac_train=0.85)
-    tr = [parts["train"][i] for i in inner["train"]]
-    va = [parts["train"][i] for i in inner["test"]]
-    te = parts["test"]
+    tr, te = parts["train"], parts["test"]
+    if parts["val"]:
+        va = parts["val"]                       # split của người đóng gói: dùng nguyên
+    else:
+        pool = tr                               # không có val ⇒ lấy một phần train
+        inner = data_mod.split_indices([m["name"] for m in pool], seed=split_seed + 1, frac_train=0.85)
+        tr = [pool[i] for i in inner["train"]]
+        va = [pool[i] for i in inner["test"]]
 
     model = model_factory().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -345,10 +390,28 @@ def evaluate(scores: Sequence[float], labels: Sequence[int], threshold: float = 
     return metrics.evaluate(scores, labels, threshold=threshold, seed=seed)
 
 
-def collect_maps(dirs: Iterable[str | Path], labels: Iterable[int]) -> list[dict]:
-    """Gom ``.npy`` từ nhiều thư mục thành danh sách item cho `train`."""
+def collect_maps(root: str | Path) -> list[dict]:
+    """Gom ``.npy`` dưới ``root/<split>/<generator>/`` thành item cho `train`.
+
+    Nhãn đọc từ **tên thư mục generator**: ``real`` ⇒ 0, còn lại ⇒ 1. Nhờ vậy
+    một cây chứa nhiều generator (``adm``, ``pndm``, ``ours_adm``) vẫn train được
+    mà không truyền nhãn riêng — và không thể lẫn nhãn.
+    """
+    root = Path(root)
+    if not root.exists():
+        raise FileNotFoundError(root)
     out: list[dict] = []
-    for d, label in zip(dirs, labels):
-        for p in sorted(Path(d).glob("*.npy")):
-            out.append({"name": p.name, "path": str(p), "label": int(label)})
+    for p in sorted(root.rglob("*.npy")):
+        rel = p.relative_to(root)
+        generator = rel.parts[-2] if len(rel.parts) >= 2 else "fake"
+        split = rel.parts[0] if len(rel.parts) >= 3 else ""
+        out.append(
+            {
+                "name": p.name,
+                "path": str(p),
+                "label": 0 if generator == "real" else 1,
+                "split": split,
+                "generator": generator,
+            }
+        )
     return out

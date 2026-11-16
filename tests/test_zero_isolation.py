@@ -25,8 +25,8 @@ PKG = ROOT / "src" / "dire_zero"
 FORBIDDEN_MODULES = ("guided_diffusion", "dire_core", "dire_modal", "dire_local")
 FORBIDDEN_STRINGS = ("/opt/dire", "ZhendongWang6", "compute_dire.py", "third_party/DIRE")
 ALLOWED_TOP = {
-    "__future__", "abc", "argparse", "dataclasses", "datetime", "hashlib",
-    "importlib", "io", "json", "math", "os", "pathlib", "random", "sys",
+    "__future__", "abc", "argparse", "collections", "dataclasses", "datetime", "hashlib",
+    "importlib", "io", "json", "math", "os", "pathlib", "random", "re", "shutil", "sys",
     "tarfile", "tempfile", "time", "typing", "numpy", "PIL", "torch", "modal",
 }
 
