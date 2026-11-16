@@ -764,7 +764,18 @@ bash scripts/01_repro.sh                  # e2,ckpts → eval → report Δ so v
 ```
 
 `eval::main` tự tìm checkpoint (`/raw/checkpoints/lsun_adm.pth` rồi
-`/ckpt/pretrained/lsun_adm.pth`) và in **CỔNG S2**: `ACC(adm) ≥ 0.99`. S2 KHÔNG
+`/ckpt/pretrained/lsun_adm.pth`) và in **CỔNG S2**: `ACC(adm) ≥ 0.99`.
+
+`--tiers` **quyết định tập cặp được chấm** (không chỉ ghi vào `run.json`): xin
+`e2` thì nhánh `lsun_bedroom__imagenet` — vốn dùng chung 1000 ảnh `real.tar.gz`
+với nhánh LSUN — bị bỏ, nên `n_real` không bị đếm hai lần. Muốn biết trước sẽ
+chấm bao nhiêu cặp mà **không cần tải byte nào**:
+
+```bash
+modal run -m dire_modal.eval::local_pairs --tiers e2     # → "sẽ chấm 15 cặp"
+```
+
+Số đó tính từ manifest (`tests/test_eval_contract.py`, mục 9), không chép tay. S2 KHÔNG
 ĐẠT thì đừng đọc bảng AP — kiểm đúng file ckpt, `n_real`/`n_fake`, và tiền xử lý
 (trường `preproc` trong `run.json`).
 

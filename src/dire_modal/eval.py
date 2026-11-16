@@ -277,6 +277,65 @@ def pairs_from_raw(root: Path, split: str = "test") -> list[dict]:
     return out
 
 
+def remote_of(path, root) -> str:
+    """Đường dẫn tương đối so với gốc dữ liệu — đúng dạng manifest ghi."""
+    try:
+        return Path(path).relative_to(Path(root)).as_posix()
+    except ValueError:
+        return ""
+
+
+def tier_paths(tiers: str) -> set[str] | None:
+    """Tập đường dẫn remote mà các tier khai báo. ``None`` = KHÔNG lọc được.
+
+    ``--tiers`` từng chỉ được ghi vào ``run.json`` rồi bỏ qua: xin ``e2`` nhưng
+    đã tải ``e3`` thì eval chấm cả ``lsun_bedroom__imagenet`` (cross-generator,
+    dùng chung ``real.tar.gz``) — số ra nhiều hơn đã khai và **mean AP bị kéo**
+    bởi một nhánh lẽ ra không có trong phạm vi. Nay tier quyết định tập cặp.
+
+    ``None`` khi tier chứa ``DirSpec`` (thư mục chỉ liệt kê được khi online, ví
+    dụ ``e4x``): thà chấm nhiều hơn còn hơn âm thầm bỏ cặp mà tier có.
+    """
+    from . import manifest as mf
+
+    try:
+        ents = mf.resolve_many(tiers)
+    except KeyError as exc:
+        raise SystemExit(f"[!] tier không có trong manifest: {exc}") from exc
+    files, unresolved, _blocked = mf.expand(ents)  # lister=None ⇒ chạy offline
+    if unresolved:
+        print(f"[eval] ⚠ {len(unresolved)} DirSpec chưa liệt kê được ⇒ KHÔNG lọc theo tier")
+        return None
+    return {f.remote.lstrip("/") for f in files}
+
+
+def filter_pairs(pairs: list[dict], tiers: str, root) -> tuple[list[dict], int]:
+    """Chỉ giữ cặp có file **fake** nằm trong ``tiers``. Trả ``(kept, dropped)``."""
+    want = tier_paths(tiers) if tiers else None
+    if want is None:
+        return pairs, 0
+    kept = [p for p in pairs if remote_of(p["fake"], root) in want]
+    return kept, len(pairs) - len(kept)
+
+
+def expected_n_pairs(tiers: str, split: str = "test") -> int | None:
+    """Số cặp mà tier sẽ chấm, tính TỪ MANIFEST — không cần tải byte nào.
+
+    ``e2`` ⇒ 15 (một ``real.tar.gz`` dùng chung + 15 tar generator). ``None``
+    nếu tier có ``DirSpec`` chưa liệt kê.
+    """
+    want = tier_paths(tiers)
+    if want is None:
+        return None
+    prefix = f"dire/{split}/"
+    fakes = [p for p in want if p.startswith(prefix) and p.endswith(".tar.gz")
+             and not p.endswith("/real.tar.gz")]
+    reals = [p for p in want if p.startswith(prefix) and p.endswith("/real.tar.gz")]
+    if not reals:
+        return 0
+    return len(fakes)
+
+
 # ============================================================================
 # Ghi kết quả
 # ============================================================================
@@ -765,6 +824,11 @@ def main(
     pairs = pairs_from_raw(Path(root), split)
     if only:
         pairs = [p for p in pairs if p["branch"] == only or p["generator"] == only]
+    if pairs:
+        pairs, dropped = filter_pairs(pairs, tiers, root)
+        if dropped:
+            print(f"[eval] {dropped} cặp ngoài tier '{tiers}' bị bỏ "
+                  f"(đổi --tiers nếu muốn chấm chúng)")
     if not pairs:
         raise SystemExit(
             f"[!] Không tìm thấy cặp (real, generator) nào trong {root}/dire/{split}.\n"
@@ -857,13 +921,27 @@ def main(
 
 
 @app.local_entrypoint()
-def local_pairs(root: str = ".", split: str = "test") -> None:
+def local_pairs(root: str = ".", split: str = "test", tiers: str = "") -> None:
     """Liệt kê cặp sẽ eval, KHÔNG cần Modal/GPU: ``python -m dire_modal.eval``.
 
     Dùng để soát trước khi tiêu tiền GPU: nếu danh sách này sai thì kết quả
     cũng sai, mà đọc nó miễn phí.
+
+    ``--tiers e2`` lọc đúng như ``eval::main``, và **data chưa tải cũng xem
+    được**: khi ``root`` rỗng, số cặp lấy từ manifest (``e2`` ⇒ 15), nên biết
+    trước mình sẽ chấm bao nhiêu mà không cần byte nào.
     """
     pairs = pairs_from_raw(Path(root), split)
+    if tiers:
+        pairs, dropped = filter_pairs(pairs, tiers, root)
+        if not pairs:
+            n = expected_n_pairs(tiers, split)
+            if n is not None:
+                print(f"[eval] {root}/dire/{split} chưa có dữ liệu. "
+                      f"Tier '{tiers}' sẽ chấm {n} cặp khi tải xong.")
+                return
+        elif dropped:
+            print(f"[eval] {dropped} cặp ngoài tier '{tiers}' bị bỏ")
     print(f"{len(pairs)} cặp trong {root}/dire/{split}")
     for p in pairs:
         print(f"  {p['branch']:<28} {p['generator']:<18} "
