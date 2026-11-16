@@ -40,24 +40,32 @@ Bài báo đánh số công thức riêng: công thức trên là phương trìn
 ## Bản đồ tài liệu
 
 ```
-Phần 1–3   Nền tảng: ảnh số · học máy · CNN/ResNet-50
-Phần 4–6   Khuếch tán: ba họ mô hình sinh · quá trình thuận · DDIM · ODE
+Phần 0     Công cụ toán tối thiểu: véc-tơ · gradient & Adam · Gauss ·
+           hợp lý cực đại → BCE · entropy/KL → ELBO · Nyquist · ROC/AUC · NFE
+Phần 1–3   Nền tảng: ảnh số · gamma & JPEG · học máy · CNN/ResNet-50
+Phần 4–6   Khuếch tán: ba họ mô hình sinh · quá trình thuận · lịch nhiễu · DDIM · ODE
            và phép đảo ngược · vì sao ảnh sinh dễ tái tạo
 Phần 7–9   DIRE: định nghĩa và thiết kế · thực nghiệm của bài báo · phản biện
 Phần 10–11 Đọc code: mã của tác giả · mã của kho này và các sai lệch
 Phần 12    Từ đọc hiểu tới nghiên cứu: bài tập và thí nghiệm đề xuất
-Phụ lục A–D  Thuật ngữ · bảng tra công thức↔mã · danh mục kiểm · tham khảo
+Phần 13–14 Bản đồ module (cả những file nhỏ) · hạ tầng: scripts, platforms, tools
+Phụ lục A–D  Thuật ngữ · bảng tra công thức → mã · danh mục kiểm · tham khảo
 ```
 
 ## Ba tuyến đọc
 
 - **Tuyến nhanh (2 giờ):** Mở đầu → Phần 7 → Phần 9. Đủ để hiểu ý tưởng và hạn
   chế, chưa đủ để tự cài đặt.
+- **Tuyến "nền chắc" (nửa ngày):** Phần 0 → Phần 1 → Phần 2. Đây là phần trả lời
+  "vì sao hàm mất mát có dạng đó", "vì sao phải lấy trị tuyệt đối", "vì sao AUC là
+  xác suất xếp hạng đúng" — những chỗ hay bị bỏ qua nhưng quyết định việc hiểu
+  đúng hay hiểu sai.
 - **Tuyến đầy đủ (1–2 ngày):** đọc tuần tự Phần 1 → 12. Đây là tuyến dành cho
   người muốn nghiên cứu tiếp hoặc tái lập.
 - **Tuyến theo code:** Phần 7 (định nghĩa) → Phần 5.6 (NFE) → Phần 10.9–10.10
-  (`compute_dire.py`, `gaussian_diffusion.py`) → Phần 11. Dành cho người đã quen
-  diffusion và chỉ muốn đối chiếu cài đặt.
+  (`compute_dire.py`, `gaussian_diffusion.py`) → Phần 11 → Phần 13 (mọi module còn
+  lại, mỗi module ba dòng). Dành cho người đã quen diffusion và chỉ muốn đối chiếu
+  cài đặt.
 
 ## Quy ước ký hiệu
 
@@ -65,13 +73,13 @@ Phụ lục A–D  Thuật ngữ · bảng tra công thức↔mã · danh mục 
 |---|---|---|
 | `x₀` | ảnh sạch, đầu vào | tensor 3×256×256, giá trị trong `[−1,1]` |
 | `x_t` | ảnh sau `t` bước thêm nhiễu | cùng kích thước `x₀` |
-| `β_t`, `α_t` | hệ số thêm nhiễu bước `t` | `α_t = 1 − β_t` |
-| ᾱ<sub>t</sub> | tích luỹ α<sub>1</sub>···α<sub>t</sub> | giảm từ ~1 về ~0 |
-| `ε`, `ε_θ` | nhiễu thật / nhiễu mô hình dự đoán | cùng kích thước ảnh |
-| `x̂₀` | ảnh sạch **dự đoán** từ `x_t` | khác `x₀` là ảnh thật |
+| $\beta_t$, $\alpha_t$ | hệ số thêm nhiễu bước $t$ | $\alpha_t = 1-\beta_t$ |
+| $\bar{\alpha}_t$ | tích luỹ $\alpha_1\cdots\alpha_t$ | giảm từ ~1 về ~0 |
+| $\varepsilon$, $\varepsilon_\theta$ | nhiễu thật / nhiễu mô hình dự đoán | cùng kích thước ảnh |
+| $\hat{x}_0$ | ảnh sạch **dự đoán** từ $x_t$ | khác $x_0$ là ảnh thật |
 | `T` | số bước huấn luyện | 1000 với ADM |
 | `S` | số bước khi sinh / đảo ngược | 20 trong bài báo |
-| `NFE` | số lượt chạy mạng | mỗi ảnh DIRE tốn `2S` |
+| NFE | số lượt chạy mạng | mỗi ảnh DIRE tốn $2S$ |
 | `I(·)`, `R(·)` | phép đảo ngược, phép tái tạo | cả hai đều `S` bước |
 
 Ba thang giá trị cần phân biệt tuyệt đối, vì lẫn chúng là hỏng kết quả mà không
@@ -133,8 +141,14 @@ docs/dire-tu-so-0.pdf
 ```
 
 Bản PDF có mục lục bấm được, bookmark theo từng mục, công thức kết xuất từ LaTeX,
-và mã nguồn có tô sáng cùng số dòng. Cách dựng lại (khi sửa nội dung) ghi trong
-`tools/pdf/README.md`.
+và mã nguồn có tô sáng cùng số dòng — **giữ nguyên thụt lề** (khoảng trắng đầu dòng
+được chuyển thành ký tự không ngắt, vì bộ dựng `Paragraph` của reportlab gộp mọi
+khoảng trắng liên tiếp).
+
+**Cú pháp công thức:** \$...\$ cho công thức nội dòng (chèn trong câu, trong ô bảng),
+\$\$[n] ... \$\$ cho công thức hiển thị có số hiệu (n). Cả hai đều là LaTeX, kết
+xuất bằng `matplotlib.mathtext` (tập con LaTeX: không có `\begin{align}`, `\text`
+tự đổi thành `\mathrm`, `\big` tự bỏ). Cách dựng lại ghi trong `tools/pdf/README.md`.
 
 ## Đọc thêm
 

@@ -8,7 +8,7 @@ $$[17] \mathrm{DIRE}(x_0) = \left\vert\, x_0 - R\big(I(x_0)\big) \,\right\vert $
   nhất của tập mốc.
 - `R`: **phép tái tạo** (DDIM sampling), `S` bước, `t` **giảm** từ mốc cao nhất về 0.
 - `|·|`: trị tuyệt đối **theo từng điểm ảnh**, giữ **3 kênh**.
-- Kết quả: ảnh 256×256×3 cùng kích thước đầu vào.
+- Kết quả: ảnh $256\times256\times3$ cùng kích thước đầu vào.
 
 Ba điều kiện để định nghĩa này có nghĩa:
 
@@ -120,7 +120,7 @@ Một ảnh = `2S` lượt chạy ADM + 1 lượt ResNet-50.
 
 | Đại lượng | Công thức | Với `S = 20` |
 |---|---|---|
-| NFE mỗi ảnh | `2S` | 40 |
+| NFE mỗi ảnh | $2S$ | 40 |
 | NFE cho 1 000 ảnh | `2S·1000` | 40 000 |
 | NFE cho toàn bộ bộ dữ liệu (~336k ảnh) | `2S·N` | ≈ 13,4 triệu |
 
@@ -131,7 +131,7 @@ không thể tuyên bố "tự tính DIRE" — chỉ có thể **chấm lại** 
 
 Với ước lượng thời gian (giả định **chưa đo**, phải ghi rõ là giả định):
 
-| Giả định `sec/ảnh` trên A100 | Giờ cho 200k ảnh | USD ở $2,0/giờ |
+| Giả định `sec/ảnh` trên A100 | Giờ cho 200k ảnh | 2,0 USD mỗi giờ |
 |---|---|---|
 | 0,004 | 0,22 | ≈ 0,4 |
 | 0,004 × 25 (nếu chạy sai 1000 bước) | 5,6 | ≈ 11 |
@@ -378,6 +378,31 @@ là pretrained của người khác. Đóng góp của bài báo là phép biế
    Nếu có, DIRE là tính chất của **quá trình**; nếu không, nó là tính chất của
    **ADM**. Câu trả lời quyết định hướng triển khai thực tế (dùng mô hình nhỏ ⇒ rẻ
    25×).
+## 9.8 Họ hàng gần nhất của DIRE: AEROBLADE
+
+AEROBLADE [[20]] (CVPR 2024) dùng **cùng một tiền đề** với DIRE nhưng khác linh kiện:
+
+| | DIRE [[1]] | AEROBLADE [[20]] |
+|---|---|---|
+| Phép biến đổi | diffusion model (ADM), đảo ngược + tái tạo, `S` bước | **autoencoder** của LDM, một lượt encode–decode |
+| Không gian | ảnh (pixel) | ẩn (latent) |
+| Độ đo sai số | `\|x − x̂\|` theo từng điểm ảnh | **LPIPS** (đặc trưng VGG16 tầng 2) |
+| Cần train? | có, ResNet-50 trên ảnh DIRE | **không**, chỉ so ngưỡng |
+| Chi phí | `2S` NFE | 1 lượt AE |
+| Áp dụng cho | mọi mô hình sinh ảnh | chỉ ảnh do **LDM** sinh |
+
+Bài học lý thuyết quan trọng: **"ảnh sinh ra từ mô hình `M` được `M` (hoặc một phần
+của `M`) tái tạo tốt hơn ảnh thật" là một quy luật tổng quát**, không phụ thuộc việc
+dùng diffusion hay autoencoder, và không phụ thuộc độ đo là pixel hay LPIPS. DIRE
+là một cách khai thác quy luật đó với độ phân giải cao nhất (giữ cấu trúc không
+gian), AEROBLADE là cách rẻ nhất (một lượt, training-free) nhưng chỉ đúng với ảnh
+LDM.
+
+Điều này cũng giải thích vì sao Chương 6 khó: nếu quy luật là tổng quát, thì **cơ
+chế** của nó cũng phải tổng quát — và lập luận "sai số Euler" của Phụ lục B chỉ nói
+về diffusion, nên nó **không thể** là lời giải thích đầy đủ. Một lời giải thích đầy
+đủ phải giải thích được cả trường hợp của AEROBLADE, nơi không có ODE nào cả.
+
 3. **Miền lạ:** Có thể cải thiện trường hợp 76,9% bằng cách chuẩn hoá DIRE theo
    thống kê của miền (ví dụ trừ đi DIRE trung bình của một tập ảnh thật cùng miền)
    không? Đây là dạng "chuẩn hoá theo miền" quen thuộc trong xử lý ảnh, và chưa

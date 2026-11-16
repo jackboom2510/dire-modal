@@ -87,15 +87,15 @@
 
 | # | Nội dung | Nơi cài đặt |
 |---|---|---|
-| (1) | `DIRE = |x₀ − R(I(x₀))|` | `guided-diffusion/compute_dire.py`: `dire = th.abs(imgs - recons)` |
+| (1) | `DIRE = \|x₀ − R(I(x₀))\|` | `guided-diffusion/compute_dire.py`: `dire = th.abs(imgs - recons)` |
 | (2) | tích chập 2D | `networks/resnet.py`: `conv3x3`, `conv1x1` |
 | (3) | DFT | không dùng trong mã (chỉ để hiểu miền tần số) |
 | (4) | sigmoid + BCE | `utils/trainer.py`: `nn.BCEWithLogitsLoss()`; `dire_core/score.py: sigmoid` |
 | (5) | softmax + CE | nhánh `num_classes=2` (không dùng cho checkpoint DIRE) |
 | (6) | AP | `dire_modal/eval.py: _average_precision` |
 | (7) | batch normalization | `networks/resnet.py`: `nn.BatchNorm2d` |
-| (8) | `q(x_t | x_{t−1})` | `gaussian_diffusion.py`: `p_mean_variance`, `q_posterior_mean_variance` |
-| (9) | `q(x_t | x_0)` | `gaussian_diffusion.py: q_mean_variance` |
+| (8) | `q(x_t \| x_{t−1})` | `gaussian_diffusion.py`: `p_mean_variance`, `q_posterior_mean_variance` |
+| (9) | `q(x_t \| x_0)` | `gaussian_diffusion.py: q_mean_variance` |
 | (10) | `x_t = √ᾱ_t·x₀ + √(1−ᾱ_t)·ε` | `gaussian_diffusion.py: q_sample` |
 | (11) | hàm mất mát huấn luyện | `gaussian_diffusion.py: training_losses` |
 | (12) | `ε` từ `x̂₀` | `gaussian_diffusion.py: _predict_eps_from_xstart` |
@@ -209,6 +209,11 @@ arXiv:1506.03365.
 
 [19] D. P. Kingma, J. Ba. *Adam: A Method for Stochastic Optimization.* ICLR 2015.
 arXiv:1412.6980.
+
+[20] J. Ricker, D. Lukovnikov, A. Fischer. *AEROBLADE: Training-Free Detection of
+Latent Diffusion Images Using Autoencoder Reconstruction Error.* CVPR 2024.
+arXiv:2401.17879. (Cùng ý tưởng "sai số tái tạo là tín hiệu", nhưng dùng autoencoder
+của LDM thay cho diffusion model, và LPIPS thay cho `|Δ|` theo điểm ảnh.)
 
 ::: note
 Các tài liệu nội bộ của kho này nên đọc kèm: `docs/adr-0006-reproduction-levels.md`

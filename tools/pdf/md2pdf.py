@@ -300,6 +300,20 @@ def parse(src_text: str) -> list[tuple]:
     return blocks
 
 
+def keep_spaces(body: str) -> str:
+    """Đổi khoảng trắng đầu dòng (và cụm ≥2 dấu cách) thành ``&#160;``.
+
+    ``Paragraph`` gộp mọi khoảng trắng liên tiếp, nên không làm vậy thì khối mã
+    mất hết thụt lề — đúng lỗi đã gặp. Chỉ giữ nguyên **khoảng trắng**, không
+    đụng tới thẻ ``<font>`` của pygments.
+    """
+    if not body:
+        return body
+    lead = len(body) - len(body.lstrip(" "))
+    out = "&#160;" * lead + body[lead:]
+    return re.sub(r" {2,}", lambda m: "&#160;" * len(m.group(0)), out)
+
+
 def _split_row(line: str) -> list[str]:
     """Tách ô của một hàng bảng; tôn trọng ``\\|`` (dấu gạch đứng trong ô)."""
     s = line.strip()
@@ -339,9 +353,42 @@ def fix_marks(t: str) -> str:
 
 MONO_MISSING = set("\u1eab\u1ea3\u1ebf\u1ec1\u1ec3\u1ec5\u1edf")
 
+_MATH_CACHE: dict = {}
+
+
+def math_renderer(fontsize: float = 9.8):
+    """Một MathRenderer cho mỗi cỡ chữ (nội dòng ~9,8 pt, hiển thị ~12,4 pt)."""
+    key = round(fontsize, 1)
+    if key not in _MATH_CACHE:
+        _MATH_CACHE[key] = MathRenderer(CACHE / "math", fontsize=fontsize, dpi=600)
+    return _MATH_CACHE[key]
+
+
+def inline_math(tex: str, fontsize: float = 9.8,
+                max_h: float | None = None, max_w: float | None = None) -> str:
+    """``$...$`` → thẻ ``<img>``, tự thu nhỏ để không tràn dòng / tràn ô bảng.
+
+    ``Paragraph`` của reportlab tính chiều cao dòng theo cỡ chữ, **không** theo
+    ảnh, nên một công thức cao (phân số, tích, căn) sẽ đè lên dòng trên. Vì vậy
+    chiều cao bị chặn ở ``max_h`` (mặc định 1,5 lần cỡ chữ) và chiều rộng ở
+    ``max_w``; vượt thì thu nhỏ theo tỉ lệ.
+    """
+    max_h = max_h if max_h is not None else fontsize * 1.5
+    try:
+        path, w, h = math_renderer(fontsize).render(tex)
+    except Exception:                                  # công thức sai cú pháp
+        return f'<font name="Body-It">{esc(tex)}</font>'
+    scale = min(1.0, max_h / h if h else 1.0)
+    if max_w and w * scale > max_w:
+        scale = max_w / w
+    w, h = w * scale, h * scale
+    return f'<img src="{path}" width="{w:.2f}" height="{h:.2f}" valign="-2.4"/>'
+
 TOKEN = re.compile(
     r"("
-    r"`[^`]+`"
+    r"\\\$"
+    r"|\$[^$]+\$"
+    r"|`[^`]+`"
     r"|\*\*[^*]+\*\*"
     r"|\*[^*]+\*"
     r"|\[\[[\d,\s]+\]\]"
@@ -355,19 +402,26 @@ def esc(t: str) -> str:
     return t.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def inline(text: str) -> str:
+def inline(text: str, math_fontsize: float = 9.8,
+           math_max_h: float | None = None, math_max_w: float | None = None,
+           base_size: float | None = None) -> str:
     """Markdown nội dòng → markup reportlab (Paragraph)."""
     text = fix_marks(text)
     out = []
     for tok in TOKEN.split(text):
         if not tok:
             continue
-        if tok.startswith("`") and tok.endswith("`") and len(tok) > 1:
+        if tok == "\\$":
+            out.append("$")
+        elif tok.startswith("$") and tok.endswith("$") and len(tok) > 2:
+            out.append(inline_math(tok[1:-1], math_fontsize, math_max_h, math_max_w))
+        elif tok.startswith("`") and tok.endswith("`") and len(tok) > 1:
             # JetBrains Mono thiếu một số dấu tiếng Việt dựng sẵn (ẫ ả ế ề ể ễ ở)
             # — gặp thì dùng phông thân bài để không ra ô "tofu".
             combining = any(0x300 <= ord(c) <= 0x36F for c in tok[1:-1])
             face = "Body" if (set(tok[1:-1]) & MONO_MISSING or combining) else "Mono"
-            size = BODY_SIZE - (0.6 if face == "Body" else 1.1)
+            base = base_size or BODY_SIZE
+            size = round(base - (0.6 if face == "Body" else 1.1), 2)
             out.append(
                 f'<font name="{face}" size="{size}" color="#8A3A1E">'
                 f"{esc(tok[1:-1])}</font>"
@@ -406,6 +460,7 @@ def plain(text: str) -> str:
     t = re.sub(r"\[\[([\d,\s]+)\]\]", r"", t)
     t = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", t)
     t = re.sub(r"</?(?:sub|sup|b|i|br|font|link)[^>]*>", "", t)
+    t = re.sub(r"\$([^$]+)\$", r"\1", t)
     return t.strip()
 
 
@@ -415,7 +470,7 @@ def plain(text: str) -> str:
 
 
 class MathRenderer:
-    def __init__(self, cache_dir: Path, fontsize: float = 12.4, dpi: int = 600):
+    def __init__(self, cache_dir: Path, fontsize: float = 13.6, dpi: int = 600):
         import matplotlib
 
         matplotlib.use("Agg")
@@ -438,6 +493,11 @@ class MathRenderer:
         t = t.replace("\\left|", "\\left\\vert").replace("\\right|", "\\right\\vert")
         t = t.replace("\\lvert", "\\vert").replace("\\rvert", "\\vert")
         t = re.sub(r"\\text\{", r"\\mathrm{", t)
+        # mathtext không có các lệnh quan hệ/bao hàm dài; đổi sang glyph tương đương
+        for a, b in (("ge", "geq"), ("le", "leq"), ("gets", "leftarrow"),
+                     ("to", "rightarrow"), ("implies", "Longrightarrow")):
+            # chỉ đổi khi KHÔNG dính chữ cái phía sau (tránh "\le" khớp "\left")
+            t = re.sub(r"\\" + a + r"(?![A-Za-z])", "\\\\" + b, t)
         t = t.replace("\\nonumber", "").replace("\\tag{", "\\mathrm{(")
         return t
 
@@ -636,7 +696,7 @@ def build(src_dir: Path, out_pdf: Path, title: str, subtitle: str,
         )
         rows = []
         for idx, frags in enumerate(lines, start=1):
-            body = "".join(frags)
+            body = keep_spaces("".join(frags))
             if not body.strip():
                 body = "&#160;"
             if show_nums:
@@ -659,6 +719,9 @@ def build(src_dir: Path, out_pdf: Path, title: str, subtitle: str,
                 ]
             )
         )
+        if len(rows) <= 14:
+            from reportlab.platypus import KeepTogether
+            return [KeepTogether(t), Spacer(1, 8)]
         return [t, Spacer(1, 8)]
 
     def math_block(tex: str, num: str | None):
@@ -687,25 +750,65 @@ def build(src_dir: Path, out_pdf: Path, title: str, subtitle: str,
             return [Spacer(1, 3), t, Spacer(1, 8)]
         return [Spacer(1, 3), Para_center(img), Spacer(1, 8)]
 
+    def _col_widths(header, rows, ncol: int, avail: float,
+                    size: float) -> tuple[list[float], float]:
+        """Chia bề rộng cột: mỗi cột đủ chỗ cho **token dài nhất** (đo bằng đúng
+        phông sẽ vẽ), phần dư chia theo tổng độ dài. Nhờ vậy `utils/config.py`
+        không bị bẻ đôi giữa từ."""
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        def segments(cell: str) -> list[tuple[str, str]]:
+            """Tách ô thành (đoạn, phông): trong `...` là Mono, còn lại là Body."""
+            out, in_code = [], False
+            for chunk in cell.split("`"):
+                if chunk:
+                    out.append((plain(chunk) if not in_code else chunk,
+                                "Mono" if in_code else "Body"))
+                in_code = not in_code
+            return out or [("", "Body")]
+
+        def measure(cell: str) -> tuple[float, float]:
+            """(bề rộng cả ô, bề rộng token dài nhất) — token được phép ngắt sau
+            `/` `_` `-` để đường dẫn dài vẫn xuống dòng đẹp."""
+            full, tok = 0.0, 0.0
+            for text, font in segments(cell):
+                full += stringWidth(text, font, size)
+                for w in text.split():
+                    parts = [w] if len(w) < 22 else re.split(r"(?<=[/_\-])", w)
+                    wmax = max(stringWidth(x, font, size) for x in parts)
+                    tok = max(tok, wmax)
+            return full, tok
+
+        need, want = [], []
+        for c in range(ncol):
+            cells = [header[c]] + [r[c] for r in rows]
+            tok = full = 0.0
+            for cell in cells:
+                f, t = measure(cell)
+                full, tok = max(full, f), max(tok, t)
+            need.append(tok + 11)
+            want.append(full + 11)
+        if sum(need) > avail and size > 7.0:
+            # không đủ chỗ cho các token dài: thu nhỏ chữ một chút (tối thiểu 7 pt)
+            return _col_widths(header, rows, ncol, avail, round(size - 0.3, 2))
+        leftover = avail - sum(need)
+        t = sum(want) or 1.0
+        return [need[i] + leftover * want[i] / t for i in range(ncol)], size
+
     def table_block(header: list[str], rows: list[list[str]]):
         ncol = len(header)
         rows = [r + [""] * (ncol - len(r)) for r in rows]
         avail = PAGE_W - M_LEFT - M_RIGHT
-        # độ rộng cột theo nội dung (đã bỏ markup), có sàn để không bị bóp
-        weights = []
-        for c in range(ncol):
-            cells = [header[c]] + [r[c] for r in rows]
-            longest = max(len(plain(x)) for x in cells)
-            weights.append(max(6.0, min(46.0, longest)) ** 0.92)
-        total = sum(weights)
-        widths = [avail * w / total for w in weights]
         # bảng nhiều cột: giảm cỡ chữ
         size = 8.3 if ncol <= 6 else 7.5
+        widths, size = _col_widths(header, rows, ncol, avail, size)
         cell = ParagraphStyle(f"c{ncol}", parent=S["cell"], fontSize=size, leading=size * 1.35)
         cellh = ParagraphStyle(f"ch{ncol}", parent=S["cellh"], fontSize=size, leading=size * 1.35)
-        data = [[Paragraph(inline(h), cellh) for h in header]]
+        data = [[Paragraph(inline(h, size, size * 1.25, avail / ncol, size), cellh)
+                 for h in header]]
         for r in rows:
-            data.append([Paragraph(inline(c), cell) for c in r])
+            data.append([Paragraph(inline(c, size, size * 1.25, avail / ncol, size), cell)
+                         for c in r])
         t = Table(data, colWidths=widths, repeatRows=1, hAlign="LEFT")
         st = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor(HEAD_BG)),
