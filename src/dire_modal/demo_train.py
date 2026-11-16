@@ -3,10 +3,15 @@
 
 Vì sao file này tồn tại, và vì sao nó KHÔNG phải `train.py`
 -----------------------------------------------------------
-`train.py` (resumable, A100, 400 epoch) là đường tái lập thật; nó vẫn là
-``NotImplementedError`` vì dự án chốt **không train lại** (ràng buộc N1). File
-này phục vụ một mục đích khác hẳn: có **một đường loss thật** để vẽ/animate khi
-giải thích DIRE hoạt động ra sao, thay vì vẽ một đường cong bịa.
+`train.py` (resumable, A100, 400 epoch) là đường **đối chiếu trọng số tác giả**
+(FR-8 — xem ``docs/adr-0004-retrain-for-reconciliation.md``); nó vẫn là
+``NotImplementedError``. File này phục vụ một mục đích khác hẳn: có **một đường
+loss thật** để vẽ/animate khi giải thích DIRE hoạt động ra sao, thay vì vẽ một
+đường cong bịa.
+
+Khác nhau ở đầu ra: ``train.py`` ghi ``/ckpt/results/`` với
+``detector=dire_retrained`` (bằng chứng *về* trọng số tác giả); ``demo_train``
+ghi ``/ckpt/demo_train/`` và **không bao giờ** vào bảng kết quả.
 
 Ranh giới đó phải cứng, nếu không nó sẽ trôi thành "số của dự án":
 

@@ -21,8 +21,8 @@ lượng "Tier A ≈ 40–70 GB" trong bản đầu — ước lượng đó là
 | Toàn bộ cây đã audit | 104 | **61.40 GB** (cận dưới) |
 | ↳ dữ liệu train | — | **47.00 GB (77%)** |
 
-Vì 77% cây là dữ liệu train mà ràng buộc dự án là *chỉ cải thiện, không train
-lại*, nhu cầu thật chỉ **3–10 GB** — dưới cả free tier của Volume (1 TiB) lẫn
+Vì 77% cây là dữ liệu train mà đường báo cáo chính chỉ eval checkpoint tác giả,
+nhu cầu thật chỉ **3–10 GB** — dưới cả free tier của Volume (1 TiB) lẫn
 R2 (10 GB). Hệ quả: quyết định lưu trữ **không còn là bài toán giá** mà là bài
 toán *chia sẻ được hay không*.
 Các phương án khả dụng: Modal Volume (1 TiB free), Cloudflare R2 (10 GB free, egress $0),

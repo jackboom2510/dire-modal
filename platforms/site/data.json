@@ -6,7 +6,7 @@
     "demo": "demo — KHÔNG phải số của paper"
   },
   "honesty": {
-    "pill": "code xong: 6 · chưa có: 3 · số của dự án: chưa có"
+    "pill": "code xong: 6 · chưa có: 4 · số của dự án: chưa có"
   },
   "generated_by": "platforms/site/build.py",
   "sources": {
@@ -205,8 +205,8 @@
     "counts": {
       "done": 0,
       "run": 6,
-      "todo": 3,
-      "out": 1
+      "todo": 4,
+      "out": 0
     },
     "items": [
       {
@@ -258,10 +258,10 @@
         "ref": "tools/manim"
       },
       {
-        "name": "Train lại detector",
-        "state": "out",
-        "note": "ngoài phạm vi: N1 — chỉ cải thiện, không train lại",
-        "ref": "spec.md N1"
+        "name": "Train lại detector (FR-8)",
+        "state": "todo",
+        "note": "**chỉ để đối chiếu** trọng số tác giả; KHÔNG dùng làm số của paper. 400 epoch ước $32–56 ⇒ phải đo 1 epoch trước",
+        "ref": "spec.md FR-8"
       },
       {
         "name": "Stage-2: compute DIRE toàn bộ",

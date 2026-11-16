@@ -52,8 +52,10 @@ trang, và mapping `ADM → lsun_adm.pth`). `eval::report` in Δ từng ô.
 
 ## Quy trình 2 — `02_improve.sh`
 
-Ràng buộc N1/C3: **không train lại**. Nên cải thiện nằm ngoài trọng số: hiệu
-chỉnh, kết hợp điểm, định tuyến, phân tích lỗi.
+Ràng buộc C3: **cải thiện phải training-free**. Nên cải thiện nằm ngoài trọng số:
+hiệu chỉnh, kết hợp điểm, định tuyến, phân tích lỗi. Train lại chỉ để **đối
+chiếu** trọng số tác giả (FR-8, `docs/adr-0004-retrain-for-reconciliation.md`)
+và không nằm trong quy trình này.
 
 Hai nguồn ý tưởng, ghi rõ nguồn:
 

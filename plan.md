@@ -9,8 +9,9 @@ Có kết quả DIRE trên dữ liệu thật với **0đ compute** (free tier),
 local chỉ điều khiển và verify, Modal làm mọi việc nặng. Ưu tiên số 1 là **có
 kết quả nhanh nhất**, không phải pipeline đầy đủ.
 
-Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn, **không train lại**.
-47 GB (77%) dữ liệu trong cây Baidu là train, nằm ngoài phạm vi.
+Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn. 47 GB (77%) dữ liệu
+train chỉ cần khi làm **FR-8** (train lại để đối chiếu trọng số tác giả —
+`docs/adr-0004-retrain-for-reconciliation.md`), không cần cho đường báo cáo chính.
 
 ## Đường chạy hiện tại (chốt 2026-10-25)
 
@@ -90,9 +91,10 @@ chạy được (nếu chọn a), hoặc docs không còn nhắc file không t�
 Stage train sẽ fail khi đọc. Cần hoặc điền cấu hình thật (khớp
 `train.py` + checkpoint tác giả), hoặc xoá file và sửa chỗ tham chiếu.
 
-**Lưu ý:** dự án **không train lại**, và `scripts/` nay không còn script train
-(đã xoá `05_train_repro.sh`). Nếu chọn xoá file thì chỉ cần kiểm `README` +
-`train.py` để không còn trỏ vào file rỗng.
+**Lưu ý:** đường báo cáo chính **không train**, nhưng từ ADR-0004 thì `train.py`
+là việc thật của **FR-8** (train lại để đối chiếu). `scripts/` vẫn giữ đúng 2
+quy trình (đã xoá `05_train_repro.sh`), nên FR-8 chạy qua entrypoint
+`dire_modal.train::main`, không thêm script thứ ba.
 
 ### 3. Submodule `third_party/DIRE` chưa init
 
@@ -138,6 +140,14 @@ thật, stage chưa có **dừng** và in đúng thiếu gì (không giả vờ 
 | M3 | Bọc AEROBLADE | `tests/test_aero_sign.py` | `dire_modal.aero::main` |
 | M4 | Format bias + fusion (chỉ fit trên val) | `tests/test_fusion_no_leak.py` | `dire_modal.fusion::fit` |
 | M5 | Robustness + báo cáo tổng | — | — |
+| **M6** | **FR-8** — train lại để đối chiếu trọng số tác giả (ADR-0004) | `tests/test_n1_reconciliation.py` | `dire_modal.train::main` (đã có, còn `NotImplementedError`) |
+
+**M6 khác M2–M5 ở chỗ:** nó **không** phải "cải thiện", nó là bằng chứng *về*
+trọng số tác giả. Ba điều kiện cứng (ADR-0004): chỉ báo cáo hai dòng `dire` /
+`dire_retrained` trên cùng test; chọn epoch chỉ trên val; mọi artefact mang
+`provenance: retrained`. Chi phí là ẩn số lớn nhất trong spec — 400 epoch trên
+A100 ước **$32–56**, vượt credit $30; nên **đo 1 epoch (~$0.1) trước** rồi mới
+cam kết (spec.md §12.1).
 
 **Vì sao 5 test trên chưa tồn tại:** spec viết trước code, và chúng được khai
 báo trong `KNOWN_MISSING` của `tests/test_agent_docs.py` để không bị quên. Khi

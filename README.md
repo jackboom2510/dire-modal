@@ -16,7 +16,7 @@ bash scripts/check.sh           # CỔNG 0: modal thật + test + pyflakes (0 cr
 python3 tools/free_quota.py     # xem còn bao nhiêu quota miễn phí
 ```
 
-Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **không train lại**, bỏ hẳn khoản $8–20 của A100).
+Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **eval checkpoint tác giả**, bỏ hẳn khoản $8–20 của A100).
 
 > **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
 > Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
@@ -203,7 +203,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | **`e4`** | **5** | **1.45 GB** | **eval AEROBLADE trên ảnh gốc (nhánh `images/`)** |
 | `e4x` | 17 | 3.47 GB | AEROBLADE trên MỌI generator (tự loại 8 file `*ddim*`) |
 | `e5` | 11 | 2.11 GB | ensemble + hiệu chỉnh ngưỡng (val có đủ 5 tar) |
-| `train` | 4 | 5.74 GB | train lại detector headline từ đầu |
+| `train` | 4 | 5.74 GB | train lại **để đối chiếu** trọng số tác giả (FR-8) — không phải đường báo cáo |
 | `trainx` | 7 | 11.24 GB | train lại detector cross-domain |
 | `trainens` | 3 | 14.60 GB | train 3 detector ensemble |
 | `rawx` | 4 | 4.48 GB | ảnh gốc để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB) |
@@ -221,8 +221,10 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | ↳ trong đó dữ liệu **train** | — | **47.00 GB (77%)** |
 
 Docs từng ghi "Tier A ≈ 40–70 GB" — đó là số của **cả cây** gán nhầm cho Tier A;
-sai 5.4–9.4 lần. Vì 77% cây là dữ liệu train mà ràng buộc dự án là *chỉ cải
-thiện, không train lại*, phần bỏ được rất lớn: **eval đầy đủ chỉ 10.35 GB**.
+sai 5.4–9.4 lần. Vì 77% cây là dữ liệu train mà đường báo cáo chính chỉ cần
+*eval checkpoint tác giả*, phần bỏ được rất lớn: **eval đầy đủ chỉ 10.35 GB**.
+Chỉ khi làm **FR-8** (train lại để đối chiếu trọng số — xem `docs/adr-0004-retrain-for-reconciliation.md`)
+mới cần thêm tier `train` (4 file / 5.74 GB).
 
 Alias cũ vẫn chạy được: `ckpt`→`ckpts` · `A`→`e2,train` · `B`→`e3` · `C`→`rawx` ·
 `D`→ rỗng (toàn bộ nội dung cũ nằm trong `NEVER`).
@@ -257,7 +259,7 @@ src/dire_modal/
   pack.py           # /raw → WebDataset shards
   bench.py          # benchmark storage (Volume/R2) + throughput DIRE
   archive.py        # đẩy/kéo: R2, HF Hub, Kaggle + verify sha256
-  train.py          # (TODO) training loop — ngoài phạm vi, xem spec.md N1
+  train.py          # (TODO) FR-8: train lại để ĐỐI CHIẾU trọng số tác giả (spec.md §7)
   eval.py           # eval 15 generator bằng checkpoint có sẵn + CỔNG S2
   compute_dire.py   # tính DIRE bằng ADM DDIM inversion + gallery
   vendor/           # module DIRE gốc đã vendorize
@@ -283,7 +285,7 @@ manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 | Tái lập Table 2 | ✅ code + quy trình xong (`scripts/01_repro.sh`) — **số của mình chưa có**, cần chạy thật |
 | Video giải thích (manim) | ✅ code 5 scene xong — **chưa render** (máy cần cairo/pango; hoặc image Modal riêng, xem `tools/manim/README.md`) |
 | `demo_train` (train demo để quay video) | ✅ code + 29 test — **chưa chạy thật** (cần tier `train`) |
-| Train lại | ⛔ ngoài phạm vi (spec.md N1: chỉ cải thiện, không train lại) |
+| Train lại (FR-8) | ⚠ **được phép nhưng chỉ để đối chiếu** — không dùng làm số của paper; xem `docs/adr-0004-retrain-for-reconciliation.md` |
 | Stage-2 (compute DIRE toàn dataset) | ⏳ code viết theo API guided-diffusion, **chưa chạy thử**; cần ~30–60 A100-h |
 | Demo HF Spaces | ✅ code + hướng dẫn; ⏳ chờ checkpoint & gallery |
 

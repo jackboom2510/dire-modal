@@ -154,10 +154,10 @@ Dùng để đánh giá bất kỳ nền tảng nào — không chỉ các nền
 | 7 | Demo public | inference CPU | **HF Spaces free** | Modal web endpoint | ResNet-50 CPU ~0.2–1 s/ảnh |
 | 8 | Mirror dữ liệu công khai | storage | **HF Hub (~300 GB/repo)** + **Kaggle Datasets (200 GB/dataset)** | R2 (10 GB free) | Xem rủi ro license §6 |
 
-> **Dòng 4 và 6 KHÔNG nằm trên đường chạy của dự án này.** Ràng buộc đã chốt
-> (spec.md N1): *chỉ cải thiện, không train lại* ⇒ đường chạy là nạp
-> `lsun_adm.pth` của tác giả rồi eval (CPU). Hai dòng đó giữ lại để so sánh nền
-> tảng, không phải để lên kế hoạch.
+> **Dòng 4 và 6 KHÔNG nằm trên đường chạy của dự án này.** Đường chính là nạp
+> `lsun_adm.pth` của tác giả rồi eval (CPU). Train lại chỉ được phép ở chế độ
+> **đối chiếu** (FR-8, ADR-0004) và không tính là cải thiện ⇒ hai dòng đó vẫn chỉ
+> để so sánh nền tảng, không phải kế hoạch.
 
 ---
 
@@ -183,7 +183,7 @@ Dùng để đánh giá bất kỳ nền tảng nào — không chỉ các nền
 Tuần 1  Kaggle/Colab: viết & sửa code trên 1–2k ảnh mẫu        (0 credit)
         Modal CPU:    tải dữ liệu + verify sha256               (~$1–2 credit)
 Tuần 2  Modal CPU:    tải lsun_adm.pth + e2min, mirror lên HF  (~$0.1 + chờ Baidu)
-        (KHÔNG train lại — spec.md N1; tiết kiệm ~$8–20 và 3–8 h A100)
+        (không cần train — dùng checkpoint tác giả; tiết kiệm ~$8–20 và 3–8 h A100)
 Tuần 3  Modal CPU:    eval 15 generator song song               (~$0.1)
         HF Spaces:    deploy demo (CPU)                          (0)
 Tuần 4  HF/Kaggle:    mirror dữ liệu + manifest                   (0)

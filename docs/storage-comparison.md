@@ -81,7 +81,7 @@
 Mọi mốc thực tế (3.39 → 61.40 GB) đều **nằm gọn dưới 1 TiB free của Volume** → chi
 phí lưu trữ $0. Chỉ hai dòng "giả định" mới vượt free tier, và chúng chỉ xảy ra
 nếu mirror cả cây **kèm shards** rồi còn mở rộng — kịch bản không có trong phạm
-vi "không train lại".
+vi "chỉ eval checkpoint tác giả" (dữ liệu train chỉ cần cho FR-8).
 
 → **Điểm hoà vốn Volume vs R2 Standard vẫn là 1.227 GB ≈ 1.20 TiB** (dưới mốc đó
 Volume rẻ hơn — thực tế miễn phí tới 1 TiB). Ở quy mô thật của repo này
