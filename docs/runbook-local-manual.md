@@ -237,6 +237,12 @@ phải báo giá.
 
 Phần torch (`ddim.py`, `scratch_gen.py`, `scratch_train.py`, `scratch_verify.py`)
 **chưa chạy trên GPU thật** — sandbox soạn code không có CUDA. Phần quyết định
-đúng/sai và tiền (lịch, mốc 950, NFE, seed, cổng, tải tay) thì có 462 test chạy
+đúng/sai và tiền (lịch, mốc 950, NFE, seed, cổng, tải tay) thì có 572 test chạy
 mỗi commit. Lần chạy đầu nên để ý: tên tham số U-Net khớp checkpoint,
 `invert` trả đúng shape, VRAM ở batch 1.
+
+> **Ba lỗi đã sửa** trong `ddim.py` (xem `docs/from-zero-clean-room.md` §3):
+> mốc 0 lấy `ᾱ = 1,0` ⇒ map toàn `NaN`; `invert`/`reconstruct` chạy thiếu một
+> lượt mỗi bên ⇒ NFE 38 thay vì 40; bước cuối tái tạo để lại ~0,5 % nhiễu.
+> Chúng **không** làm script dừng — đó là lý do nên chạy `--stage gates` trước
+> và kiểm `[DIRE]` có in ra `nfe_total = 2·20·N` hay không.
