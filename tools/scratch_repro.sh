@@ -22,6 +22,7 @@
 #   bash tools/scratch_repro.sh --stage all          # fetch → bench → gen → dire → train
 #
 # Tải tay (không BaiduPCS-Go) rồi chấm lại / đối chiếu recons:
+#   bash tools/scratch_repro.sh --stage ingest        # A: LMDB tay → PNG, in lệnh push
 #   bash tools/scratch_repro.sh --stage list          # in danh sách + vị trí trong data/raw
 #   bash tools/scratch_repro.sh --stage verify-data   # kiểm cấu trúc tar/pth đã tải
 #   bash tools/scratch_repro.sh --stage push          # modal volume put từng file
@@ -49,7 +50,7 @@ FORCE=0
 NEED="a,gallery,e2min"   # nhóm dữ liệu cho tải tay (xem tools/manual_data.py list)
 DEST="${DIRE_LOCAL_ROOT:-data/raw}"
 PY_HELP=0
-usage() { sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '3,33p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -189,6 +190,48 @@ fetch() {
   echo "  modal volume put dire-raw \"$STATE/lsun/png\" scratch/real"
 }
 
+# ---- A: dùng file TẢI TAY (không curl, không Baidu) -------------------------
+ingest() {
+  say "INGEST dữ liệu tải tay → chuẩn bị cho Modal"
+  local zip="$DEST/sources/lsun/bedroom_val_lmdb.zip"
+  local pt="$DEST/sources/ckpt/adm_lsun.pt"
+  [[ -s "$pt"  ]] || die "thiếu $pt — tải 256x256_diffusion_uncond.pt (2,5 GB) rồi đặt đúng tên"
+  [[ -s "$zip" ]] || die "thiếu $zip — tải bedroom_val_lmdb.zip"
+  python3 "$ROOT/tools/manual_data.py" verify --need a --dest "$DEST" --strict \
+    || die "file A chưa đạt — chạy: python tools/manual_data.py verify --need a --strict"
+
+  mkdir -p "$STATE/ckpt" "$STATE/lsun"
+  # ADM: hardlink nếu cùng ổ (0 byte, 0 giây), nếu không thì copy.
+  if [[ ! -f "$STATE/ckpt/adm_lsun.pt" ]]; then
+    ln "$pt" "$STATE/ckpt/adm_lsun.pt" 2>/dev/null \
+      || { echo "  [copy] ADM sang $STATE (khác ổ, mất ~2,5 GB tạm)"; cp "$pt" "$STATE/ckpt/adm_lsun.pt"; }
+  fi
+  [[ "$(sha256sum "$pt" | cut -d' ' -f1)" == "$(sha256sum "$STATE/ckpt/adm_lsun.pt" | cut -d' ' -f1)" ]] \
+    || die "sha256 ADM khác nhau sau khi link/copy"
+
+  if [[ ! -f "$STATE/lsun/bedroom_val_lmdb/data.mdb" ]]; then
+    echo "  [giải nén] LMDB…"
+    unzip -q -o "$zip" -d "$STATE/lsun"
+    # zip LSUN giải nén ra một thư mục con tên khác nhau tuỳ bản
+    local found; found="$(find "$STATE/lsun" -maxdepth 2 -name data.mdb -printf '%h\n' | head -1)"
+    [[ -n "$found" && "$found" != "$STATE/lsun/bedroom_val_lmdb" ]] \
+      && mv "$found" "$STATE/lsun/bedroom_val_lmdb"
+  fi
+  if [[ ! -d "$STATE/lsun/png" || -z "$(ls -A "$STATE/lsun/png" 2>/dev/null)" ]]; then
+    python3 "$ROOT/tools/lsun_to_png.py" --lmdb "$STATE/lsun/bedroom_val_lmdb" \
+      --out "$STATE/lsun/png" --n "$N_REAL" --manifest "$ROOT/manifests/lsun_val.tsv" \
+      || die "LMDB → PNG lỗi (cần: pip install lmdb pillow)"
+  fi
+
+  say "XONG. Đẩy lên Volume (chạy khi bạn đồng ý chờ upload):"
+  echo "  modal volume put dire-raw \"$STATE/ckpt/adm_lsun.pt\" ckpt/adm_lsun.pt"
+  echo "  modal volume put dire-raw \"$STATE/lsun/png\" scratch/real"
+  echo
+  echo "Hoặc để tool tự in/chạy lệnh:"
+  echo "  python3 tools/manual_data.py push --need a --dest \"$DEST\""
+  echo "  modal volume put dire-raw \"$STATE/lsun/png\" scratch/real"
+}
+
 # ---- đo sec/step ------------------------------------------------------------
 bench() {
   say "ĐO sec/step THẬT (G8) — 3 ảnh, NFE = $((2 * DDIM_STEPS * 3))"
@@ -254,6 +297,7 @@ case "$STAGE" in
   dire)  dire ;;
   train) train ;;
   list)          list_data ;;
+  ingest)        ingest ;;
   verify-data)   verify_data ;;
   push)          push_data ;;
   verify-recons) verify_recons ;;
