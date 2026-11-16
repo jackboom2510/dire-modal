@@ -226,3 +226,53 @@ def _run_all() -> int:
 
 if __name__ == "__main__":
     sys.exit(_run_all())
+
+
+# ---------------------------------------------------------------------------
+# Mức tái lập — một bảng số phải tự nói nó là loại bằng chứng gì
+# ---------------------------------------------------------------------------
+def test_run_json_records_reproduction_level():
+    import tempfile
+
+    ev = _ev()
+    doc = ev.run_json(Path(tempfile.mkdtemp()) / "run.json",
+                      experiment_id="x", tiers="e2", n_images={}, rows=0)
+    rep = doc["reproduction"]
+    assert rep["label"] == "R0", "mặc định KHÔNG tự nhận đã tái lập"
+    assert rep["data_source"].startswith("authors:")
+    assert set(rep["needs"]) == {"dire_maps", "detector", "images"}
+
+
+def test_csv_has_data_source_column_and_row_fills_it():
+    import tempfile
+
+    ev = _ev()
+    row = dict(ROW, data_source="authors:dire_maps+authors:detector+authors:images")
+    path = Path(tempfile.mkdtemp()) / "dire.csv"
+    ev.write_csv([row], path)
+    with path.open(encoding="utf-8") as fh:
+        got = list(csv.DictReader(fh))[0]
+    assert got["data_source"].startswith("authors:")
+
+
+def test_eval_main_defaults_to_authors_weights_and_maps():
+    """Ba cờ phải mặc định False: nhãn an toàn là nhãn mặc định."""
+    import inspect
+
+    ev = _ev()
+    fn = getattr(ev.main, "_fn", ev.main)
+    params = inspect.signature(fn).parameters
+    for name in ("dire_maps_self", "detector_self", "images_self"):
+        assert name in params, f"eval::main thiếu cờ {name}"
+        assert params[name].default is False, f"{name} phải mặc định False"
+
+
+def test_collect_reproduction_marks_old_runs_as_unknown_not_r0():
+    """`run.json` cũ chưa có trường này KHÔNG được coi là R0 — đó là 'không ghi'."""
+    import tempfile
+
+    ev = _ev()
+    root = Path(tempfile.mkdtemp())
+    (root / "old").mkdir()
+    (root / "old" / "run.json").write_text('{"spec": "SPEC-001"}', encoding="utf-8")
+    assert ev.collect_reproduction(root)["old"] == "?"

@@ -6,7 +6,7 @@ ai nói được "repo này tái lập cái gì". Nay mỗi file ứng với **m
 
 | Quy trình | Câu hỏi | File |
 |---|---|---|
-| **1 — Tái lập** | "Chúng ta có tái tạo được số của paper không?" | `01_repro.sh` |
+| **1 — Chấm lại** | "Trên cùng đặc trưng của tác giả, đường đo của ta có ra đúng số paper không?" (**R0**) | `01_repro.sh` |
 | **2 — Cải thiện** | "Training-free, ta làm tốt hơn DIRE được không?" | `02_improve.sh` |
 
 Hai file còn lại **không** phải quy trình thực nghiệm:
@@ -25,8 +25,12 @@ Tiện ích đo/xem (không sinh ra kết quả khoa học) nằm ở `tools/`:
 
 ## Quy trình 1 — `01_repro.sh`
 
-Tái lập khối **DIRE (ours)** của **Table 2**, ICCV 2023 (arXiv:2303.09295v1):
+Chấm lại khối **DIRE (ours)** của **Table 2**, ICCV 2023 (arXiv:2303.09295v1):
 4 detector × 8 generator = **32 ô**, headline `Avg 99.9 ACC / 100 AP`.
+
+⚠ Đây là **R0**: DIRE map và trọng số đều của tác giả ⇒ kết quả chỉ kiểm
+**harness eval** của ta, không kiểm phương pháp DIRE. Nhãn R0/R1/R2/R3:
+`src/dire_core/provenance.py` + `spec.md` §2.1.
 
 Không train gì — nhánh `dire/` đã chứa DIRE map tác giả tính sẵn (ADM-LSUN,
 DDIM S=20), nên chỉ cần ResNet-50 forward trên CPU.

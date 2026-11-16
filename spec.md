@@ -35,13 +35,46 @@ nghĩa đường đo đó, và định nghĩa luôn phần **cải thiện** d�
 
 | # | Mục tiêu |
 |---|---|
-| G1 | Tái tạo được bảng eval của DIRE trên checkpoint tác giả, **không cần train lại** |
-| G2 | Tự tính được DIRE map và chứng minh nó **khớp** với map tác giả phát hành |
+| G1 | **Chấm lại** (R0) bảng eval của DIRE trên DIRE map + checkpoint của tác giả — không train lại, và **không** gọi là tái lập thí nghiệm (xem §2.1) |
+| G2 | Tự tính được DIRE map (R1) và chứng minh nó **khớp** với map tác giả phát hành — đây mới là tái lập **đường DIRE** |
 | G3 | Đo được AEROBLADE trên **cùng tập ảnh** để so sánh công bằng |
 | G4 | Định lượng **format bias** — yếu tố làm DIRE sụp trong thực tế |
 | G5 | Một detector kết hợp (training-free) tốt hơn từng cái ở chỗ yếu của nó |
-| G6 | Mọi con số báo cáo đều tái lập được: cùng lệnh, cùng seed, có manifest |
+| G6 | Mọi con số **chạy lại được**: cùng lệnh, cùng seed, có manifest (tất định — khác "tái lập paper" ở §2.1) |
 | G7 | **Giải thích được trọng số ResNet-50 của tác giả**: train lại từ đúng split và siêu tham số của họ, rồi so với checkpoint phát hành |
+
+### 2.1 Mức tái lập — dùng đúng từ
+
+Ba thành phần **độc lập** tạo ra một con số DIRE. Cái nào do tác giả làm thì
+cái đó **không** được tính là mình đã tái lập:
+
+| Thành phần | Ai làm (mặc định) | Muốn tự làm (R#) | Chi phí |
+|---|---|---|---|
+| DIRE map `\|x − x̂\|` (`dire/**`) | tác giả | **R1**: ADM-LSUN 2,5 GB + DDIM S=20 | $22–150 GPU |
+| Detector `*.pth` | tác giả | **R2** = FR-8 | $4–56 GPU |
+| Ảnh real + ảnh generator (`images/**`) | tác giả | **R3**: generator + seed; DALL·E 2 / IF / Midjourney **không** tái lập được | — |
+
+Nhãn của một lần chạy là **phép hợp** các thành phần tự làm: `R0` (không tự
+làm gì) · `R1` · `R2` · `R1+R2` · … Ba trục **không** phải một cái thang, vì
+train lại detector được mà không cần tính lại map (FR-8 dùng map phát hành).
+
+| Nhãn | Được nói | **Không** được nói |
+|---|---|---|
+| `R0` | "đường đo của mình khớp số paper" (harness parity) | "tái lập DIRE", "DIRE đạt X% vì mình chạy lại được", "tái lập Table 2" |
+| `R2` | "train lại ra checkpoint tương đương" | "tái lập DIRE" (map vẫn của tác giả) |
+| `R1` | "pipeline DIRE tái tạo được map phát hành" | "tái lập được kết quả" (chưa nói gì về training) |
+| `R1+R2+R3` | "tái lập thí nghiệm" | — |
+
+Nhãn này **suy ra từ cờ**, không khai bằng tay: `eval::main` nhận
+`--dire-maps-self` / `--detector-self` / `--images-self`, ghi vào
+`run.json → reproduction` và cột `data_source` của CSV, in ở đầu mọi báo cáo
+(`dire_core/provenance.py`, `tests/test_provenance.py`, quyết định ở
+`docs/adr-0006-reproduction-levels.md`).
+
+> **Vì sao phải khắt khe:** dùng lại map của tác giả thì một lỗi trong cách họ
+> tính DIRE sẽ **không** làm hỏng kết quả của mình — mình dùng đúng map sai đó.
+> Bảng đẹp nhất mà R0 tạo ra vẫn không nói được gì về phương pháp; nó chỉ nói
+> mình đọc đúng đặc trưng của họ.
 
 ## 3. Không phải mục tiêu (non-goals)
 
@@ -367,7 +400,7 @@ một phép so chưa được kiểm.
 ### 10.1 Kết quả — `results/<experiment_id>/<detector>.csv`
 
 ```
-experiment_id,detector,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fpr,threshold,git_sha,created_at
+experiment_id,detector,branch,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fpr,threshold,git_sha,created_at,data_source
 ```
 
 | Cột | Kiểu | Ghi chú |
@@ -378,6 +411,8 @@ experiment_id,detector,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fp
 | `transform` | str | `clean` \| `jpeg_90` \| … \| `noise_0.25` |
 | `acc,ap,tpr_at_5fpr` | float | 6 chữ số thập phân; `null` nếu không tính được |
 | `threshold` | float | ngưỡng dùng cho ACC/TPR (lấy từ val, hoặc 0.5 với ACC) |
+| `branch` | str | nhánh `dire/test/<A>/<B>/` — hai nhánh có generator CÙNG TÊN (`adm`) mà KHÁC nghĩa |
+| `data_source` | str | `authors:dire_maps+authors:detector+…` hay `self:…` — mức tái lập của dòng (§2.1). Thiếu cột này thì bảng không tự nói được nó là loại bằng chứng gì |
 
 ### 10.2 `results/<experiment_id>/run.json`
 
@@ -389,9 +424,23 @@ experiment_id,detector,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fp
   "data": {"tiers": ["e2"], "manifest_sha256": "...", "n_images": {"real": 1000, "adm": 1000}},
   "codec": {"transform": "clean"},
   "cost": {"preflight_usd": 0.0, "actual_usd": null},
-  "seed": 3407
+  "seed": 3407,
+  "reproduction": {
+    "label": "R0",
+    "title": "chấm lại trên đặc trưng của tác giả",
+    "author_made": ["dire_maps", "detector", "images"],
+    "self_made": [],
+    "proves": ["đường ĐO của mình khớp đường đo của tác giả (...)"],
+    "does_not_prove": ["DIRE map có ĐÚNG không (...)", "..."],
+    "data_source": "authors:dire_maps+authors:detector+authors:images",
+    "full": false,
+    "needs": {"dire_maps": "...", "detector": "...", "images": "..."}
+  }
 }
 ```
+
+`reproduction` là **bắt buộc**, không phải ghi chú: thiếu nó thì `run.json`
+không trả lời được "kết quả này chứng minh cái gì" (§2.1).
 
 ### 10.3 Lệnh
 

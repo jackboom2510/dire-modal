@@ -41,6 +41,8 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | Đường dẫn | Nội dung |
 |---|---|
 | `src/dire_core/` | **Lõi thuần** — tiền xử lý, đọc checkpoint, `prob_fake`, nhãn, vòng lặp batch. Không import `modal`/`torch` ở tầng module |
+| `docs/adr-0006-reproduction-levels.md` | ADR: R0 = *chấm lại*, không phải tái lập; ba trục độc lập; nhãn vào `run.json` + CSV |
+| `src/dire_core/provenance.py` | **Mức tái lập** R0/R1/R2/R3 — thành phần nào của tác giả. R0 = *chấm lại*, **không** được gọi là tái lập. Ghi vào `run.json` + cột `data_source` |
 | `src/dire_local/` | Chạy ở máy nhà: `dire info|detect|batch|serve` + FastAPI (`server.py`) |
 | `src/dire_modal/api.py` | Wrapper SaaS: `/v1/detect`, `/healthz`, `max_containers=2`, weight nhúng image |
 | `src/dire_modal/download.py` | Tải Baidu → Volume `/raw`. Phần lớn nhất, nhiều cạm bẫy nhất. Có `--paths` (tải đúng danh sách file), **tự lặp vòng 20 h**, `from_hf` (kéo từ mirror HF) |
@@ -52,7 +54,7 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | `src/dire_modal/train.py`, `bench.py`, `archive.py` | Stage 3–6 |
 | `src/dire_modal/common.py` | `app`, image, Volume, Secret — import từ đây |
 | `tools/` | `free_quota.py`, `storage_cost.py` (thuần stdlib) + tiện ích `.sh`: `tree.sh`, `bench_storage.sh`, `bench_baidu_mode.sh`, `measure_dire.sh`, `pack_shards.sh` — **không phải quy trình thực nghiệm** |
-| `scripts/` | **ĐÚNG 2 quy trình**: `01_repro.sh` (tái lập Table 2) · `02_improve.sh` (cải thiện). Kèm `setup.sh` (secret), `check.sh` (CỔNG 0), `lib.sh`. Chi tiết: `scripts/README.md`. Thêm bước ⇒ thêm **stage**, không thêm file thứ ba |
+| `scripts/` | **ĐÚNG 2 quy trình**: `01_repro.sh` (chấm lại Table 2 — R0) · `02_improve.sh` (cải thiện). Kèm `setup.sh` (secret), `check.sh` (CỔNG 0), `lib.sh`. Chi tiết: `scripts/README.md`. Thêm bước ⇒ thêm **stage**, không thêm file thứ ba |
 | `tests/` | 117 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |

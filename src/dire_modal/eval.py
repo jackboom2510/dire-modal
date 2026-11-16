@@ -54,6 +54,7 @@ from dire_core import (
     prob_fake as _core_prob_fake,
 )
 from dire_core.detector import load_detector as _core_load_detector
+from dire_core.provenance import Claim, banner as _rep_banner, claim as _rep_claim
 
 from .common import app, cpu_image, gpu_image, vol_ckpt, vol_raw
 
@@ -343,6 +344,10 @@ CSV_FIELDS = [
     "experiment_id", "detector", "branch", "generator", "split", "transform",
     "n_real", "n_fake", "acc", "ap", "tpr_at_5fpr", "threshold",
     "git_sha", "created_at",
+    # Nguồn của phép đo này: `authors:dire_maps+authors:detector+...` hay
+    # `self:...`. Không có cột này thì một bảng "khớp 32/32 ô" trông y như tái
+    # lập thí nghiệm, trong khi thực chất là chấm lại trên đặc trưng tác giả.
+    "data_source",
     # Cột cuối: cặp KHÔNG chấm được (checkpoint sai kiểu, tar hỏng, …). Để trống
     # nghĩa là "chạy xong"; có chữ nghĩa là "cặp này không có số" — không được để
     # một dòng toàn ô rỗng trông giống "đã chấm nhưng ra 0".
@@ -351,7 +356,7 @@ CSV_FIELDS = [
 
 
 def row_for_result(exp: str, r: dict, meta: dict, split: str,
-                   git_sha: str, created: str) -> dict:
+                   git_sha: str, created: str, data_source: str = "") -> dict:
     """Một dòng CSV từ kết quả của ``eval_one`` — kể cả kết quả LỖI.
 
     Cặp lỗi phải để **trống** metric, không được ghi 0: dòng ``acc = 0`` đọc như
@@ -366,6 +371,7 @@ def row_for_result(exp: str, r: dict, meta: dict, split: str,
             "split": split, "transform": PREPROC,
             "n_real": "", "n_fake": "", "acc": "", "ap": "", "tpr_at_5fpr": "",
             "threshold": ACC_THRESHOLD, "git_sha": git_sha, "created_at": created,
+            "data_source": data_source,
             "error": err,
         }
     return {
@@ -376,6 +382,7 @@ def row_for_result(exp: str, r: dict, meta: dict, split: str,
         "acc": round(r["acc"], 6), "ap": round(r["ap"], 6),
         "tpr_at_5fpr": round(r["tpr_at_5fpr"], 6),
         "threshold": ACC_THRESHOLD, "git_sha": git_sha, "created_at": created,
+        "data_source": data_source,
         "error": "",
     }
 
@@ -396,7 +403,8 @@ def write_csv(rows: list[dict], path: Path) -> None:
 
 
 def run_json(path: Path, *, experiment_id: str, tiers: str, n_images: dict,
-             rows: int, sysinfo: dict | None = None, extra: dict | None = None) -> dict:
+             rows: int, sysinfo: dict | None = None, extra: dict | None = None,
+             reproduction: Claim | None = None) -> dict:
     """Metadata để người khác tái lập mà không phải hỏi (FR-7).
 
     ``git_sha`` lấy từ env ``GIT_SHA`` (Modal truyền vào lúc chạy) — không đọc
@@ -418,6 +426,9 @@ def run_json(path: Path, *, experiment_id: str, tiers: str, n_images: dict,
         "acc_threshold": ACC_THRESHOLD,
         "fpr_target": FPR_TARGET,
         "versions": sysinfo or {},
+        # Mức tái lập là METADATA BẮT BUỘC, không phải ghi chú: thiếu nó thì
+        # `run.json` không trả lời được "kết quả này chứng minh cái gì".
+        "reproduction": (reproduction or _rep_claim()).as_dict(),
     }
     if extra:
         doc.update(extra)
@@ -590,6 +601,30 @@ def collect_results(results_root: Path | str, exp_ids: list[str] | None = None
     return out
 
 
+def collect_reproduction(results_root: Path | str,
+                         exp_ids: list[str] | None = None) -> dict[str, str]:
+    """``{exp_id: nhãn mức tái lập}`` đọc từ ``run.json``.
+
+    Kết quả sinh trước khi có trường ``reproduction`` trả ``"?"`` — **không**
+    mặc định là R0, vì "không ghi" khác "đã ghi là R0". Báo cáo sẽ nói rõ.
+    """
+    root = Path(results_root)
+    dirs = ([root / e for e in exp_ids] if exp_ids
+            else sorted(d for d in root.iterdir() if d.is_dir())) if root.is_dir() else []
+    out: dict[str, str] = {}
+    for d in dirs:
+        meta = d / "run.json"
+        if not meta.exists():
+            continue
+        try:
+            doc = json.loads(meta.read_text(encoding="utf-8"))
+        except Exception:  # noqa: BLE001 — run.json hỏng thì coi như không ghi
+            out[d.name] = "?"
+            continue
+        out[d.name] = ((doc.get("reproduction") or {}).get("label")) or "?"
+    return out
+
+
 def compare_to_paper(
     ours: dict, paper: dict, tol: float = 0.5
 ) -> dict:
@@ -729,6 +764,22 @@ def report(exp_ids: str = "", paper: bool = True, tol: float = 0.5) -> dict:
             f"[!] Không có kết quả nào trong {RESULTS_ROOT}.\n"
             "    Chạy trước: bash scripts/01_repro.sh --stage eval"
         )
+    # Nhãn mức tái lập phải đứng TRƯỚC bảng số: người đọc thấy "khớp 32/32"
+    # trước khi biết mình chỉ chấm lại trên đặc trưng tác giả là đọc sai ngay.
+    reps = collect_reproduction(RESULTS_ROOT, [e for e in exp_ids.split(",") if e.strip()] or None)
+    labels = sorted({v for v in reps.values()})
+    if not reps:
+        print("[i] không có run.json ⇒ không biết mức tái lập")
+    elif labels == ["?"]:
+        for line in _rep_banner(_rep_claim()):
+            print(line)
+        print("  (run.json KHÔNG ghi mức tái lập — kết quả cũ, coi là R0: chấm lại)")
+    elif len(labels) > 1:
+        print(f"[!] các lần chạy KHÁC mức tái lập: {', '.join(labels)} "
+              f"⇒ không được gộp thành một bảng")
+    else:
+        print(f"[i] mức tái lập của {len(reps)} lần chạy: {labels[0]}")
+
     ref = load_paper_table() if paper else None
     for line in render_report(ours, ref, tol):
         print(line)
@@ -799,6 +850,9 @@ def main(
     limit: int = 0,
     batch_size: int = 64,
     only: str = "",
+    dire_maps_self: bool = False,
+    detector_self: bool = False,
+    images_self: bool = False,
 ) -> str:
     """Eval checkpoint PRE-TRAINED trên mọi cặp tìm được, ghi CSV + run.json.
 
@@ -810,6 +864,11 @@ def main(
 
     ``modal run -m dire_modal.eval::main --tiers e2``
     ``modal run -m dire_modal.eval::main --only lsun_bedroom__lsun_bedroom --limit 100``
+
+    **Mức tái lập.** Mặc định cả DIRE map và trọng số đều của tác giả ⇒ đây là
+    *chấm lại* (R0), không phải tái lập thí nghiệm. Chỉ bật ``--dire-maps-self``
+    / ``--detector-self`` / ``--images-self`` khi **thật sự** đã tự tạo thành
+    phần đó; nhãn suy ra từ cờ, không khai bằng tay (``dire_core.provenance``).
     """
     found = resolve_ckpt(ckpt)
     if not found:
@@ -835,6 +894,11 @@ def main(
             "    → chạy `download::main --mode fetch --tiers e2` trước."
         )
 
+    rep = _rep_claim(dire_maps=dire_maps_self, detector=detector_self,
+                     images=images_self)
+    for line in _rep_banner(rep):
+        print(line)
+
     exp = exp_id or f"eval_{datetime.datetime.now(datetime.timezone.utc):%Y%m%d_%H%M%S}"
     out_dir = RESULTS_ROOT / exp
     print(f"[eval] {len(pairs)} cặp · ckpt={ckpt}\n[eval] → {out_dir}")
@@ -849,7 +913,8 @@ def main(
     by_fake = {str(p["fake"]): p for p in pairs}
     failed: list[dict] = [r for r in results if r.get("error")]
     rows: list[dict] = [
-        row_for_result(exp, r, by_fake.get(r["fake"], {}), split, git_sha, created)
+        row_for_result(exp, r, by_fake.get(r["fake"], {}), split, git_sha, created,
+                       data_source=rep.data_source)
         for r in results
     ]
     rows.sort(key=lambda d: (d["branch"], d["generator"]))
@@ -870,6 +935,7 @@ def main(
         n_images=n_images,
         rows=len(rows),
         sysinfo=_sysinfo(),
+        reproduction=rep,
         extra={"ckpt": ckpt, "split": split, "root": root, "only": only,
                "pairs_failed": [{"fake": r["fake"], "error": r["error"]}
                                 for r in failed]},
