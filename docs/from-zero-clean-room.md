@@ -146,18 +146,26 @@ môi trường.
 Nếu bạn đã có cây `DiffusionForensics` trên ổ, không cần tải lại gì:
 
 ```bash
+python -m dire_zero peek    --tar F:/du-lieu/.../dire/val/lsun_bedroom/adm.tar.gz  # bên trong có gì
 python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
-python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm --license research-only
+python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm --license research-only                             --splits train val test
 ```
 
-`dataset` in bảng `split × generator`, cảnh báo bất đối xứng, và **dừng** nếu
-thiếu giấy phép hoặc nếu dataset không cùng phân bố với ADM. `ingest` đổ tar.gz
-ra PNG 256², tên file theo sha256 pixel, kèm manifest + `data_card.json`.
+`dataset` in bảng `split × generator` (đã gộp `stylegan_official` → `stylegan`),
+cảnh báo bất đối xứng + cảnh báo thư mục ảnh giải nén dở nằm cạnh tar, rồi **đếm
+thật** số ảnh của phần được chọn. Nó **dừng** nếu thiếu giấy phép, nếu dataset
+không cùng phân bố với ADM, hoặc nếu bộ lọc rỗng. `ingest` đổ tar.gz ra PNG 256²,
+tên file theo sha256 pixel, kèm manifest + `data_card.json`.
+
+Cây **có `images/val/`** (5 archive) ⇒ dùng val của người đóng gói, không cắt từ
+train. Cây cũng **có `images/test/lsun_bedroom/adm.tar.gz`** ⇒ dòng headline ADM
+làm được bằng dữ liệu phát hành, không cần `::gen`.
 
 Nhãn phụ thuộc **ảnh giả lấy từ đâu**: `--fake-source author` (dùng ảnh của tác
-giả) ⇒ tối đa `R1+R2`; `--fake-source gen` (tự sinh) ⇒ `R1+R2+R3`.
-Chi tiết + phát hiện "ảnh ADM test chưa từng được phát hành":
-[`docs/dataset-own.md`](dataset-own.md).
+giả) ⇒ tối đa `R1+R2`; `--fake-source gen` (tự sinh) ⇒ `R1+R2+R3`;
+`--fake-source published` (map có sẵn) ⇒ `R0` — chỉ là *chấm lại*, không phải
+tái lập. Chi tiết, gồm đường R0 trên CPU ~$0 và bảng lệch giữa bản kê với
+inventory: [`docs/dataset-own.md`](dataset-own.md).
 
 ### 4.3 Trên Modal
 

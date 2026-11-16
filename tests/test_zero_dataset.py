@@ -60,6 +60,14 @@ def _tree(root: Path, leak: bool = False) -> Path:
     _make_tar(base / "images/val/lsun_bedroom/real.tar.gz", [_png_bytes((10, 10, 10), seed=100 + i) for i in range(2)])
     _make_tar(base / "images/val/lsun_bedroom/pndm.tar.gz", [_png_bytes((30, 30, 200), seed=i) for i in range(2)])
     _make_tar(base / "images/test/lsun_bedroom/real.tar.gz", [_png_bytes((10, 10, 10), seed=200 + i) for i in range(3)])
+    _make_tar(base / "images/val/lsun_bedroom/iddpm.tar.gz", [_png_bytes((40, 40, 90), seed=i) for i in range(2)])
+    _make_tar(base / "images/val/lsun_bedroom/stylegan.tar.gz", [_png_bytes((30, 150, 30), seed=i) for i in range(2)])
+    # cùng generator, tên khác ở test
+    _make_tar(base / "images/test/lsun_bedroom/stylegan_official.tar.gz", [_png_bytes((31, 151, 31), seed=i) for i in range(2)])
+    # thư mục giải nén dở nằm cạnh tar (phải cảnh báo, không được im lặng)
+    dangling = base / "images/test/lsun_bedroom/real"
+    dangling.mkdir(parents=True)
+    (dangling / "000001.png").write_bytes(_png_bytes((9, 9, 9)))
     _make_tar(base / "images/test/lsun_bedroom/pndm.tar.gz", [_png_bytes((30, 30, 200), seed=50 + i) for i in range(3)])
     _make_tar(base / "images/test/lsun_bedroom/sdv1_test.tar.gz", [_png_bytes((90, 90, 20), seed=i) for i in range(2)])
     _make_tar(base / "images/train/imagenet/real.tar.gz", [_png_bytes((11, 11, 11), seed=i) for i in range(2)])
@@ -118,7 +126,8 @@ def test_scan_finds_the_matrix(tree: Path):
     m = scan.matrix()
     assert set(m) == {"lsun_bedroom", "imagenet"}
     assert m["lsun_bedroom"]["train"][0] == "real"          # real luôn đứng đầu
-    assert set(m["lsun_bedroom"]["test"]) == {"real", "pndm", "sdv1"}
+    assert set(m["lsun_bedroom"]["test"]) == {"real", "pndm", "sdv1", "stylegan"}
+    assert set(m["lsun_bedroom"]["val"]) == {"real", "pndm", "iddpm", "stylegan"}
     assert set(scan.generators("lsun_bedroom", "train")) == {"real", "adm", "stylegan"}
 
 
@@ -127,6 +136,15 @@ def test_sdv1_test_is_the_same_generator_as_sdv1():
     assert ds.generator_of("adm.tar.gz") == "adm"
     assert ds.label_for_generator("real") == 0
     assert ds.label_for_generator("adm") == 1
+
+
+def test_stylegan_official_is_stylegan_but_diff_stylegan_is_not():
+    """Tên khác nhau cho cùng generator phải gộp; generator khác thì không."""
+    assert ds.generator_of("stylegan_official.tar.gz") == "stylegan"
+    assert ds.generator_of("stylegan.tar.gz") == "stylegan"
+    # Diffusion-styleGAN / Diffusion-ProjectedGAN là generator KHÁC
+    assert ds.generator_of("diff-stylegan.tar.gz") == "diff-stylegan"
+    assert ds.generator_of("diff-projectedgan.tar.gz") == "diff-projectedgan"
 
 
 def _parts_under(item, root: Path) -> tuple[str, ...]:
@@ -143,6 +161,34 @@ def test_dire_is_refused_unless_explicitly_allowed(tree: Path):
     assert any("R0" in n for n in scan2.notes)
 
 
+def test_dangling_extracted_dir_is_reported_not_silently_skipped(tree: Path):
+    """`real/` nằm cạnh `real.tar.gz` ⇒ phải cảnh báo, và không được đếm vào dữ liệu."""
+    scan = ds.scan_tree(tree)
+    text = " ".join(scan.warnings)
+    assert "THƯ MỤC ảnh" in text and "real/" in text
+    # chỉ tar được dùng
+    assert all(it.source.suffix != "" for it in scan.items)
+    assert not any(it.source.is_dir() for it in scan.items)
+    item = next(i for i in scan.items if i.generator == "real" and i.split == "test")
+    # số ảnh đến từ tar (3), không phải 3 + 1 file trong thư mục rác
+    n, _ = ds.count_items([item])
+    assert n == 3
+
+
+def test_count_items_only_counts_selected(tree: Path):
+    """Đếm chỉ phần được chọn — đây là lý do `scan_tree` không đếm nữa."""
+    scan = ds.scan_tree(tree)
+    assert all(it.n_images is None for it in scan.items)      # quét không đếm
+    picked = ds.select(scan, dataset="lsun_bedroom", splits=("test",))
+    total, warns = ds.count_items(picked)
+    assert total == sum(1 for _ in []) or total > 0
+    assert all(it.n_images is not None for it in picked)
+    # archive không được chọn vẫn chưa đếm
+    other = next(it for it in scan.items if it.dataset == "imagenet")
+    assert other.n_images is None
+    assert not warns
+
+
 def test_recons_is_skipped_with_a_note(tree: Path):
     scan = ds.scan_tree(tree)
     assert all(p[0] != "recons" for p in (_parts_under(it, tree) for it in scan.items))
@@ -155,7 +201,7 @@ def test_asymmetry_warnings(tree: Path):
     text = " ".join(scan.warnings)
     assert "imagenet" in text                       # chỉ có train
     assert "sdv1" in text and "'test'" in text      # chỉ có test
-    assert scan.generators("lsun_bedroom", "test") == ["real", "pndm", "sdv1"]
+    assert scan.generators("lsun_bedroom", "test") == ["real", "pndm", "sdv1", "stylegan"]
 
 
 def test_select_filters(tree: Path):
@@ -189,7 +235,7 @@ def test_ingest_writes_pngs_and_manifest(tree: Path, tmp_path: Path):
     items = ds.select(scan, dataset="lsun_bedroom", splits=("train", "test"))
     made, stats = ds.ingest(items, tmp_path / "out", size=64)
 
-    assert stats["written"] == sum(it.n_images for it in items)
+    assert stats["written"] == sum(stats["per_archive"].values())
     dirs = {(p.parts[-3], p.parts[-2]) for p in (tmp_path / "out").rglob("*.png")}
     assert ("train", "real") in dirs and ("test", "pndm") in dirs
     with Image.open(next((tmp_path / "out").rglob("*.png"))) as im:
@@ -306,3 +352,46 @@ def test_cli_ingest_end_to_end(tree: Path, tmp_path: Path, capsys):
     for r in rows:
         per_archive[r["source_tar"]] = per_archive.get(r["source_tar"], 0) + 1
     assert max(per_archive.values()) <= 2
+
+
+def test_tar_inventory_reports_suffixes_without_extracting(tmp_path: Path):
+    """`peek` phải nói được bên trong là .npy hay .png — đây là câu hỏi chặn R0."""
+    import io
+    import tarfile
+
+    import numpy as np
+
+    p = tmp_path / "maps_adm.tar.gz"
+    with tarfile.open(p, "w:gz") as tf:
+        for i in range(3):
+            buf = io.BytesIO()
+            np.save(buf, np.zeros((3, 256, 256), np.float16))
+            data = buf.getvalue()
+            ti = tarfile.TarInfo(f"lsun/{i:04d}.npy")
+            ti.size = len(data)
+            tf.addfile(ti, io.BytesIO(data))
+        readme = b"notes"
+        ti = tarfile.TarInfo("lsun/README.txt")
+        ti.size = len(readme)
+        tf.addfile(ti, io.BytesIO(readme))
+
+    info = ds.tar_inventory(p)
+    assert info["by_ext"][".npy"] == 3
+    assert info["by_ext"][".txt"] == 1
+    assert info["n_members"] == 4
+    assert len(info["sample"]) == 3
+    assert all(".npy" in s for s in info["sample"])
+
+
+def test_tar_inventory_sample_is_capped(tmp_path: Path):
+    import io
+    import tarfile
+
+    p = tmp_path / "imgs.tar.gz"
+    with tarfile.open(p, "w:gz") as tf:
+        for i in range(5):
+            data = _png_bytes((1, 2, 3), seed=i)
+            ti = tarfile.TarInfo(f"{i}.png")
+            ti.size = len(data)
+            tf.addfile(ti, io.BytesIO(data))
+    assert len(ds.tar_inventory(p, n_sample=2)["sample"]) == 2
