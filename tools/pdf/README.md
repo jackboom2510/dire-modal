@@ -50,6 +50,8 @@ Tập con có chủ đích, đủ cho tài liệu kỹ thuật:
 ```
 # Phần        ## Mục        ### Mục con
 đoạn văn, **đậm**, *nghiêng*, `mã nội dòng`, [chữ](https://url)
+$\frac{a}{b}$ nội dòng      công thức nội dòng (cũng dùng được trong ô bảng)
+\$ ... \$                   escape khi cần hiện ký tự $ thật
 trích dẫn → [[1]]            (chỉ số trên, màu xanh)
 - gạch đầu dòng             1. danh sách số
 > trích dẫn khối
@@ -62,12 +64,22 @@ $$[12] \frac{a}{b} $$       công thức hiển thị, [12] là số hiệu (tu�
 
 ## Giới hạn đã biết
 
-- **Công thức** do `matplotlib.mathtext` dựng, tức tập con LaTeX của mathtext:
+- **Công thức** do `matplotlib.mathtext` dựng, tức tập con LaTeX của mathtext
+  (`sanitize()` tự đổi `\ge→\geq`, `\le→\leq`, `\to→\rightarrow`, `\left|→\left\vert`,
+  bỏ `\big`/`\Big`, `\text{}→\mathrm{}`):
   không có `\begin{align}`, không có `\text{}` (bộ dựng tự đổi thành `\mathrm{}`),
   không có `\big`/`\Big` (bộ dựng tự bỏ), `\left|` được đổi thành `\left\vert`.
   Công thức **không** đánh số tự động — số hiệu do người viết đặt trong `$$[n]`.
 - **Ngắt trang** chỉ xảy ra ở tiêu đề `#`, ở `<!-- pagebreak -->`, và bên trong
-  khối mã/bảng (Table được phép tách hàng). Một mục dài sẽ chảy sang trang sau.
+  khối mã/bảng (Table được phép tách hàng). Khối mã **≤ 14 dòng** được bọc
+  `KeepTogether` để không bị tách rời khỏi ngữ cảnh; khối dài hơn thì tách tự do.
+- **Thụt lề trong khối mã** được giữ bằng cách đổi khoảng trắng đầu dòng và cụm
+  ≥ 2 dấu cách thành `&#160;` — vì `Paragraph` gộp mọi khoảng trắng liên tiếp
+  (đây chính là lỗi "mất indent" đã gặp ở bản trước).
+- **Công thức nội dòng** được chèn dưới dạng `<img>` với chiều cao chặn ở 1,5 lần
+  cỡ chữ (và bề rộng chặn theo ô bảng): `Paragraph` tính chiều cao dòng theo cỡ
+  chữ, **không** theo ảnh, nên công thức cao (phân số, tích phân) sẽ đè lên dòng
+  trên nếu không chặn.
 - **Không có chỉ mục (index)** theo từ khoá; Phụ lục tra cứu viết tay.
 
 ## Kiểm tra kết quả

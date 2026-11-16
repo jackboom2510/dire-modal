@@ -158,21 +158,73 @@ DIRE **không** dùng ba độ đo này, và đó là lựa chọn có chủ đ�
 cùng PSNR vẫn có thể có cấu trúc sai số rất khác nhau — một cái sai đều khắp ảnh,
 một cái sai tập trung ở vùng biên. Chính cấu trúc đó mới là thứ ResNet-50 học.
 
+## 1.7 Không gian màu, gamma, và vì sao JPEG không nén RGB trực tiếp
+
+### Ba kênh không độc lập
+
+Mắt người nhạy với **độ sáng** hơn nhiều so với **màu**. Vì vậy mọi chuẩn nén ảnh
+đều đổi RGB sang một không gian tách hai thứ đó ra:
+
+$$ Y = 0{,}299R + 0{,}587G + 0{,}114B, \qquad C_b = 0{,}564\,(B-Y), \qquad C_r = 0{,}713\,(R-Y) $$
+
+`Y` là độ sáng (luma), `C_b`/`C_r` là hai kênh màu (chroma). JPEG sau đó **lấy mẫu
+thưa** hai kênh màu (4:2:0 — giữ 1/4 số điểm ảnh) vì mắt không phân biệt được. Đây
+là lý do ảnh JPEG 8 bit thực chất chỉ chứa đầy đủ thông tin độ sáng.
+
+**Hệ quả cho pháp y ảnh:** mọi phép xử lý ảnh (nén, chỉnh màu, phóng to) đều tác
+động **không đều** lên `Y` và `C_b`/`C_r`. Một số detector chỉ dùng kênh `Y`. Với
+DIRE thì khác: nó giữ **3 kênh RGB**, nên sai số trên kênh màu cũng vào biểu diễn —
+và đây là một trong những lý do tín hiệu của nó phong phú hơn các phương pháp chỉ
+nhìn độ sáng.
+
+### Gamma: vì sao "giá trị 128" không phải "một nửa độ sáng"
+
+Cảm biến ghi ánh sáng **tuyến tính** theo số photon, nhưng mắt cảm nhận độ sáng
+theo **luỹ thừa** gần bậc 1/2,2. Nếu lưu tuyến tính, dải tối sẽ bị dồn vào vài giá
+trị và dải sáng chiếm quá nhiều. Vì vậy ảnh được **mã hoá gamma**:
+
+$$ I_{\mathrm{enc}} = 255\cdot\left(\frac{I_{\mathrm{lin}}}{255}\right)^{1/\gamma}, \qquad \gamma \approx 2{,}2 $$
+
+trong đó `I_lin` là giá trị tuyến tính (tỉ lệ số photon) và `I_enc` là giá trị sau
+mã hoá (giá trị mà ta lưu). Hệ quả định lượng cần nhớ: giá trị 8 bit `128` tương
+ứng **khoảng 22%** độ sáng tuyến tính, không phải 50%.
+
+Ba chỗ gamma ảnh hưởng tới tài liệu này:
+
+1. **`|x − x̂|` không phải sai số vật lý.** DIRE tính trên giá trị đã mã hoá gamma,
+   nên một sai lệch `Δ` ở vùng tối "nặng" hơn cùng `Δ` ở vùng sáng (theo nghĩa vật
+   lý). Bài báo không bàn điểm này; nó là một nguồn thiên lệch có hệ thống giữa ảnh
+   tối và ảnh sáng.
+2. **`pixel/127,5 − 1`** là phép đổi **thẳng** trên giá trị đã mã hoá, không giải
+   gamma. ADM cũng được train trên dữ liệu như vậy, nên nhất quán — nhưng nếu bạn
+   tự giải gamma trước khi đưa vào, bạn đang lệch khỏi miền mà mô hình biết.
+3. **Làm mờ và nén** đều tác động khác nhau lên vùng tối/sáng vì gamma; đó là một
+   phần lý do "ảnh thật khó tái tạo" không đồng đều trên toàn ảnh.
+
+### Vì sao 8 bit là đủ — và khi nào không
+
+Lượng tử hoá 8 bit cho 256 mức. Nếu nhiễu cảm biến lớn hơn 1 mức (trường hợp phổ
+biến), lượng tử hoá gần như không mất gì. Nhưng nếu ảnh được tạo **tổng hợp** (như
+ảnh diffusion) rồi lượng tử hoá **một lần** từ số thực, thì bước lượng tử trở thành
+một dấu vết: phân phối phần dư làm tròn của ảnh tổng hợp **khác** ảnh chụp (ảnh chụp
+đã bị nhiễu che lấp trước khi lượng tử hoá). Đây là cơ sở của cả một nhóm phương
+pháp pháp y ảnh dựa trên "dấu vết lượng tử hoá", và là lý do các phép phân tích
+**không được** làm mất bit thấp (đừng chuyển sang JPEG chất lượng cao trước khi
+phân tích).
+
 # Phần 2 — Học máy: những gì thực sự cần cho bài toán này
 
 ## 2.1 Bài toán tối ưu
 
-Cho tập `D = {(x_i, y_i)}` với `y_i ∈ {0, 1}` (`0` = thật, `1` = giả), ta tìm
-tham số `θ` cực tiểu **rủi ro thực nghiệm**:
+Cho tập $D = \{(x_i, y_i)\}$ với $y_i \in \{0,1\}$ ($0$ = thật, $1$ = giả), ta
+tìm tham số $\theta$ cực tiểu **rủi ro thực nghiệm**:
 
-```
-min_θ  (1/N) Σ_i  ℓ( f_θ(x_i), y_i )
-```
+$$ \min_\theta \; \frac{1}{N}\sum_{i=1}^{N} \ell\big(f_\theta(x_i),\, y_i\big) $$
 
 Quy trình lặp quen thuộc: lan truyền xuôi → tính mất mát → lan truyền ngược →
 cập nhật. Ba siêu tham số quyết định tốc độ:
 
-- **Learning rate** `η`: bước cập nhật `θ ← θ − η·∇θ`.
+- **Learning rate** $\eta$: bước cập nhật $\theta \leftarrow \theta - \eta\nabla_\theta$.
 - **Batch size**: số mẫu dùng cho một lần tính gradient. Bài báo dùng 64.
 - **Optimizer**: bài báo dùng Adam [[19]], `lr = 1e-4`. Bộ điều hoà learning
   rate mặc định là `CosineAnnealingLR` [[15]].
@@ -281,8 +333,8 @@ thì không. Ở mức 99–100% ACC đã bão hoà, AP còn phân biệt đư�
 hạng** tốt hơn. Trong ứng dụng thật, người ta còn dùng `TPR@FPR=1%` vì chi phí
 buộc tội oan cao hơn chi phí bỏ sót.
 
-**Đọc con số cho đúng.** Test chỉ có 1 000 ảnh mỗi bộ sinh. Với `p ≈ 0,99`, sai
-số chuẩn của tỉ lệ là `√(0,99·0,01/1000) ≈ 0,3%`, nên khoảng tin cậy 95% rộng
+**Đọc con số cho đúng.** Test chỉ có 1 000 ảnh mỗi bộ sinh. Với $p \approx 0{,}99$, sai số
+chuẩn của tỉ lệ là $\sqrt{0{,}99\cdot 0{,}01/1000} \approx 0{,}3\%$, nên khoảng tin cậy 95% rộng
 khoảng ±0,6 điểm. Chênh lệch 99,7 so với 100,0 **không có ý nghĩa thống kê**. Bài
 báo không báo khoảng tin cậy, và đó là một hạn chế (Phần 9.5).
 
@@ -307,9 +359,7 @@ số: `k² · C_in · C_out + C_out` (nếu có bias). Với `k = 3`, `C_in = C_
 
 Kích thước đầu ra:
 
-```
-H_out = ⌊(H_in + 2·padding − k) / stride⌋ + 1
-```
+$$ H_{\text{out}} = \left\lfloor \frac{H_{\text{in}} + 2p - k}{s} \right\rfloor + 1 $$
 
 Ba siêu tham số này (`kernel`, `padding`, `stride`) đủ để kiểm mọi lỗi shape.
 Ví dụ lớp đầu của ResNet-50: `k=7, stride=2, padding=3` trên 224 ⇒ `(224+6−7)/2+1
@@ -332,7 +382,7 @@ Hai lưu ý thực hành:
 - BatchNorm làm mỗi mẫu phụ thuộc các mẫu khác trong batch — điều này ảnh hưởng
   đến diễn giải, nhưng không ảnh hưởng đến kết quả nếu batch đủ lớn.
 
-**Kết nối tắt** (residual): `y = x + F(x)`. Vì đạo hàm của `x` theo `x` bằng 1,
+**Kết nối tắt** (residual): $y = x + F(x)$. Vì đạo hàm của `x` theo `x` bằng 1,
 gradient chảy thẳng qua mọi tầng, nên train được 50–152 tầng mà gradient không
 triệt tiêu. Đây là ý tưởng cốt lõi của ResNet [[14]].
 

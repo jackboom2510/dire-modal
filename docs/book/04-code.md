@@ -433,7 +433,7 @@ def ddim_reverse_sample(self, model, x, t, clip_denoised=True, ...):
 | Dòng mã | Toán |
 |---|---|
 | `sqrt_recip_alphas_cumprod[t] * x − pred_xstart) / sqrt_recipm1_alphas_cumprod[t]` | `ε = (x/√ᾱ_t − x̂₀)/√(1/ᾱ_t − 1)`, tương đương [12] |
-| `pred_xstart * sqrt(alpha_bar_prev) + sqrt(1 − alpha_bar_prev − σ²) * eps` | [13] + thành phần `σ` của [14] |
+| `pred_xstart * sqrt(alpha_bar_prev) + sqrt(1 − alpha_bar_prev − sigma²) * eps` | [13] + thành phần $\sigma$ của [14] |
 | `pred_xstart * sqrt(alpha_bar_next) + sqrt(1 − alpha_bar_next) * eps` | [16] |
 
 **Vòng lặp và `real_step`:**

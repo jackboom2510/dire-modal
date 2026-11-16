@@ -52,7 +52,7 @@ Nghĩa là: co ảnh cũ lại một chút (`√α_t`) rồi cộng nhiễu Gaus
 
 $$[9] q(x_t \mid x_0) = \mathcal{N}\left(x_t;\ \sqrt{\bar{\alpha}_t}\,x_0,\ (1-\bar{\alpha}_t)\,\mathbf{I}\right) $$
 
-hay viết theo mẫu:
+hay viết dưới dạng mẫu (chỉ cần một lần lấy nhiễu `ε`):
 
 $$[10] x_t = \sqrt{\bar{\alpha}_t}\; x_0 + \sqrt{1-\bar{\alpha}_t}\; \varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, \mathbf{I}) $$
 
@@ -60,8 +60,8 @@ Công thức [10] là công thức quan trọng nhất của cả tài liệu. B
 
 1. `ᾱ_t` **giảm** theo `t`: ảnh mất dần, nhiễu chiếm dần. Bảng dưới là số tính
    thật với lịch tuyến tính của ADM.
-2. Đảo công thức [10] được: `x₀ = (x_t − √(1−ᾱ_t)·ε)/√ᾱ_t`. Nếu biết `ε` thì biết
-   ảnh sạch.
+2. Đảo công thức [10] được: $x_0 = \big(x_t - \sqrt{1-\bar{\alpha}_t}\,\varepsilon\big)/\sqrt{\bar{\alpha}_t}$.
+   Nếu biết $\varepsilon$ thì biết ảnh sạch.
 3. Vì `x_t` được xác định hoàn toàn bởi cặp `(x₀, ε)`, bài toán "sinh ảnh" trở
    thành bài toán "**đoán nhiễu**".
 
@@ -251,7 +251,7 @@ used = list(range(0, num_timesteps, stride))  # 0, 50, 100, …, 950
 Tập mốc là `{0, 50, 100, …, 950}` — **20 phần tử**, mốc lớn nhất là **950**, không
 phải 999. Hai hệ quả định lượng:
 
-- **Chi phí:** mỗi ảnh cần `S` lượt cho đảo ngược + `S` lượt cho tái tạo = `2S`
+- **Chi phí:** mỗi ảnh cần $S$ lượt cho đảo ngược + $S$ lượt cho tái tạo = $2S$
   lượt chạy mạng. Với `S = 20`: **40 NFE/ảnh** (NFE = number of function
   evaluations). Đây là hoá đơn thật của DIRE, lớn hơn nhiều so với 1 lượt ResNet-50.
 - **Điểm bắt đầu tái tạo:** vì mốc cuối là 950, `x_950` vẫn còn `√ᾱ_950 ≈ 1,03%`
@@ -265,6 +265,62 @@ phải 999. Hai hệ quả định lượng:
 1000 bước sẽ chạy **20 bước đầu của thang 1000** (mốc 0…19), tức một quỹ đạo hoàn
 toàn khác — không phải "20 mốc rải đều". Đây là lỗi cài đặt đã có thật trong kho
 này (Phần 11.3, lỗi F2).
+:::
+
+## 5.7 Lịch nhiễu: tuyến tính, cosine, và hệ quả lên DIRE
+
+Cách chọn dãy `β_t` **không** phải chi tiết phụ. Nó quyết định:
+
+- bao nhiêu "thời gian" dành cho việc phá cấu trúc ảnh so với việc phá chi tiết;
+- giá trị `ᾱ_t` ở mốc cuối của tập respacing (tức điểm bắt đầu tái tạo);
+- do đó, **DIRE map của hai mô hình dùng hai lịch khác nhau không so sánh trực tiếp
+  được**.
+
+### Hai lịch phổ biến
+
+**Tuyến tính** (DDPM, ADM):
+
+$$ \beta_t = \beta_{\min} + \frac{t-1}{T-1}\left(\beta_{\max}-\beta_{\min}\right), \qquad \beta_{\min}=10^{-4},\ \beta_{\max}=0{,}02 $$
+
+**Cosine** (iDDPM [[8]]): định nghĩa trực tiếp qua `ᾱ` thay vì `β`:
+
+$$ \bar{\alpha}_t = \frac{f(t)}{f(0)}, \qquad f(t) = \cos^{2}\!\left(\frac{t/T + s}{1+s}\cdot\frac{\pi}{2}\right), \quad s = 0{,}008 $$
+
+và `β_t = 1 − ᾱ_t/ᾱ_{t−1}`.
+
+### So sánh định lượng (số tính từ công thức, `T = 1000`)
+
+| `t` | `ᾱ_t` tuyến tính | `ᾱ_t` cosine |
+|---|---|---|
+| 250 | 0,521 | 0,816 |
+| 500 | 0,078 | 0,494 |
+| 750 | 0,0033 | 0,164 |
+
+Đọc bảng: lịch tuyến tính **phá ảnh quá nhanh ở nửa đầu** — đến `t = 500` đã mất
+92% tín hiệu — rồi dành nửa sau cho việc "dọn" gần như không còn gì. Cosine giữ
+tín hiệu lâu hơn, phân bố công việc đều hơn. iDDPM chứng minh cosine cho ảnh sinh
+tốt hơn; đây là một trong những khác biệt lớn giữa DDPM và iDDPM.
+
+### Ba hệ quả trực tiếp lên DIRE
+
+1. **`√ᾱ` ở mốc cuối khác nhau.** Với `ddim20`, mốc cuối là `t = 950`:
+   `√ᾱ_950 ≈ 0,0103` (tuyến tính). Nếu mô hình dùng cosine, cùng mốc đó có
+   `√ᾱ_950` lớn hơn **nhiều lần** ⇒ `x_T` còn giữ nhiều tín hiệu hơn ⇒ phép đảo ngược
+   "dễ" hơn ⇒ DIRE có xu hướng **nhỏ hơn** ở mọi ảnh. Nói cách khác: **thang đo DIRE
+   phụ thuộc lịch nhiễu**.
+2. **DIRE map của ADM và của iDDPM không cùng thang.** Đây là lý do khi làm thí
+   nghiệm E2 (thay ADM bằng iDDPM làm `I`/`R`, Phần 12.2) phải **huấn luyện lại**
+   detector, và phải chuẩn hoá lại ngưỡng; không thể dùng checkpoint cũ.
+3. **So sánh giữa các bài báo phải kiểm lịch.** Nếu một phương pháp báo "DIRE với
+   `S = 20`" mà không nói lịch nhiễu, con số chưa đủ để tái lập. Trong bài báo DIRE,
+   lịch là tuyến tính (mặc định của `guided-diffusion`), và điều này chỉ đọc được từ
+   **mã**, không có trong bài.
+
+::: warn
+Một cái bẫy khi tự cài: `β` được khai theo `T = 1000`, nhưng khi dùng respacing 20
+mốc, **không** được tính lại `β`. `SpacedDiffusion` chỉ **chọn** các mốc từ lịch đã
+tính. Tính lại `β` cho 20 bước (tức giãn lịch) là một thay đổi hoàn toàn khác, và sẽ
+cho DIRE map khác hẳn — dù "chỉ là 20 bước" trong cả hai trường hợp.
 :::
 
 # Phần 6 — Vì sao ảnh sinh "dễ tái tạo": hai tầng giải thích
