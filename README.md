@@ -209,6 +209,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 | `rawx` | 4 | 4.48 GB | ảnh gốc để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB) |
 | `rawxens` | 6 | 12.10 GB | ảnh gốc cho ensemble |
 | `ckpts` | 6 | 1.58 GB | toàn bộ checkpoint detector (mỗi file 269.4 MB) |
+| **`gallery`** | **9** | **~0.67 GB** | **bộ ba ảnh gốc + recons + DIRE map** cho báo cáo (real/pndm/ldm) — KHÔNG cho eval |
 
 | tổ hợp | file | size |
 |---|---|---|
@@ -226,10 +227,16 @@ thiện, không train lại*, phần bỏ được rất lớn: **eval đầy đ
 Alias cũ vẫn chạy được: `ckpt`→`ckpts` · `A`→`e2,train` · `B`→`e3` · `C`→`rawx` ·
 `D`→ rỗng (toàn bộ nội dung cũ nằm trong `NEVER`).
 
-`NEVER` chặn cứng, không tier nào với tới: `recons/` · `*ddim*` (8 tar ablation
-số bước DDIM, không có bản `dire/` tương ứng — 2 trong số đó chỉ **130 B**, tức
-rỗng ngay trong dataset gốc) · `lsun_bedroom.pt` (weight ADM 2.5 GB không có
-trong cây Baidu). Audit đo được **1.6 GB** bị chặn trong phạm vi đã quét.
+`NEVER` chặn theo mặc định: `recons/` · `*ddim*` (8 tar ablation số bước DDIM,
+không có bản `dire/` tương ứng — 2 trong số đó chỉ **130 B**, tức rỗng ngay
+trong dataset gốc) · `lsun_bedroom.pt` (weight ADM 2.5 GB không có trong cây
+Baidu). Audit đo được **~25 GB** bị chặn (recons 24 GB + ddim 0.87 GB).
+
+Một ngoại lệ **hẹp và có tên**: tier **`gallery`** được mang `recons/` cho báo
+cáo (ảnh tái tạo `x̂` để đối chiếu với DIRE map). Nó khai báo **từng file** bằng
+`File(allow_never=True)`, nên `*ddim*` và weight ADM **vẫn bị chặn** — kể cả khi
+gõ `--paths ... --allow-never`. Lý do tồn tại: `NEVER` nghĩa là "không tier nào
+tự động kéo về", không phải "file này vô dụng". Xem `tools/triplet_view.py`.
 
 `expand()` khử trùng lặp theo **đường dẫn remote**, không theo object: `e4 ⊂ e4x`
 nên `--tiers e4,e4x` cho 17 file chứ không phải 22.

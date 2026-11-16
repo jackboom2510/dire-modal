@@ -185,3 +185,4 @@ tiers:
   rawx:     "4 file · 4.48 GB · ảnh gốc để TỰ tính lại DIRE (cần GPU + ADM 2.5 GB)"
   rawxens:  "6 file · 12.10 GB · ảnh gốc cho ensemble — mặc định KHÔNG"
   ckpts:    "6 file · 1.58 GB · toàn bộ checkpoint detector DIRE (mỗi file 269.4 MB)"
+  gallery:  "9 file · ~0.67 GB · BỘ BA ảnh gốc + recons + DIRE map cho BÁO CÁO (không cho eval) ⭐"
