@@ -38,10 +38,13 @@ import modal
 
 APP_NAME = "dire-zero"
 CKPT = "/raw/zero/ckpt/adm_lsun.pt"
-REAL = "/raw/zero/real"
-GEN = "/raw/zero/gen"
-MAPS_REAL = "/raw/zero/maps/real"
-MAPS_FAKE = "/raw/zero/maps/fake"
+#: Cây dữ liệu sau `python -m dire_zero ingest`: <split>/<generator>/*.png
+#: `real` là ảnh thật; mọi tên khác là ảnh sinh (adm, pndm, ldm, ours_adm, …).
+DATA = "/raw/zero/data"
+MANIFEST = "/raw/zero/data/manifest.tsv"
+DATA_CARD = "/raw/zero/data/data_card.json"
+GEN = "/raw/zero/gen"                 # chỉ dùng khi chưa có ảnh giả nào
+MAPS = "/raw/zero/maps"              # <split>/<generator>/*.npy
 OUT = "/ckpt/zero"
 
 #: Image riêng: chỉ torch + numpy + pillow. **Không** clone repo tác giả.
@@ -97,7 +100,8 @@ def selfcheck() -> dict:
     # (2) một ảnh thật; nếu chưa có thì nhiễu, để cổng vẫn chạy được sớm
     from .data import list_images
 
-    pngs = list_images(REAL) if os.path.isdir(REAL) else []
+    real_dir = f"{DATA}/test/real"
+    pngs = list_images(real_dir) if os.path.isdir(real_dir) else []
     if pngs:
         from .pipeline import load_image
 
@@ -131,6 +135,63 @@ def selfcheck() -> dict:
     assert report["finite"], "map có NaN/Inf — thường là ᾱ[0] = 1,0 (chia cho 0)"
     assert 0.0 <= report["dire_min"] and report["dire_max"] <= 2.0 + 1e-5, report
     print(report, flush=True)
+    return report
+
+
+@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
+def checkdata() -> dict:
+    """Cổng dữ liệu: kiểm manifest + data_card **trước** khi tiêu GPU.
+
+    Kiểm bốn thứ mà một lần chạy GPU 3 tiếng sẽ không báo:
+
+    1. manifest có trên Volume và sha256 từng PNG khớp (file bị sửa/xoá);
+    2. có đủ hai lớp, và tỉ lệ hai lớp không lệch quá 5:1 (ACC sẽ vô nghĩa);
+    3. `data_card.label` phù hợp với nguồn ảnh giả (`author` ⇒ không được `R3`);
+    4. rò rỉ pixel giữa hai lớp (nếu ingest đã chạy, việc này đã chặn; ở đây
+       kiểm lại trên bản đã đẩy lên vì Volume có thể bị ghi đè từ ngoài).
+    """
+    import collections
+    import json  # noqa: PLC0415
+
+    from .dataset import read_manifest_tsv, verify_manifest
+
+    card = json.load(open(DATA_CARD, encoding="utf-8")) if os.path.exists(DATA_CARD) else {}
+    label = card.get("label", "?")
+    ok, bad = verify_manifest(MANIFEST) if os.path.exists(MANIFEST) else (0, ["thiếu manifest.tsv"])
+
+    rows = read_manifest_tsv(MANIFEST) if os.path.exists(MANIFEST) else []
+    counts = collections.Counter((r["split"], r["generator"]) for r in rows)
+    n_real = sum(1 for r in rows if r["label"] == 0)
+    n_fake = sum(1 for r in rows if r["label"] == 1)
+
+    problems = []
+    if not rows:
+        problems.append("manifest rỗng — chạy `python -m dire_zero ingest` rồi đẩy lên")
+    if bad:
+        problems.append(f"{len(bad)} ảnh lệch sha256/xoá: {bad[:2]}")
+    if n_real and n_fake and max(n_real, n_fake) / max(min(n_real, n_fake), 1) > 5:
+        problems.append(f"hai lớp lệch {n_real}:{n_fake} — ACC sẽ bị lớp đông lấn át")
+    if not n_real or not n_fake:
+        problems.append(f"thiếu một lớp (thật {n_real}, giả {n_fake})")
+    if card.get("fake_source") == "author" and "R3" in label:
+        problems.append("data_card nói ảnh giả là của tác giả nhưng nhãn lại có R3")
+
+    report = {
+        "label": label,
+        "fake_source": card.get("fake_source", "?"),
+        "dataset": card.get("dataset", "?"),
+        "license": card.get("license", "?"),
+        "comparable_to_paper": card.get("comparable_to_paper"),
+        "n_rows": len(rows),
+        "n_real": n_real,
+        "n_fake": n_fake,
+        "by_split_generator": {f"{s}/{g}": n for (s, g), n in sorted(counts.items())},
+        "manifest_sha_ok": ok,
+        "problems": problems,
+    }
+    print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
+    if problems:
+        raise RuntimeError("dữ liệu chưa dùng được:\n  " + "\n  ".join(problems))
     return report
 
 
@@ -182,47 +243,94 @@ def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, m
     require_estimate(est, max_usd)
 
     f, digest = _counter(dtype="float16")
-    out = generate(f, n=n, out_dir=GEN, meta=RunMeta(digest, steps), seed_base=seed_base, size=size)
+    out_root = f"{DATA}/gen"          # chưa biết split ở bước này; `ingest` không đụng vào
+    out = generate(f, n=n, out_dir=out_root, meta=RunMeta(digest, steps), seed_base=seed_base, size=size)
+
+    # đặt vào cây dữ liệu theo split đã ghi trong gen.json, dưới tên `ours_adm`
+    import shutil  # noqa: PLC0415
+
+    for split, names in out["split"].items():
+        target = f"{DATA}/{split}/ours_adm"
+        os.makedirs(target, exist_ok=True)
+        for nm in names:
+            shutil.move(f"{out_root}/{nm}", f"{target}/{nm}")
     vol_raw.commit()
-    return {"n": n, "out": GEN, "gen_json": {k: out[k] for k in ("n", "steps", "nfe_total", "seconds")}}
+    return {"n": n, "out": f"{DATA}/<split>/ours_adm", "fake_source": "gen",
+            "gen_json": {k: out[k] for k in ("n", "steps", "nfe_total", "seconds")}}
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
-def dire(n: int = 500, steps: int = 20, max_usd: float = 5.0) -> dict:
-    """R1 — DIRE map cho cả hai phía, cùng một lịch."""
+def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
+         steps: int = 20, max_usd: float = 5.0) -> dict:
+    """R1 — DIRE map cho cả hai phía, cùng một lịch, **giữ split của người đóng gói**.
+
+    ``generator="auto"``: nếu đã có ảnh giả trong cây dữ liệu (tác giả hoặc tự
+    sinh) thì dùng; nếu chưa, đọc ảnh từ `gen/` (kết quả `::gen`).
+    """
     from .budget import Estimate, load_sec_per_step, require_estimate
+    from .data import list_images
     from .pipeline import RunMeta, compute_maps
 
+    want = tuple(x.strip() for x in splits.split(",") if x.strip())
+    gens = _generators_in(DATA)
+    if generator != "auto":
+        gens = [g for g in gens if g == generator]
+    if not gens:
+        raise FileNotFoundError(
+            f"không có thư mục generator nào trong {DATA} (có: {_generators_in(DATA)}).\n"
+            "Chạy `python -m dire_zero ingest` rồi đẩy lên, hoặc `::gen` để tự sinh ảnh giả."
+        )
+
+    n_pairs = sum(len(list_images(f"{DATA}/{s}/real")) for s in want if os.path.isdir(f"{DATA}/{s}/real"))
+    n_fake = sum(len(list_images(f"{DATA}/{s}/{g}")) for s in want for g in gens if os.path.isdir(f"{DATA}/{s}/{g}"))
     sec = load_sec_per_step(f"{OUT}/bench.json")
-    est = Estimate(n_images=2 * n, nfe_per_image=2 * steps, sec_per_step=sec)
+    est = Estimate(n_images=n_pairs + n_fake, nfe_per_image=2 * steps, sec_per_step=sec)
     print("[tiền]", est.line(), flush=True)
     require_estimate(est, max_usd)
 
     f, digest = _counter(dtype="float16")
     meta = RunMeta(digest, steps)
 
-    def listing(root: str, label: int, limit: int) -> list[tuple[str, int]]:
-        from .data import list_images
+    items: list[tuple[str, int, str]] = []
+    for split in want:
+        real_dir = f"{DATA}/{split}/real"
+        if not os.path.isdir(real_dir):
+            raise FileNotFoundError(f"thiếu {real_dir} — ingest chưa đẩy split này?")
+        for p in list_images(real_dir)[:n]:
+            items.append((str(p), 0, split))
+        for g in gens:
+            d = f"{DATA}/{split}/{g}"
+            if os.path.isdir(d):
+                for p in list_images(d)[:n]:
+                    items.append((str(p), 1, split))
 
-        if not os.path.isdir(root):
-            raise FileNotFoundError(f"thiếu {root} — chạy bước trước (real: tải tay; fake: `gen`)")
-        return [(str(p), label) for p in list_images(root)[:limit]]
-
-    real = compute_maps(f, listing(REAL, 0, n), MAPS_REAL, meta, limit=n)
-    fake = compute_maps(f, listing(GEN, 1, n), MAPS_FAKE, meta, limit=n)
+    out = compute_maps(f, items, MAPS, meta, limit=None)
     vol_raw.commit()
-    return {"real": real["n"], "fake": fake["n"], "nfe_total": real["nfe_total"] + fake["nfe_total"], "est": est.as_dict()}
+    return {"n": out["n"], "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"], "est": est.as_dict()}
+
+
+def _generators_in(root: str) -> list[str]:
+    """Các generator có mặt trong cây dữ liệu (bỏ `real`)."""
+    found = set()
+    if not os.path.isdir(root):
+        return []
+    for split in os.listdir(root):
+        d = os.path.join(root, split)
+        if os.path.isdir(d):
+            found.update(x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x)) and x != "real")
+    return sorted(found)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
 def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, seed: int = 3407) -> dict:
     """R2 — train detector trên map **của mình**."""
-    from .detector import ResNetDetector, resnet50
     from .pipeline import collect_maps, train as train_fn
 
-    maps = collect_maps([MAPS_REAL, MAPS_FAKE], [0, 1])
+    from .detector import ResNetDetector, resnet50
+
+    maps = collect_maps(MAPS)
     if not maps:
-        raise FileNotFoundError(f"không có .npy trong {MAPS_REAL} / {MAPS_FAKE} — chạy `dire` trước")
+        raise FileNotFoundError(f"không có .npy trong {MAPS} — chạy `dire` trước")
     payload = train_fn(
         lambda: ResNetDetector(resnet50()),
         maps,
@@ -241,6 +349,12 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, see
     return payload
 
 
+def _read_json(path: str) -> dict:
+    import json  # noqa: PLC0415
+
+    return json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+
+
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
 def report() -> dict:
     """Gom `gen/dire/train` thành một báo cáo có nhãn mức tái lập và cảnh báo."""
@@ -249,15 +363,16 @@ def report() -> dict:
     from .pipeline import write_json
 
     def read(name: str) -> dict:
-        p = f"{OUT}/{name}.json"
+        p = f"{MAPS}/{name}.json" if name == "dire" else f"{OUT}/{name}.json"
         return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
 
     payload = {
-        "label": "R1+R2+R3 (clean-room, không trọng số ImageNet)",
+        "label": _read_json(DATA_CARD).get("label", "R1+R2+R3 (clean-room)"),
         "what_is_ours": ["DIRE map", "detector", "ảnh sinh"],
         "what_is_not": ["trọng số ADM (OpenAI)", "LSUN-Bedroom (dữ liệu thật)", "kiến trúc U-Net/ResNet"],
         "gen": {k: v for k, v in read("gen").items() if k in ("n", "steps", "nfe_total", "seconds")},
         "dire": {k: v for k, v in read("dire").items() if k in ("n", "steps", "nfe_total", "seconds")},
+        "data": _read_json(DATA_CARD),
         "train": {k: v for k, v in read("train").items() if k in ("test", "best_epoch", "threshold_from_val", "init")},
         "bench": read("bench"),
         "warnings": [
