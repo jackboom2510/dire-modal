@@ -111,16 +111,9 @@ def _print_scan(scan: ds.Scan) -> None:
     for dataset, splits in rows.items():
         print(f"\n  [{dataset}]")
         for split, gens in splits.items():
-            counts = {
-                g: sum(it.n_images for it in scan.items
-                       if it.dataset == dataset and it.split == split and it.generator == g)
-                for g in gens
-            }
-            print(f"    {split:5s}  " + "  ".join(f"{g}:{n}" for g, n in counts.items()))
+            print(f"    {split:5s}  " + "  ".join(gens))
     for note in scan.notes:
         print(f"\n  [bỏ qua] {note}")
-    for w in scan.warnings:
-        print(f"  [cảnh báo] {w}")
 
 
 def _cost_lines(n_real: int, n_fake: int, gen_steps: int, dire_steps: int, sec: float | None) -> list[str]:
@@ -169,9 +162,28 @@ def cmd_dataset(args: argparse.Namespace) -> int:
         generators=tuple(args.generators) if args.generators else None,
         include_real=not args.no_real,
     )
-    n_real = sum(it.n_images for it in items if it.label == 0)
-    n_fake = sum(it.n_images for it in items if it.label == 1)
-    print(f"\nDùng: {len(items)} archive · {n_real} ảnh thật · {n_fake} ảnh giả")
+    if not items:
+        print("\n[CHẶN] bộ lọc không chọn archive nào", file=sys.stderr)
+        return 3
+
+    # Đếm ảnh **chỉ trong phần sẽ dùng** — cây 12 GB, đếm hết là vài phút vô ích.
+    print(f"\nĐang đếm {len(items)} archive (bung gzip, không ghi ra đĩa)…")
+
+    def _tick(it: ds.Item, info: dict) -> None:
+        mb = info["bytes"] / 1e6
+        print(f"  {it.split}/{it.dataset}/{it.source.name}: {info['n_images']} ảnh / {mb:.1f} MB")
+
+    _, count_warn = ds.count_items(items, progress=_tick)
+    if args.limit:
+        for it in items:
+            if it.n_images is not None:
+                it.n_images = min(it.n_images, args.limit)
+    n_real = sum(it.n_images or 0 for it in items if it.label == 0)
+    n_fake = sum(it.n_images or 0 for it in items if it.label == 1)
+    print(f"\nDùng: {len(items)} archive · {n_real} ảnh thật · {n_fake} ảnh giả"
+          + (f" (cắt {args.limit}/archive)" if args.limit else ""))
+    for w in count_warn + scan.warnings:
+        print(f"  [cảnh báo] {w}")
 
     # ---- cổng 1: giấy phép ---------------------------------------------
     if not args.license:
@@ -256,11 +268,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     out = Path(args.out)
     print(f"Đang đổ {len(items)} archive → {out} (cắt tối đa {args.limit} ảnh/archive)…")
 
-    def progress(it: ds.Item) -> None:
-        print(f"  {it.split}/{it.dataset}/{it.generator}: {it.n_images} ảnh", flush=True)
-
     try:
-        made, stats = ds.ingest(items, out, size=args.size, limit_per_archive=args.limit, progress=progress)
+        made, stats = ds.ingest(items, out, size=args.size, limit_per_archive=args.limit)
     except ds.IntegrityError as exc:
         print(f"[CHẶN] {exc}", file=sys.stderr)
         return 3
@@ -288,6 +297,8 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     ds.write_data_card(cardpath, card)
 
     ok, bad = ds.verify_manifest(manifest)
+    for key, n in sorted(stats["per_archive"].items()):
+        print(f"  {key}: {n} ảnh")
     print(f"\n[xong] {stats['written']} ảnh · thật {n_real} · giả {n_fake} · bỏ {stats['skipped']} ảnh hỏng")
     print(f"  manifest: {manifest}\n  data_card: {cardpath}")
     print(f"  kiểm lại sha256: {ok} khớp, {len(bad)} lệch")
@@ -301,6 +312,39 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     print("  modal volume put dire-raw " + str(cardpath) + " zero/data/data_card.json")
     print("\nRồi:  modal run -m dire_zero.modal_app::checkdata")
     return 0 if not bad else 3
+
+
+def cmd_peek(args: argparse.Namespace) -> int:
+    """Xem **bên trong** tar: đuôi file + vài tên mẫu. Không giải nén.
+
+    Đây là lệnh đáng chạy trước khi viết bất cứ pipeline nào cho ``dire/``,
+    ``recons/`` hay ``checkpoints/``: nó trả lời "bên trong là .npy hay .png"
+    bằng dữ liệu, thay vì bằng phỏng đoán.
+    """
+    from pathlib import Path as _P
+
+    targets: list[_P] = []
+    if args.tar:
+        targets = [_P(t) for t in args.tar]
+    if args.root:
+        root = ds.resolve_root(args.root)
+        targets += sorted(root.rglob("*.tar.gz")) if args.recursive else sorted(root.glob("*.tar.gz"))
+    targets = [t for t in targets if t.is_file()]
+    if not targets:
+        print("[CHẶN] không có file .tar.gz nào để xem", file=sys.stderr)
+        return 3
+
+    for t in targets:
+        try:
+            info = ds.tar_inventory(t, n_sample=args.sample)
+        except Exception as exc:   # tar hỏng, nén lạ, member rác — đều là chuyện thật
+            print(f"{t.name}: [lỗi] {exc}")
+            continue
+        print(f"{t.name}  ·  {info['n_members']} member  ·  {info['bytes'] / 1e6:.1f} MB")
+        print("  đuôi: " + "  ".join(f"{k}:{v}" for k, v in info["by_ext"].items()))
+        for nm in info["sample"]:
+            print(f"  vd: {nm}")
+    return 0
 
 
 # --------------------------------------------------------------------------- #
@@ -321,6 +365,13 @@ def main(argv: list[str] | None = None) -> int:
 
     c = sub.add_parser("selftest", help="chạy trọn 4 bước trên mô hình tí hon")
     c.set_defaults(func=cmd_selftest)
+
+    f = sub.add_parser("peek", help="xem bên trong tar (đuôi file, tên mẫu) — không giải nén")
+    f.add_argument("--root", default=None, help="thư mục chứa .tar.gz")
+    f.add_argument("--tar", nargs="+", default=None, help="một hoặc nhiều file .tar.gz")
+    f.add_argument("--recursive", action="store_true")
+    f.add_argument("--sample", type=int, default=3)
+    f.set_defaults(func=cmd_peek)
 
     for name, func, helptext in (
         ("dataset", cmd_dataset, "kiểm cây dữ liệu (tar.gz) trước khi chạy GPU"),
@@ -344,6 +395,8 @@ def main(argv: list[str] | None = None) -> int:
         d.add_argument("--card", default=None)
         d.set_defaults(func=func)
         if name == "dataset":
+            d.add_argument("--limit", type=int, default=None,
+                           help="tính kế hoạch với tối đa bao nhiêu ảnh MỖI archive")
             d.add_argument("--ack-ood", action="store_true")
             d.add_argument("--gen-steps", type=int, default=50)
             d.add_argument("--dire-steps", type=int, default=20)

@@ -6,6 +6,7 @@ Cây thật trên máy::
 
     DiffusionForensics/
     ├── images/{train,val,test}/{lsun_bedroom,imagenet,celebahq}/{real,adm,pndm,…}.tar.gz
+    ├── checkpoints/{lsun_adm,…}.pth          (detector của tác giả — chỉ dùng cho R0)
     ├── recons/test/lsun_bedroom/lsun_bedroom/{real,ldm,pndm}.tar.gz
     └── dire/{train,val,test}/…
 
@@ -14,7 +15,8 @@ Bốn quyết định trong đó **không phải chi tiết kỹ thuật**, mà 
 
 * **`real.tar.gz` = ảnh thật. Mọi file khác = ảnh do máy sinh**, và tên file
   chính là tên generator. Đây là nguồn nhãn duy nhất; đoán theo tên thư mục sẽ
-  sai ở `images/test/lsun_bedroom/` (không có `adm`) và ở `sdv1_test.tar.gz`.
+  sai ở `sdv1_test.tar.gz` và ở cặp `stylegan` (train/val) — `stylegan_official`
+  (test): cùng một generator, hai tên, nên có `GENERATOR_ALIASES`.
 * **`dire/` là DIRE map của tác giả**, không phải ảnh. Dùng nó cho đường
   from-scratch là vi phạm cổng G0 — ở đây nó bị **từ chối**, trừ khi bật
   `--allow-published` để chấm lại R0, và khi đó nhãn là `R0`.
@@ -77,6 +79,16 @@ SPLITS = ("train", "val", "test")
 
 #: Tên file trong cây được hiểu là ảnh thật.
 REAL_STEM = "real"
+
+#: Tên **khác nhau cho cùng một generator**. Cây thật có ``stylegan`` ở train/val
+#: nhưng ``stylegan_official`` ở test; không gộp thì bảng kết quả có hai dòng cho
+#: cùng một thứ, và "train trên stylegan, test trên stylegan_official" trông như
+#: hai generator khác nhau. Đây là **quyết định**, không phải suy đoán:
+#: ``diff-stylegan`` và ``diff-projectedgan`` là generator KHÁC (Diffusion-styleGAN)
+#: nên cố ý không nằm trong bảng này.
+GENERATOR_ALIASES = {
+    "stylegan_official": "stylegan",
+}
 
 MANIFEST_COLUMNS = (
     "png", "label", "generator", "split", "dataset", "source_tar", "member", "sha256", "width", "height",
@@ -141,11 +153,12 @@ def _is_image_member(name: str) -> bool:
     return name.lower().endswith(IMAGE_SUFFIXES)
 
 
-def peek_archive(path: str | Path) -> dict:
-    """Đếm ảnh + tổng byte **không giải nén ra đĩa**.
+def peek_archive(path: str | Path, limit: int | None = None) -> dict:
+    """Đếm ảnh + tổng byte **không ghi ra đĩa**.
 
-    `tarfile` vẫn phải bung gzip để đọc header, nhưng không ghi gì; 100 MB mất
-    ~1 giây. Đây là mức đủ để lập kế hoạch trước khi tiêu GPU.
+    `tarfile` vẫn phải bung gzip để đi hết archive ⇒ ~1 giây/100 MB. Cây đầy đủ
+    nặng 12 GB, nên `scan_tree` **không** đếm; chỉ đếm phần thật sự được chọn
+    (:func:`count_items`). `limit` dừng sớm khi chỉ cần "ít nhất bao nhiêu".
     """
     n, total = 0, 0
     with tarfile.open(path, "r:*") as tf:
@@ -153,6 +166,8 @@ def peek_archive(path: str | Path) -> dict:
             if m.isfile() and _is_image_member(m.name):
                 n += 1
                 total += m.size
+                if limit is not None and n >= limit:
+                    break
     return {"path": str(path), "n_images": n, "bytes": total}
 
 
@@ -168,8 +183,8 @@ def generator_of(tar_path: str | Path) -> str:
         if stem.endswith(suffix):
             stem = stem[: -len(suffix)]
             break
-    stem = re.sub(r"_(test|val|train)$", "", stem)
-    return stem.lower()
+    stem = re.sub(r"_(test|val|train)$", "", stem).lower()
+    return GENERATOR_ALIASES.get(stem, stem)
 
 
 def label_for_generator(gen: str) -> int:
@@ -190,7 +205,8 @@ class Item:
     generator: str = REAL_STEM
     split: str = ""
     dataset: str = ""
-    n_images: int = 0               # với archive
+    n_images: int | None = None     # None = chưa đếm (đếm sau, chỉ khi được chọn)
+    raw_name: str = ""              # tên file gốc, trước khi áp GENERATOR_ALIASES
     sha256: str = ""                # sau ingest: sha của PNG chuẩn hoá
     width: int = 0
     height: int = 0
@@ -265,12 +281,6 @@ def scan_tree(
             for ds_dir in sorted(p for p in split_dir.iterdir() if p.is_dir()):
                 for tar in sorted(ds_dir.glob("*.tar.gz")):
                     gen = generator_of(tar)
-                    info = peek_archive(tar)
-                    if info["n_images"] == 0:
-                        scan.warnings.append(
-                            f"{tar.relative_to(root)}: 0 ảnh (tar 130 B là bản rỗng đã biết của dataset)"
-                        )
-                        continue
                     scan.items.append(
                         Item(
                             source=tar,
@@ -278,9 +288,10 @@ def scan_tree(
                             generator=gen,
                             split=split,
                             dataset=ds_dir.name.lower(),
-                            n_images=info["n_images"],
+                            raw_name=tar.name,
                         )
                     )
+                _warn_extracted_dirs(scan, ds_dir, root)
         if (root / "dire").is_dir():
             if allow_published:
                 scan.notes.append(
@@ -326,6 +337,53 @@ def scan_tree(
         "  • cây DiffusionForensics: <root>/images/{train,val,test}/<dataset>/<gen>.tar.gz\n"
         "  • thư mục ảnh rời:       <root>/real/*.png + <root>/fake/*.png"
     )
+
+
+def _warn_extracted_dirs(scan: Scan, ds_dir: Path, root: Path) -> None:
+    """Cảnh báo khi có **thư mục ảnh nằm cạnh tar** — chúng bị bỏ qua, và phải nói ra.
+
+    Cây thật có cả ``images/test/lsun_bedroom/real.tar.gz`` **và**
+    ``images/test/lsun_bedroom/real/`` (bản giải nén dở), cùng
+    ``dire/test/imagenet/imagenet/real/`` (lồng hai tầng). Im lặng bỏ qua thì số
+    ảnh thật trong báo cáo khác số người dùng nhìn thấy trên đĩa, và họ không có
+    cách nào biết tại sao.
+    """
+    for sub in sorted(p for p in ds_dir.iterdir() if p.is_dir()):
+        n = sum(1 for f in sub.rglob("*") if f.is_file() and f.suffix.lower() in IMAGE_SUFFIXES)
+        rel = sub.relative_to(root)
+        if n:
+            scan.warnings.append(
+                f"{rel}/ là THƯ MỤC ảnh ({n} file) nằm cạnh tar — bị BỎ QUA, chỉ tar được đọc. "
+                "Nếu là bản giải nén dở, xoá hoặc chuyển đi để không nhầm số ảnh."
+            )
+        else:
+            scan.warnings.append(f"{rel}/ là thư mục rỗng (giải nén dở?) — bị bỏ qua")
+
+
+def count_items(items: list[Item], progress=None) -> tuple[int, list[str]]:
+    """Đếm ảnh trong **đúng** các archive được chọn. Trả ``(tổng, cảnh báo)``.
+
+    Đếm ở đây thay vì lúc quét vì: (a) cây đầy đủ nặng 12 GB, đếm hết mất vài
+    phút mỗi lần chạy; (b) con số chỉ có nghĩa với phần sẽ dùng — đếm
+    ``imagenet/train`` khi chạy ``lsun_bedroom/test`` là lãng phí và gây nhiễu.
+    """
+    total = 0
+    warnings: list[str] = []
+    for it in items:
+        if it.member is not None or not _is_archive(it.source):
+            it.n_images = 1
+            total += 1
+            continue
+        info = peek_archive(it.source)
+        it.n_images = info["n_images"]
+        total += info["n_images"]
+        if info["n_images"] == 0:
+            warnings.append(
+                f"{it.split}/{it.dataset}/{it.source.name}: 0 ảnh (tar rỗng 130 B là lỗi đã biết của dataset)"
+            )
+        if progress:
+            progress(it, info)
+    return total, warnings
 
 
 def _cross_check(scan: Scan) -> None:
@@ -377,7 +435,8 @@ def select(
         out.append(it)
     if max_images:
         for it in out:
-            it.n_images = min(it.n_images, max_images)
+            if it.n_images is not None:
+                it.n_images = min(it.n_images, max_images)
     return out
 
 
@@ -427,10 +486,11 @@ def ingest(
     pix_seen: dict[str, tuple[int, str]] = {}
     leaks: list[str] = []
     skipped = 0
+    per_archive: dict[str, int] = {}
 
     for it in items:
         if _is_archive(it.source):
-            sources = _iter_tar_images(it.source, limit_per_archive or it.n_images)
+            sources = _iter_tar_images(it.source, limit_per_archive)
         else:                                      # ảnh rời (bố cục real/ + fake/)
             sources = [(it.source.name, it.source.read_bytes())]
 
@@ -450,6 +510,8 @@ def ingest(
                 continue
             pix_seen[sha] = (it.label, f"{it.generator}:{name}")
 
+            key = f"{it.split}/{it.generator}"
+            per_archive[key] = per_archive.get(key, 0) + 1
             dst = out_root / it.split / it.generator / f"{sha[:16]}.png"
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_bytes(png_bytes)
@@ -471,7 +533,13 @@ def ingest(
         if progress:
             progress(it)
 
-    stats = {"written": len(made), "skipped": skipped, "leaks": leaks[:10], "n_leaks": len(leaks)}
+    stats = {
+        "written": len(made),
+        "skipped": skipped,
+        "leaks": leaks[:10],
+        "n_leaks": len(leaks),
+        "per_archive": per_archive,
+    }
     if leaks:
         raise IntegrityError(
             f"{len(leaks)} ảnh trùng pixel giữa hai lớp (đã dừng, chưa ghi file trùng).\n"
@@ -481,12 +549,44 @@ def ingest(
     return made, stats
 
 
+def tar_inventory(path: str | Path, n_sample: int = 3) -> dict:
+    """``tar`` chứa gì: đếm theo đuôi file + vài tên mẫu. **Không** giải nén ra đĩa.
+
+    Vì sao cần: ``dire/*.tar.gz`` và ``recons/*.tar.gz`` là map/reconstruction của
+    tác giả, nhưng **định dạng bên trong không được ghi ở đâu cả** — có thể là
+    ``.npy`` float, có thể là PNG đã chuẩn hoá, có thể là ``.png`` 3 kênh. Đoán
+    sai định dạng là cách nhanh nhất để viết ra một pipeline chạy được mà vô
+    nghĩa. Một lệnh đọc header trả lời dứt điểm, giá 0 đồng.
+    """
+    from collections import Counter  # noqa: PLC0415
+
+    ext = Counter()
+    sample: list[str] = []
+    total = 0
+    with tarfile.open(path, "r:*") as tf:
+        for m in tf:
+            if not m.isfile():
+                continue
+            suffix = Path(m.name).suffix.lower() or "(không đuôi)"
+            ext[suffix] += 1
+            total += m.size
+            if len(sample) < n_sample:
+                sample.append(f"{m.name} ({m.size} B)")
+    return {
+        "path": str(path),
+        "n_members": sum(ext.values()),
+        "bytes": total,
+        "by_ext": dict(ext.most_common()),
+        "sample": sample,
+    }
+
+
 def _is_archive(path: str | Path) -> bool:
     """`.tar.gz` / `.tgz` / `.tar` — mọi thứ khác coi là một file ảnh."""
     return str(path).lower().endswith((".tar.gz", ".tgz", ".tar"))
 
 
-def _iter_tar_images(path: Path, limit: int):
+def _iter_tar_images(path: Path, limit: int | None):
     """Sinh ``(tên member, bytes)`` cho tối đa ``limit`` ảnh, theo thứ tự trong tar.
 
     Thứ tự trong tar là **ổn định** (do người đóng gói), nên ``limit`` cắt tiền
@@ -502,7 +602,7 @@ def _iter_tar_images(path: Path, limit: int):
                 continue
             yield m.name, fh.read()
             n += 1
-            if n >= limit:
+            if limit is not None and n >= limit:
                 return
 
 

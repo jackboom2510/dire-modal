@@ -180,6 +180,7 @@ python -m dire_zero selftest    # gen → dire → train trên U-Net 32×32, ~20
 Dùng **dataset riêng trên ổ** (cây `DiffusionForensics`, tar.gz) thay vì tải LSUN:
 
 ```bash
+python -m dire_zero peek    --tar F:/du-lieu/.../dire/test/lsun_bedroom/adm.tar.gz  # bên trong tar
 python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
 python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm   # PNG 256² + manifest
 ```

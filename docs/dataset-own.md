@@ -3,177 +3,257 @@
 > Dành cho: bạn đã có `F:\…\DiffusionForensics` và **không** muốn tải lại LSUN
 > từ Baidu. Mọi lệnh dưới đây chạy trên máy bạn, không tốn GPU.
 >
-> Code: `src/dire_zero/dataset.py`. Test: `tests/test_zero_dataset.py` (22 test).
+> Code: `src/dire_zero/dataset.py`. Test: `tests/test_zero_dataset.py` (25 test).
 
 ---
 
-## 1. Đọc cây dữ liệu — cái gì là gì
+## 0. Đọc mục này trước: số liệu trong tài liệu không phải số đo
+
+Mọi con số trong tài liệu này (kích thước archive, danh sách generator) là **bản
+kê bạn dán vào**, không phải kết quả đo. Chúng **lệch** với inventory đã audit
+trong `src/dire_modal/manifest.py` ở ít nhất ba chỗ:
+
+| Mục | Bản kê bạn dán | `manifest.py` (audit trước đó) |
+|---|---|---|
+| số archive ở `images/test/` | 15 | 25 |
+| `images/test/imagenet/sdv1.tar.gz` | có, 4,22 GB | ghi "**không** có `sdv1`, chỉ `sdv1_new`/`sdv1_new2`" |
+| `dire/train/lsun_bedroom/` | 2 file (`real`, `adm`) | 5 file, 20,3 GB |
+
+Không bên nào được coi là chân lý. Cả hai đều là **bản kê**, và bản kê thì sai
+được. Vì vậy:
+
+- **không suy số ảnh từ số MB** — tỉ lệ nén của PNG trong tar.gz thay đổi 2–3×
+  giữa các generator;
+- **không kết luận "không tồn tại"** từ một danh sách, kể cả danh sách này;
+- lệnh `dataset` (mục 2) đếm **thật** trong archive được chọn, và đó là con số
+  duy nhất được dùng để lập kế hoạch.
+
+Một hệ quả kỹ thuật: `sdv1.tar.gz` 4,22 GB **không nằm được trên FAT32** (chặn
+file > 4 GB). Nếu `ls` thấy file đó thì ổ là NTFS — nhưng nếu một archive > 4 GB
+báo "No such file" sau khi chép, nghi vấn đầu tiên là định dạng ổ, không phải
+đường dẫn.
+
+## 1. Cây dữ liệu — cái gì là gì
 
 ```text
 DiffusionForensics/
-├── images/{train,test}/{lsun_bedroom,imagenet,celebahq}/<generator>.tar.gz
-├── dire/{train,val,test}/<dataset>/<generator>.tar.gz      ← DIRE map của TÁC GIẢ
-├── recons/test/<dataset>/<dataset>/<generator>.tar.gz      ← reconstruction của TÁC GIẢ
-└── checkpoints/*.pth                                        ← detector của TÁC GIẢ
+├── images/
+│   ├── train/lsun_bedroom/{real,adm,iddpm,pndm,stylegan}.tar.gz
+│   ├── val/lsun_bedroom/{real,adm,iddpm,pndm,stylegan}.tar.gz
+│   ├── test/lsun_bedroom/{real,adm,dalle2,ddpm,diff-projectedgan,diff-stylegan,
+│   │                        iddpm,if,ldm,midjourney,pndm,projectedgan,sdv2,
+│   │                        stylegan_official,vqdiffusion}.tar.gz
+│   ├── train/imagenet/{real,adm}.tar.gz      test/imagenet/{real,adm,sdv1}.tar.gz
+│   └── train/celebahq/real.tar.gz
+├── dire/                                        ← DIRE map của TÁC GIẢ (G0)
+│   ├── train/lsun_bedroom/{real,adm}.tar.gz
+│   ├── val/lsun_bedroom/{real,adm,iddpm,pndm,stylegan}.tar.gz
+│   └── test/{lsun_bedroom,imagenet}/…
+├── recons/                                      ← reconstruction của TÁC GIẢ
+│   ├── train/lsun_bedroom/real.tar.gz
+│   └── test/lsun_bedroom/lsun_bedroom/{real,ldm,pndm}.tar.gz
+└── checkpoints/{lsun_adm,lsun_iddpm,lsun_pndm,lsun_stylegan,
+                 imagenet_adm,celebahq_sdv2}.pth     ← detector của TÁC GIẢ
 ```
 
-Ba quy ước, tất cả đều **do cấu trúc quyết định**, không do mình thích:
+Thư mục | Là gì | Dùng được cho
+---|---|---
+`images/…/real.tar.gz` | ảnh **thật** (LSUN-Bedroom / ImageNet) | train + val + test, nhãn 0
+`images/…/<gen>.tar.gz` | ảnh do **<gen>** sinh | train/val/test, nhãn 1
+`dire/…` | **DIRE map** của tác giả | chấm lại R0 — cổng G0 chặn nếu không bật `--allow-published`
+`recons/…` | reconstruction của tác giả | chỉ đối chiếu số học DDIM (việc B), **có ghi chú** khi bị bỏ qua
+`checkpoints/…` | detector của tác giả | chấm lại R0
 
-| Thư mục | Là gì | Dùng được cho |
-|---|---|---|
-| `images/…/real.tar.gz` | ảnh **thật** (LSUN-Bedroom / ImageNet) | train + test, nhãn 0 |
-| `images/…/<gen>.tar.gz` | ảnh do **<gen> sinh** | test/train, nhãn 1 |
-| `dire/…` | **DIRE map** của tác giả | **chỉ** chấm lại R0 — bị từ chối cho from-scratch |
-| `recons/…` | reconstruction của tác giả | chỉ để đối chiếu số học DDIM (việc B) |
-| `checkpoints/…` | detector của tác giả | chỉ chấm lại R0 |
+Nhãn lấy từ **tên file**, không từ tên thư mục: `real` ⇒ thật, mọi tên khác ⇒
+giả, và tên đó là tên generator. Tên được chuẩn hoá hai lần:
 
-Nhãn lấy từ **tên file**: `real` ⇒ thật, mọi tên khác ⇒ giả, và tên đó chính là
-tên generator. `sdv1_test.tar.gz` được hiểu là generator `sdv1` (hậu tố `_test`
-chỉ là chỗ đóng gói khác đi).
+- bỏ hậu tố đóng gói `_test` / `_val` / `_train` ⇒ `sdv1_test.tar.gz` = `sdv1`;
+- áp bảng `GENERATOR_ALIASES` ⇒ `stylegan_official` = `stylegan`.
 
-## 2. Điều quan trọng nhất rút ra từ chính cây của bạn
+Vì sao cần bảng alias: `stylegan` ở train/val nhưng `stylegan_official` ở test.
+Không gộp thì bảng kết quả có hai dòng cho cùng một generator, và "train trên
+`stylegan`, test trên `stylegan_official`" trông như hai thứ khác nhau. Ngược
+lại, `diff-stylegan` và `diff-projectedgan` **cố ý không** nằm trong bảng — đó
+là Diffusion-styleGAN, một generator khác hẳn.
 
-```text
-dire/test/lsun_bedroom/adm.tar.gz        ← CÓ map của ảnh ADM
-images/test/lsun_bedroom/                ← KHÔNG có adm.tar.gz (chỉ ldm, pndm, real)
+## 2. Hai điều đính chính bản trước của tài liệu này
+
+Bản trước viết hai câu **sai**, và cả hai đều sai theo cùng một kiểu: kết luận
+"không tồn tại" từ một danh sách bị cắt.
+
+| Câu sai (bản trước) | Sự thật |
+|---|---|
+| "Ảnh ADM dùng cho test **chưa từng được phát hành**" | `images/test/lsun_bedroom/adm.tar.gz` **có** |
+| "Cây này **không có** `images/val/`" | `images/val/lsun_bedroom/` có 5 archive |
+
+Hai hệ quả khoa học, và chúng đổi hẳn kế hoạch:
+
+1. **Dòng headline ADM làm được bằng dữ liệu phát hành.** Không cần `::gen` để
+   có dòng ADM in-distribution; `images/test/lsun_bedroom/{adm,real}.tar.gz` là
+   đủ. Nhãn trung thực là **`R1+R2`** (map và detector của mình, ảnh của tác
+   giả) — không phải `R0`, cũng không phải `R3`.
+2. **Giao thức train/val/test đúng như paper.** Có val riêng 5 archive ⇒
+   **không** cắt 15 % từ train. Việc cắt chỉ còn là đường lui khi thiếu val, và
+   `train()` ghi rõ điều đó vào `train.json`.
+
+## 3. Ba lệnh, theo thứ tự
+
+### 3.1 `peek` — xem bên trong tar, không giải nén (0 đồng, vài giây)
+
+```bash
+python -m dire_zero peek --tar "F:/du-lieu/.../dire/test/lsun_bedroom/lsun_bedroom/adm.tar.gz"
 ```
 
-**Ảnh ADM dùng cho test chưa từng được phát hành.** Tác giả phát hành *map* DIRE
-của chúng, không phát hành *ảnh*. Hệ quả trực tiếp:
+In ra số member, dung lượng, **đuôi file** và vài tên mẫu. Đây là lệnh phải chạy
+**trước** khi viết bất cứ pipeline nào cho `dire/` hay `recons/`: tài liệu không
+ghi bên trong là `.npy` float hay `.png` 3 kênh, và đoán sai định dạng là cách
+nhanh nhất để có một pipeline chạy được mà vô nghĩa.
 
-| Câu hỏi | Dữ liệu có sẵn trên ổ F | Nhãn được nói |
-|---|---|---|
-| ADM in-distribution (dòng headline của paper) | **phải tự sinh ảnh** (`::gen`) | `R1+R2+R3` |
-| Cross-model pndm / ldm / sdv1 | `images/test/lsun_bedroom/*` | `R1+R2` |
-| Chấm lại bảng 2 (R0) | `dire/` + `checkpoints/` | `R0` |
-
-Đây không phải chi tiết vụn: nó có nghĩa **không thể** làm dòng "ADM" bằng dữ
-liệu phát hành. Muốn có dòng đó thì phải tự sinh — đúng việc mà bản clean-room
-làm, và cũng là lý do `dire_zero` có `::gen`.
-
-Ngoài ra, cây này **không có `images/val/`**. Bước train sẽ tự cắt 15 % từ train
-làm val (ghi rõ trong `train.json`), và test không bao giờ được nhìn.
-
-## 3. Ba lệnh
-
-### 3.1 Kiểm trước — 0 đồng, ~2 giây
+### 3.2 `dataset` — kiểm cây (0 đồng)
 
 ```bash
 python -m dire_zero dataset --root F:/du-lieu --dataset lsun_bedroom \
-                            --license research-only --splits train test
+                            --license research-only --splits train val test
 ```
 
-In ra bảng `split × generator` kèm **số ảnh thật** trong từng archive, cảnh báo
-bất đối xứng, và kế hoạch NFE. Cổng **đỏ ⇒ exit 3**, không đi tiếp:
+In bảng `split × generator` (đã gộp alias), cảnh báo bất đối xứng, rồi **đếm
+thật** số ảnh của đúng phần được chọn — `split/dataset/file: N ảnh / M MB`.
+`scan_tree` cố ý **không** đếm khi quét: cây đầy đủ ~12 GB, bung hết mỗi lần
+chạy là vài phút vô ích.
 
-| Cổng | Vì sao |
-|---|---|
-| thiếu `--license` | repo có đường mirror công khai; `data_card.json` ghi thẳng giá trị này |
-| `--dataset imagenet` mà không `--ack-ood` | ADM 256 học LSUN-Bedroom; ảnh thật ngoài phân bố ⇒ khoảng cách DIRE co lại ⇒ ACC về mức đoán mò |
-| chưa có `sec_per_step` | **không báo tiền**. Khoảng thực tế 0,05–2,5 s/step ⇒ chênh 50× |
+Cổng **đỏ ⇒ exit 3**:
 
-`--root` nhận cả ba cách gõ: `F:/du-lieu`, `F:\du-lieu`, `/f/du-lieu`; trỏ vào
-thư mục cha cũng được (tự lùi vào `DiffusionForensics/` nếu thấy `images/`).
+Cổng | Vì sao
+---|---
+thiếu `--license` | repo có đường mirror công khai; `data_card.json` ghi thẳng giá trị này
+`--dataset imagenet` mà không `--ack-ood` | ADM 256 học LSUN-Bedroom; ảnh thật ngoài phân bố ⇒ khoảng cách DIRE co lại ⇒ ACC về mức đoán mò
+bộ lọc rỗng | gõ sai `--splits`/`--dataset` mà vẫn chạy tiếp là tiêu GPU cho 0 ảnh
+chưa có `sec_per_step` | **không in tiền**. Khoảng thực tế 0,05–2,5 s/step ⇒ chênh 50×
 
-### 3.2 Chuẩn hoá — 0 đồng, vài phút
+`--root` nhận `F:/du-lieu`, `F:\du-lieu`, `/f/du-lieu`; trỏ thư mục cha cũng
+được (tự lùi vào `DiffusionForensics/` nếu thấy `images/`).
+
+### 3.3 `ingest` — chuẩn hoá (0 đồng, vài phút)
 
 ```bash
 python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
                            --dataset lsun_bedroom --license research-only \
-                           --splits train test --limit 500
+                           --splits train val test --limit 500
 ```
 
-Việc nó làm:
-
-- giải nén **trực tiếp** từ `.tar.gz` (không cần giải ra đĩa trước);
-- RGB, cạnh ngắn = 256, cắt giữa 256×256 — đúng phép biến đổi của DIRE;
-- tên file = **16 ký tự đầu sha256 của pixel**, không phải tên gốc: hai ảnh trùng
-  nội dung không thể thành hai mẫu, và chia train/test theo hash vẫn ổn định qua
-  các máy;
+- giải nén **trực tiếp** từ `.tar.gz`, không cần giải ra đĩa trước;
+- RGB, cạnh ngắn 256, cắt giữa 256×256 — đúng phép biến đổi của DIRE;
+- tên file = 16 ký tự đầu sha256 của pixel: hai ảnh trùng nội dung không thể
+  thành hai mẫu;
 - ghi `manifest.tsv` (10 cột, có `source_tar` + `member` để truy ngược) và
   `data_card.json`;
-- **chặn rò rỉ**: cùng một ảnh ở cả hai lớp ⇒ `IntegrityError`, dừng, không ghi
-  gì. (Đây là lỗi làm ACC 100 % và vô nghĩa, và nó không bao giờ tự báo.)
+- **chặn rò rỉ**: cùng pixel ở cả hai lớp ⇒ `IntegrityError`, dừng, không ghi gì;
 - in sẵn lệnh `modal volume put`.
 
-`--limit 500` cắt **500 ảnh đầu** mỗi archive (thứ tự trong tar là ổn định, nên
-cắt tiền tố là tái lập được — khác với cắt ngẫu nhiên).
+`--limit N` cắt **N ảnh đầu** mỗi archive (thứ tự trong tar ổn định ⇒ tái lập
+được), không cắt ngẫu nhiên.
 
-### 3.3 Đẩy lên và kiểm trên Volume
+## 4. Thư mục ảnh nằm cạnh tar — phải cảnh báo, không được im lặng
 
-```bash
-modal volume put dire-raw F:/dire-zero-norm zero/data -r
-modal run -m dire_zero.modal_app::checkdata
+Cây thật có chỗ **vừa** có `real.tar.gz` **vừa** có thư mục `real/` đã giải nén
+dở:
+
+```text
+images/test/lsun_bedroom/real.tar.gz
+images/test/lsun_bedroom/real/            ← cùng nội dung, đã giải nén
+dire/test/imagenet/imagenet/real/
+recons/test/lsun_bedroom/{imagenet,lsun_bedroom}/
 ```
 
-`checkdata` kiểm lại **trên Volume** (nơi có thể bị ghi đè từ ngoài): sha256 từng
-PNG, đủ hai lớp, tỉ lệ hai lớp ≤ 5:1, và `data_card.label` có khớp nguồn ảnh giả
-không. Sai ⇒ dừng trước khi tiêu GPU.
+Đây là bẫy hai chiều. Nếu tool **im lặng đọc cả hai**, mỗi ảnh thật vào hai lần
+⇒ lớp 0 phình lên, tỉ lệ lớp lệch, và nếu bản giải nén nằm ở split khác thì đó
+là **rò rỉ train/test** — loại lỗi cho ACC 100 % và không bao giờ tự báo. Nếu
+tool **im lặng bỏ qua**, bạn tưởng dữ liệu đã có mặt trong khi nó không được
+dùng. Nên: tool chỉ đọc `*.tar.gz`, và **in cảnh báo** cho mọi thư mục ảnh/rỗng
+nằm cạnh tar (`_warn_extracted_dirs`). Cảnh báo đó không phải lỗi — nó là nhắc
+bạn xoá bản giải nén hoặc chuyển nó ra khỏi cây.
 
-## 4. Nhãn phụ thuộc **ảnh giả lấy từ đâu**
+## 5. Ba đường chạy, chọn theo nhãn bạn được phép nói
+
+### 5.1 R0 — chấm lại bằng dữ liệu + checkpoint của tác giả (CPU, ~$0)
+
+Không đụng GPU. Không phải "tái lập" — đây là **chấm lại**, và artefact phải tự
+khai `R0`.
 
 ```bash
---fake-source author   # dùng images/test/<gen>.tar.gz   ⇒ R1+R2
---fake-source gen      # để ::gen tự sinh                  ⇒ R1+R2+R3
---fake-source auto     # mặc định: có ảnh giả thì author, không thì gen
+# map tác giả: dire/<split>/lsun_bedroom/<gen>.tar.gz  →  maps/<split>/<gen>/*.npy
+for f in .../dire/train/lsun_bedroom/*.tar.gz; do
+  gen=$(basename "$f" .tar.gz)
+  mkdir -p "F:/dire-zero-r0/maps/train/$gen"
+  tar -xzf "$f" -C "F:/dire-zero-r0/maps/train/$gen" --strip-components=0
+done
+# lặp lại cho val/ và test/ — ba split, đừng trộn
 ```
 
-Ảnh thật luôn là dữ liệu của người khác (LSUN) — không bao giờ tự tính vào
-"của mình". Vì thế **R3 chỉ đúng khi ảnh giả do mình sinh**; dùng ảnh giả của tác
-giả mà nói `R3` là tự khen một thành phần chưa làm. `data_card.json` ghi cứng
-điều này, và `checkdata` từ chối nếu thấy `fake_source="author"` mà nhãn có `R3`.
+Sau đó `pipeline.collect_maps("F:/dire-zero-r0/maps")` đọc nhãn từ **tên thư mục
+generator** (`real` ⇒ 0) và `pipeline.train(...)` chạy được trên CPU.
 
-## 5. Đường chạy đầy đủ
+Hai điều phải nói rõ, vì chúng quyết định nhãn:
+
+- **chạy bằng 6 `checkpoints/*.pth`** mới đúng là R0. Loader cho checkpoint tác
+  giả **chưa có trong repo** ⇒ việc này còn là TODO, không phải đã xong.
+- lấy map tác giả rồi **tự train detector** thì không phải R0: nhãn phải ghi
+  "map: tác giả · detector: của mình". Gọi nó R0 là tự khen một thành phần chưa
+  làm.
+- `--allow-published` chỉ mở cổng G0 cho `dire/`; nó **không** đổi nhãn. Nhãn
+  R0 phải khai bằng `--fake-source published`.
+
+### 5.2 R1+R2 — map + detector của mình, ảnh của tác giả (GPU)
+
+Đường rẻ nhất có ý nghĩa khoa học, và giờ **đã làm được dòng ADM**:
 
 ```bash
-# 0) máy: kiểm + chuẩn hoá
-python -m dire_zero dataset --root F:/du-lieu --license research-only
-python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm --license research-only
-
-# 1) đẩy checkpoint ADM (2,5 GB) và dữ liệu
-modal volume put dire-raw "F:/du-lieu/…/256x256_diffusion_uncond.pt" zero/ckpt/adm_lsun.pt
+python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
+        --dataset lsun_bedroom --license research-only \
+        --splits train val test --fake-source author --limit 500
 modal volume put dire-raw F:/dire-zero-norm zero/data -r
-
-# 2) cổng
-modal run -m dire_zero.modal_app::checkdata
-modal run -m dire_zero.modal_app::selfcheck     # nạp strict=True + kiểm NaN/NFE
-modal run -m dire_zero.modal_app::bench         # ĐO sec/step
-
-# 3) ba bước đo
-modal run -m dire_zero.modal_app::gen   --n 500 --steps 50     # R3 (chỉ khi cần ảnh ADM)
-modal run -m dire_zero.modal_app::dire  --splits train,test --steps 20
+modal run -m dire_zero.modal_app::checkdata       # sha256 + hai lớp + tỉ lệ ≤5:1
+modal run -m dire_zero.modal_app::bench           # ĐO sec/step trước khi tin bảng giá
+modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20
 modal run -m dire_zero.modal_app::train --epochs 40
 modal run -m dire_zero.modal_app::report
 ```
 
-## 6. Chi phí cho đúng cây này
+### 5.3 R1+R2+R3 — tự sinh ảnh giả
 
-Với 500 ảnh mỗi phía, `S = 20` cho DIRE, `S = 50` cho sinh, GPU A10G:
+Chỉ khi cần một generator **không có** trong cây, hoặc khi muốn nói `R3`. Đắt
+hơn ~2,7 USD cho 500 ảnh, và không còn cần cho dòng ADM nữa.
 
-| Việc | NFE | GPU-h @0,35 s | USD @$1,10 |
-|---|---|---|---|
-| sinh 500 ảnh ADM (S=50) | 25 000 | 2,43 | 2,67 |
-| DIRE 500 thật + 500 giả | 40 000 | 3,89 | 4,28 |
-| train detector (~40 epoch) | — | 0,3–1 | 0,33–1,10 |
-| **tổng** | | **~7** | **~7–8** |
+## 6. Chi phí
 
-Ba lưu ý:
+**Không có bảng tiền trong tài liệu này.** Bảng giá cũ (0,35 s/step giả định)
+đã bị bỏ: nó là một con số chưa đo, và mọi kết luận "rẻ/đắt" dựa trên nó đều là
+số bịa có đơn vị. Trình tự đúng:
 
-1. **0,35 s/step là giả định, chưa đo.** Bảng trên chỉ để biết bậc độ lớn. Số
-   thật lấy từ `::bench`; nếu là 2,5 s/step thì tổng thành ~50 USD.
-2. Bỏ bước `gen` (dùng ảnh giả của tác giả) thì rẻ hơn ~2,7 USD, nhưng nhãn tụt
-   xuống `R1+R2`.
-3. Nếu chỉ muốn kiểm đường ống trước khi tiêu tiền: `--limit 50` cho mỗi archive
-   ⇒ toàn bộ dưới 1 USD.
+1. `bench` đo `sec/step` thật trên A10G;
+2. `dataset --sec-per-step <số đo>` in kế hoạch NFE → GPU-h → USD;
+3. chỉ khi đó mới quyết định cắt bao nhiêu ảnh.
+
+Bậc độ lớn để biết trước: DIRE tốn **2·S NFE/ảnh** (S = số bước DDIM, mặc định
+20 ⇒ 40 NFE), sinh tốn `S`. Với `--limit 500` mỗi archive, toàn bộ đường 5.2
+nằm trong khoảng "một buổi tối GPU"; toàn bộ train split (hàng chục nghìn ảnh ×
+nhiều generator) thì không nên chạy — hãy cắt tiền tố và nói rõ đã cắt.
 
 ## 7. Hạn chế của đường này
 
-- **Không có `images/val/`** ⇒ val cắt từ train; early-stop vì thế kém tin cậy
-  hơn, ghi rõ trong `train.json`.
-- **`imagenet/` không cùng phân bố** với ADM-LSUN ⇒ kết quả trên ImageNet chỉ có
-  nghĩa "đo lại bằng mô hình sai phân bố", không so được với paper.
-- **Ảnh test của tác giả không do mình sinh** ⇒ mọi kết quả trên `images/test/`
-  tối đa là `R1+R2`.
-- **`--limit` cắt tiền tố** trong tar ⇒ nếu tar được đóng gói theo thứ tự lớp
-  con (vd. toàn ảnh sáng trước), mẫu của bạn bị lệch. Muốn chắc thì đừng cắt,
-  hoặc kiểm phân bố độ sáng của mẫu (chưa có trong repo).
+- **Bản kê vs inventory lệch nhau** (mục 0) ⇒ mọi kế hoạch phải dựa trên số do
+  `dataset` đếm, không dựa trên tài liệu, kể cả tài liệu này.
+- **Dòng `imagenet/` không so được với paper**: ADM 256 vô điều kiện học
+  LSUN-Bedroom; ảnh ImageNet "thật" cũng bị tái tạo kém ⇒ khoảng cách DIRE co
+  lại. Kết quả chỉ có nghĩa "đo bằng mô hình sai phân bố".
+- **`recons/test/` thiếu `adm`** (chỉ `real`, `ldm`, `pndm`) ⇒ đối chiếu số học
+  DDIM trên ADM phải dùng map ở `dire/`, không dùng `recons/`.
+- **`recons/` không dùng để train**, chỉ để kiểm phép tái tạo.
+- **Ảnh test của tác giả không do mình sinh** ⇒ trần nhãn của đường 5.2 là
+  `R1+R2`.
+- **`--limit` cắt tiền tố** trong tar ⇒ nếu tar đóng gói theo thứ tự lớp con
+  (vd. toàn ảnh sáng trước), mẫu bị lệch. Kiểm phân bố độ sáng của mẫu chưa có
+  trong repo.
+- **Chưa chạy trên dữ liệu thật của bạn.** Toàn bộ test hiện tại dựng cây giả
+  trong `tmp_path`; chưa lần nào đọc 12 GB thật, chưa lần nào chạy trên GPU,
+  chưa lần nào chạy trên Modal thật.
