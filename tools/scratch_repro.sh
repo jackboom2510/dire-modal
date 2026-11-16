@@ -21,6 +21,13 @@
 #   bash tools/scratch_repro.sh --stage train        # train detector (GPU)
 #   bash tools/scratch_repro.sh --stage all          # fetch → bench → gen → dire → train
 #
+# Tải tay (không BaiduPCS-Go) rồi chấm lại / đối chiếu recons:
+#   bash tools/scratch_repro.sh --stage list          # in danh sách + vị trí trong data/raw
+#   bash tools/scratch_repro.sh --stage verify-data   # kiểm cấu trúc tar/pth đã tải
+#   bash tools/scratch_repro.sh --stage push          # modal volume put từng file
+#   bash tools/scratch_repro.sh --stage verify-recons # B: so recon của mình vs tác giả
+#   bash tools/scratch_repro.sh --stage r0            # C: eval R0 trên dữ liệu đã đẩy
+#
 # Không chạy GPU khi cổng G8 (sec/step chưa đo) còn đỏ — đó là chỗ mọi ước
 # lượng tiền trong repo đang dựa vào một giả định 0,35 s/step chưa kiểm.
 # ============================================================================
@@ -39,8 +46,10 @@ SEED_BASE=1000     # seed gốc; train/test suy ra và ghi vào gen.json
 DDIM_STEPS=20
 EPOCHS=40
 FORCE=0
-
-usage() { sed -n '3,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
+NEED="a,gallery,e2min"   # nhóm dữ liệu cho tải tay (xem tools/manual_data.py list)
+DEST="${DIRE_LOCAL_ROOT:-data/raw}"
+PY_HELP=0
+usage() { sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -50,6 +59,8 @@ while [[ $# -gt 0 ]]; do
     --seed-base) SEED_BASE="$2"; shift 2 ;;
     --steps) DDIM_STEPS="$2"; shift 2 ;;
     --epochs) EPOCHS="$2"; shift 2 ;;
+    --need) NEED="$2"; shift 2 ;;
+    --dest) DEST="$2"; shift 2 ;;
     --force) FORCE=1; shift ;;
     -h|--help) usage ;;
     *) echo "tham số lạ: $1" >&2; exit 2 ;;
@@ -206,6 +217,34 @@ dire()  { gates; say "TÍNH DIRE MAP (R1)"; modal run -m dire_modal.scratch_gen:
 train() { gates; say "TRAIN DETECTOR (R2)"; modal run -m dire_modal.scratch_train::train \
             --epochs "$EPOCHS"; }
 
+# ---- tải tay: in danh sách / kiểm / đẩy lên Volume -------------------------
+list_data() {
+  say "DANH SÁCH TẢI TAY → $DEST"
+  python3 "$ROOT/tools/manual_data.py" list --need "$NEED" --dest "$DEST"
+}
+
+verify_data() {
+  say "KIỂM CHỨNG OFFLINE (không gọi mạng)"
+  python3 "$ROOT/tools/manual_data.py" verify --need "$NEED" --dest "$DEST" --strict
+}
+
+push_data() {
+  say "ĐẨY LÊN VOLUME dire-raw"
+  python3 "$ROOT/tools/manual_data.py" push --need "$NEED" --dest "$DEST" --execute
+}
+
+# ---- B: đối chiếu reconstruction của mình với recons/ của tác giả ----------
+verify_recons() {
+  say "ĐỐI CHIẾU RECONSTRUCTION (cần images/ + recons/ + ADM trên /raw)"
+  modal run -m dire_modal.scratch_verify::main --n "${RECON_N:-10}" --steps "$DDIM_STEPS"
+}
+
+# ---- C: chấm lại R0 trên dữ liệu vừa đẩy lên -------------------------------
+r0() {
+  say "CHẤM LẠI R0 (map + checkpoint của tác giả) — nhãn R0, KHÔNG phải tái lập"
+  modal run -m dire_modal.eval::main --tiers "${R0_TIERS:-e2min}"
+}
+
 case "$STAGE" in
   plan)  plan ;;
   gates) gates ;;
@@ -214,6 +253,11 @@ case "$STAGE" in
   gen)   gen ;;
   dire)  dire ;;
   train) train ;;
+  list)          list_data ;;
+  verify-data)   verify_data ;;
+  push)          push_data ;;
+  verify-recons) verify_recons ;;
+  r0)            verify_data; r0 ;;
   all)   fetch; bench; gen; dire; train
          say "XONG — đọc /ckpt/scratch/scratch_adm/train.json; nhãn được phép nói: R1+R2+R3" ;;
   *)     echo "stage lạ: $STAGE" >&2; usage ;;
