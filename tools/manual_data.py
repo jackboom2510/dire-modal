@@ -198,6 +198,20 @@ def _check_tar_gz(p: Path) -> tuple[bool, str, int]:
     return True, "ok", n
 
 
+def _check_zip(p: Path) -> tuple[bool, str, dict]:
+    """Zip (`.zip`, và `.pt`/`.pth` của PyTorch ≥1.6 đều là zip)."""
+    import zipfile  # noqa: PLC0415
+
+    try:
+        with zipfile.ZipFile(p) as zf:
+            names = zf.namelist()
+    except (zipfile.BadZipFile, OSError, EOFError) as exc:
+        return False, f"không phải zip hợp lệ: {exc}", {}
+    if not names:
+        return False, "zip rỗng (0 entry)", {}
+    return True, "ok", {"members": len(names)}
+
+
 def _check_pth(p: Path) -> tuple[bool, str]:
     try:
         head = p.open("rb").read(4)
@@ -220,9 +234,11 @@ def _check_file(p: Path) -> tuple[bool, str, dict]:
     if p.name.endswith((".tar.gz", ".tgz")):
         ok, why, n = _check_tar_gz(p)
         return ok, why, {"members": n}
-    if p.suffix == ".pth":
+    if p.suffix in {".pt", ".pth"}:
         ok, why = _check_pth(p)
         return ok, why, {}
+    if p.suffix == ".zip":
+        return _check_zip(p)
     return True, "ok (không có phép kiểm riêng)", {}
 
 
@@ -246,6 +262,11 @@ def cmd_verify(args) -> int:
     files = []
     for need in needs:
         if need == "a":
+            # A nằm ngoài dataset: kiểm theo đúng đích local đã khai.
+            mf = _manifest()
+            for item in OUTSIDE:
+                files.append(mf.File(remote=item["remote"], local=item["local"],
+                                     note=item["url"]))
             continue
         files.extend(_need_files(need))
     # khử trùng theo local
@@ -302,29 +323,50 @@ def cmd_verify(args) -> int:
 # --------------------------------------------------------------------------- #
 
 def cmd_push(args) -> int:
-    dest = Path(args.dest)
-    files = []
-    for need in [n.strip() for n in args.need.split(",") if n.strip()]:
-        if need == "a":
-            continue
-        files.extend(_need_files(need))
-    seen, uniq = set(), []
-    for f in files:
-        if f.local not in seen:
-            seen.add(f.local)
-            uniq.append(f)
+    """Đẩy file lên Volume `/raw` với đúng đường dẫn mà code trong container đọc.
 
-    cmds = []
-    for f in uniq:
+    Nhóm A có đích KHÁC với đích local: ADM phải nằm ở `ckpt/adm_lsun.pt` vì
+    `scratch_gen.CKPT` đọc đúng đường đó. Đặt ở `sources/ckpt/...` rồi mong nó
+    tự tìm thấy là cách tạo ra lỗi "thiếu checkpoint" khó hiểu.
+    """
+    dest = Path(args.dest)
+    pairs: list[tuple[Path, str]] = []      # (file local, đường dẫn trên Volume)
+    missing: list[str] = []
+
+    def _add(f, remote_rel: str | None = None) -> None:
         p, _how = _find(dest, f.local)
         if p is None:
-            print(f"  [bỏ] thiếu {f.local}")
+            missing.append(f.local)
+            return
+        pairs.append((p, remote_rel or f.local))
+
+    for need in [n.strip() for n in args.need.split(",") if n.strip()]:
+        if need == "a":
+            mf = _manifest()
+            for item in OUTSIDE:
+                rel = ("ckpt/adm_lsun.pt"
+                       if item["local"].endswith("adm_lsun.pt") else item["local"])
+                _add(mf.File(remote=item["remote"], local=item["local"],
+                             note=item["url"]), rel)
             continue
-        cmds.append(["modal", "volume", "put", args.volume, str(p), f.local])
+        for f in _need_files(need):
+            _add(f)
+
+    # khử trùng theo đích trên Volume
+    seen, uniq = set(), []
+    for p, rel in pairs:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        uniq.append((p, rel))
+
+    cmds = [["modal", "volume", "put", args.volume, str(p), rel] for p, rel in uniq]
 
     print(f"\n{len(cmds)} lệnh `modal volume put {args.volume}`:")
     for c in cmds:
         print("  " + " ".join(f'"{x}"' if " " in x else x for x in c))
+    if missing:
+        print(f"\n[bỏ qua] thiếu {len(missing)} file: {', '.join(missing[:6])}")
     if not args.execute:
         print("\n(đây là DANH SÁCH; thêm --execute để chạy thật)")
         return 0

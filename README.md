@@ -169,6 +169,7 @@ Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.m
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
 | [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
 | [`docs/download-manual.md`](docs/download-manual.md) | Tải dữ liệu **bằng tay**: danh sách file, vị trí dưới `data/raw/`, tên dễ sai, kiểm offline, đẩy lên Volume |
+| [`docs/runbook-local-manual.md`](docs/runbook-local-manual.md) | Runbook 11 bước trên **máy cá nhân**: kiểm máy → tải tay → ingest → bench → gen → dire → train, kèm tiền và cách sửa lỗi |
 | [`docs/iaas-options.md`](docs/iaas-options.md) | So sánh ~16 nền tảng IaaS × 28 tiêu chí, ánh xạ workload, decision tree, 10 cái bẫy |
 | [`docs/storage-comparison.md`](docs/storage-comparison.md) | Modal Volume vs R2 vs Local vs Kaggle/HF — 18 tiêu chí, điểm hoà vốn, quy tắc ngưỡng |
 | [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |

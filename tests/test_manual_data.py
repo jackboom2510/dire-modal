@@ -152,3 +152,30 @@ def test_push_is_dry_run_by_default(tree: Path):
     assert r.returncode == 0, r.stderr
     assert "modal volume put dire-raw" in r.stdout
     assert "--execute" in r.stdout  # nhắc cách chạy thật
+
+
+# --------------------------------------------------------------------------- #
+# preflight: kiểm máy
+# --------------------------------------------------------------------------- #
+
+PREFLIGHT = ROOT / "tools" / "preflight_local.sh"
+
+
+def test_preflight_parses():
+    r = subprocess.run(["bash", "-n", str(PREFLIGHT)], capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+
+
+def test_preflight_disables_msys_path_conversion():
+    text = PREFLIGHT.read_text(encoding="utf-8")
+    assert "MSYS_NO_PATHCONV=1" in text
+    assert "MSYS2_ARG_CONV_EXCL" in text
+
+
+def test_preflight_runs_and_reports_python(tmp_path: Path):
+    r = subprocess.run(["bash", str(PREFLIGHT)], capture_output=True, text=True,
+                       env={**__import__("os").environ,
+                            "DIRE_LOCAL_ROOT": str(tmp_path / "root")})
+    out = r.stdout + r.stderr
+    assert "Python" in out
+    assert "DIRE_LOCAL_ROOT" in out
