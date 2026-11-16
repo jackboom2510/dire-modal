@@ -24,6 +24,8 @@ import tarfile
 import types
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
@@ -826,3 +828,65 @@ def test_hf_space_preprocessing_matches_the_author_pipeline():
     src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
     assert "RESIZE = 256" in src and "CROP = 224" in src, src[:200]
     assert "0.485" in src and "0.229" in src, "phải chuẩn hoá ImageNet như lúc train"
+
+
+# ---------------------------------------------------------------------------
+# 9. `--tiers` phải QUYẾT ĐỊNH tập cặp, không chỉ được ghi vào run.json
+# ---------------------------------------------------------------------------
+def _pairs_under(tmp_root, rels):
+    """Cặp giả: (real, fake) cùng thư mục, để test bộ lọc mà không cần tar."""
+    return [
+        {"branch": "x", "generator": Path(rel).name[: -len(".tar.gz")],
+         "real": Path(tmp_root) / Path(rel).parent / "real.tar.gz",
+         "fake": Path(tmp_root) / rel}
+        for rel in rels
+    ]
+
+
+def test_tier_e2_selects_exactly_fifteen_pairs():
+    """`e2` = 17 file: 1 checkpoint + real + 15 generator ⇒ **15 cặp**."""
+    ev = _install_stub()
+    assert ev.expected_n_pairs("e2") == 15
+
+
+def test_filter_pairs_keeps_only_the_requested_tier(tmp_path):
+    """Xin `e2` mà ổ đĩa có cả `e3` ⇒ nhánh cross-generator KHÔNG được chấm.
+
+    `lsun_bedroom__imagenet` dùng chung `real.tar.gz` với nhánh LSUN, nên nếu
+    lọt vào thì mean AP bị tính hai lần trên cùng 1000 ảnh real.
+    """
+    ev = _install_stub()
+    pairs = _pairs_under(tmp_path, [
+        "dire/test/lsun_bedroom/lsun_bedroom/adm.tar.gz",
+        "dire/test/lsun_bedroom/lsun_bedroom/sdv2.tar.gz",
+        "dire/test/lsun_bedroom/imagenet/adm.tar.gz",
+        "dire/test/celebahq/sdv2.tar.gz",
+    ])
+    kept, dropped = ev.filter_pairs(pairs, "e2", tmp_path)
+    assert [p["generator"] for p in kept] == ["adm", "sdv2"]
+    assert all("imagenet" not in str(p["fake"]) for p in kept)
+    assert dropped == 2
+
+
+def test_filter_pairs_does_not_guess_when_tier_has_dirspec(tmp_path):
+    """Tier có `DirSpec` (e4x) ⇒ KHÔNG lọc. Thà chấm thừa còn hơn bỏ cặp."""
+    ev = _install_stub()
+    pairs = _pairs_under(tmp_path, ["images/test/lsun_bedroom/adm/0001.png"
+                                    .replace(".png", ".tar.gz")])
+    kept, dropped = ev.filter_pairs(pairs, "e4x", tmp_path)
+    assert kept == pairs and dropped == 0
+
+
+def test_unknown_tier_fails_loudly(tmp_path):
+    ev = _install_stub()
+    with pytest.raises(SystemExit, match="tier không có trong manifest"):
+        ev.filter_pairs(_pairs_under(tmp_path, ["dire/test/a/b.tar.gz"]), "ez9", tmp_path)
+
+
+def test_local_pairs_previews_tier_without_data(tmp_path, capsys):
+    """Chưa tải byte nào vẫn trả lời được "e2 sẽ chấm bao nhiêu cặp"."""
+    ev = _install_stub()
+    ev.local_pairs.local(str(tmp_path), "test", "e2")
+    out = capsys.readouterr().out
+    assert "15 cặp" in out
+    assert "chưa có dữ liệu" in out
