@@ -46,6 +46,14 @@ G5 và G8 là hai cổng về tiền. Lỗi cũ chạy 1020 NFE thay vì 40 — 
 mà không có exception nào; mọi ước lượng chi phí trong repo lại đang dựa vào một
 `sec_per_step = 0,35` **chưa ai đo**.
 
+## 2b. Bản clean-room (không dùng code tác giả)
+
+Đường trong tài liệu này vẫn mượn `guided_diffusion` (clone repo tác giả) để
+dựng U-Net và ResNet-50. Nếu câu hỏi là "**code** của tác giả có đúng không",
+dùng `src/dire_zero/` — bản viết lại độc lập, kiểm bằng 566 cặp tên→shape, và
+tìm ra ba lỗi trong chính `ddim.py` ở đây (map `NaN`, NFE thiếu 2, nhiễu dư
+0,5 %). Xem [`docs/from-zero-clean-room.md`](from-zero-clean-room.md).
+
 ## 3. Chạy
 
 ```bash

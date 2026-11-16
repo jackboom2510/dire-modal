@@ -1,0 +1,154 @@
+"""ResNet-50 cho DIRE — viết lại, không dùng `torchvision` cũng không dùng bản chép của tác giả.
+
+Khác biệt **có chủ ý** so với bài báo: bài báo khởi tạo từ trọng số ImageNet.
+Bản này khởi tạo ngẫu nhiên, vì "từ số 0" mà còn nạp 25 triệu tham số của
+ImageNet thì chữ "from scratch" chỉ còn đúng một nửa. Hệ quả phải nói rõ:
+
+* với 1 000 ảnh train, ResNet-50 ngẫu nhiên **sẽ** kém hơn bản ImageNet;
+* ACC vì thế không so được với Table 2 của bài báo, và không được trình bày như
+  thể so được.
+
+Nạp ImageNet là tuỳ chọn (`init="imagenet"`), có ghi vào `train.json` để người
+đọc biết con số đến từ đâu. Mặc định: `"scratch"`.
+"""
+
+from __future__ import annotations
+
+import torch
+from torch import Tensor, nn
+
+__all__ = ["Bottleneck", "ResNet", "resnet50", "ResNetDetector"]
+
+
+class Bottleneck(nn.Module):
+    """Khối thắt nút: 1×1 → 3×3 → 1×1, cộng tắt, ReLU sau mỗi BN."""
+
+    expansion = 4
+
+    def __init__(self, in_ch: int, width: int, stride: int = 1, groups: int = 1, base: int = 64) -> None:
+        super().__init__()
+        out = width * self.expansion
+        self.conv1 = nn.Conv2d(in_ch, width, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(width)
+        self.conv2 = nn.Conv2d(width, width, 3, stride=stride, padding=1, groups=groups, bias=False)
+        self.bn2 = nn.BatchNorm2d(width)
+        self.conv3 = nn.Conv2d(width, out, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(out)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.downsample: nn.Module = nn.Identity()
+        if stride != 1 or in_ch != out:
+            self.downsample = nn.Sequential(
+                nn.Conv2d(in_ch, out, 1, stride=stride, bias=False),
+                nn.BatchNorm2d(out),
+            )
+
+    def forward(self, x: Tensor) -> Tensor:
+        idt = self.downsample(x)
+        h = self.relu(self.bn1(self.conv1(x)))
+        h = self.relu(self.bn2(self.conv2(h)))
+        h = self.bn3(self.conv3(h))
+        return self.relu(h + idt)
+
+
+class ResNet(nn.Module):
+    """ResNet chuẩn, đầu ra 1 logit (thật/giả) — không phải 1000 lớp ImageNet."""
+
+    def __init__(self, blocks: tuple[int, ...] = (3, 4, 6, 3), widths: tuple[int, ...] = (64, 128, 256, 512)) -> None:
+        super().__init__()
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 64, 7, stride=2, padding=3, bias=False),
+            nn.BatchNorm2d(64),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(3, stride=2, padding=1),
+        )
+        stages = []
+        in_ch = 64
+        for i, (n, w) in enumerate(zip(blocks, widths)):
+            for j in range(n):
+                stride = 2 if (i > 0 and j == 0) else 1
+                stages.append(Bottleneck(in_ch, w, stride))
+                in_ch = w * Bottleneck.expansion
+        self.stages = nn.Sequential(*stages)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Linear(in_ch, 1)
+        self._init_weights()
+
+    def _init_weights(self) -> None:
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.Linear):
+                nn.init.normal_(m.weight, 0, 0.01)
+                nn.init.zeros_(m.bias)
+
+    def forward(self, x: Tensor) -> Tensor:
+        x = self.stem(x)
+        x = self.stages(x)
+        x = self.pool(x).flatten(1)
+        return self.fc(x).squeeze(1)   # logit thô, chưa sigmoid
+
+    def imagenet_alias(self) -> dict[str, str]:
+        """Bảng ``tên của mình → tên torchvision`` cho trọng số ImageNet.
+
+        `stages` là một `Sequential` phẳng 16 khối; torchvision gom thành
+        `layer1..4`. Bảng này là chỗ duy nhất biết cách gom, và có test vòng
+        tròn (đổi tên → nạp lại → tham số không đổi) để nó không lệch âm thầm.
+        """
+        alias: dict[str, str] = {"stem.0": "conv1", "stem.1": "bn1"}
+        leaves = ("conv1", "bn1", "conv2", "bn2", "conv3", "bn3", "downsample.0", "downsample.1")
+        sizes = (3, 4, 6, 3)
+        i = 0
+        for layer, n in enumerate(sizes, start=1):
+            for b in range(n):
+                for leaf in leaves:
+                    alias[f"stages.{i}.{leaf}"] = f"layer{layer}.{b}.{leaf}"
+                i += 1
+        return alias
+
+    def load_imagenet(self, state: dict) -> list[str]:
+        """Nạp trọng số ImageNet (bỏ `fc` vì 1000 lớp ≠ 1 logit). Trả key bị bỏ qua."""
+        table = self.imagenet_alias()
+        own = self.state_dict()
+        renamed, skipped = {}, []
+        for my_key, ref_prefix in table.items():
+            for suffix in ("weight", "bias", "running_mean", "running_var", "num_batches_tracked"):
+                full = f"{ref_prefix}.{suffix}"
+                my_full = f"{my_key}.{suffix}"
+                if full in state and my_full in own and state[full].shape == own[my_full].shape:
+                    renamed[my_full] = state[full]
+        skipped = [k for k in own if k not in renamed]
+        own.update(renamed)          # thay tại chỗ: giữ nguyên fc và các buffer khác
+        self.load_state_dict(own, strict=True)
+        return skipped
+
+
+def resnet50() -> ResNet:
+    return ResNet()
+
+
+class ResNetDetector(nn.Module):
+    """Bọc thêm chuẩn hoá đầu vào + sigmoid, để pipeline không phải nhớ."""
+
+    #: Trung bình/độ lệch ImageNet — detector gốc cũng dùng đúng bộ này.
+    MEAN = (0.485, 0.456, 0.406)
+    STD = (0.229, 0.224, 0.225)
+
+    def __init__(self, backbone: nn.Module | None = None) -> None:
+        super().__init__()
+        self.backbone = backbone or resnet50()
+        self.register_buffer("mean", torch.tensor(self.MEAN).view(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor(self.STD).view(1, 3, 1, 1))
+
+    def logits(self, x: Tensor) -> Tensor:
+        return self.backbone((x - self.mean) / self.std)
+
+    def forward(self, x: Tensor) -> Tensor:
+        return torch.sigmoid(self.logits(x))
+
+    @property
+    def n_params(self) -> int:
+        return sum(p.numel() for p in self.parameters())

@@ -84,6 +84,7 @@ một bước trong dãy 00…10 như trước. Chi tiết: [`scripts/README.md`
 | **1 — Chấm lại** | "Đường đo của mình có ra đúng số paper trên cùng đặc trưng không?" (R0) | `scripts/01_repro.sh` | ~$0.2 (CPU) |
 | **2 — Cải thiện** | "Training-free, làm tốt hơn DIRE được không?" | `scripts/02_improve.sh` | ~$0–20 theo FR |
 | **3 — Từ đầu** | "Không dùng map/checkpoint tác giả, dựng lại được không?" (R1+R2+R3) | `tools/scratch_repro.sh` | < 1 GPU-giờ / 2 000 ảnh |
+| **4 — Từ số 0** | "Không dùng **code** tác giả, còn dựng lại được không?" (R1+R2+R3, clean-room) | `python -m dire_zero · dire_zero.modal_app` | như trên (cùng GPU, cùng NFE) |
 
 ### Quy trình 1 — chấm lại Table 2 của paper (R0)
 
@@ -162,12 +163,30 @@ Local:    git + modal CLI + xem mẫu nhỏ (máy mỏng — không giữ datase
 
 Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) · [`docs/adr-0002-iaas.md`](docs/adr-0002-iaas.md).
 
+## Bản clean-room — `dire_zero`
+
+`src/dire_zero/` là bản viết lại **độc lập**: U-Net 256 (566 tensor khớp từng
+shape, 552 814 086 tham số), DDIM + DIRE, ResNet-50, ACC/AP đều viết từ công
+thức. Image Modal của nó **không** clone repo tác giả, và `selfcheck` assert
+điều đó.
+
+```bash
+pip install -e ".[zero]"
+python -m dire_zero info        # lịch, mốc, NFE, bảng tiền
+python -m dire_zero keys        # đối chiếu 566 key với fixture (không cần checkpoint)
+python -m dire_zero selftest    # gen → dire → train trên U-Net 32×32, ~20 giây
+```
+
+Trên Modal: `modal run -m dire_zero.modal_app::selfcheck|bench|gen|dire|train|report`.
+Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md).
+
 ## Tài liệu
 
 | Tài liệu | Nội dung |
 |---|---|
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
 | [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
+| [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md) | **Clean-room**: viết lại U-Net/DDIM/DIRE/ResNet-50 từ công thức, không dùng một dòng code tác giả — 4 lớp chứng minh, 3 lỗi tìm được trong code cũ, cách chạy và đọc số |
 | [`docs/download-manual.md`](docs/download-manual.md) | Tải dữ liệu **bằng tay**: danh sách file, vị trí dưới `data/raw/`, tên dễ sai, kiểm offline, đẩy lên Volume |
 | [`docs/runbook-local-manual.md`](docs/runbook-local-manual.md) | Runbook 11 bước trên **máy cá nhân**: kiểm máy → tải tay → ingest → bench → gen → dire → train, kèm tiền và cách sửa lỗi |
 | [`docs/iaas-options.md`](docs/iaas-options.md) | So sánh ~16 nền tảng IaaS × 28 tiêu chí, ánh xạ workload, decision tree, 10 cái bẫy |

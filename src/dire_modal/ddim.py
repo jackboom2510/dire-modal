@@ -121,9 +121,17 @@ class Schedule:
         return torch.full((1,), int(t), device=device, dtype=torch.long)
 
     def _ab(self, t: int, device, dtype):
+        """``ᾱ`` tại **mốc** ``t``, dùng chỉ số 0-based như ADM.
+
+        `alphas_cumprod` trả ``[1,0, ᾱ₁, …]`` (phần tử 0 = "chưa thêm nhiễu"),
+        nên mốc ``t`` ứng với ``abar[t + 1]``, tức ``ᾱ`` **sau** ``t + 1`` bước
+        nhiễu. Bản cũ lấy ``abar[t]``: tại ``t = 0`` ra ``ᾱ = 1,0`` ⇒
+        ``√(1−ᾱ) = 0`` ⇒ ``ε̂ = 0/0 = NaN``, và NaN đó lan qua cả map. Xem
+        `tests/test_ddim_protocol.py`.
+        """
         import torch  # noqa: PLC0415
 
-        v = self.abar[t]
+        v = self.abar[min(int(t) + 1, len(self.abar) - 1)]
         return torch.tensor(v, device=device, dtype=dtype).view(1, 1, 1, 1)
 
     def eps_from_x0(self, x_t, t: int, x0, device):
@@ -152,7 +160,13 @@ def _predict(model, x_t, t, schedule: Schedule, device):
 
 
 def invert(model, x0_img, schedule: Schedule, device):
-    """x₀ → x_T (mốc cuối) bằng S bước; trả `(x_last, nfe)`."""
+    """x₀ → mốc cao nhất, **đúng S lượt mạng**; trả `(x_last, nfe)`.
+
+    `S − 1` cặp mốc chỉ cho `S − 1` lượt, nên bước cuối chiếu lại trạng thái tại
+    chính mốc cao nhất (``x = √ᾱ·x̂₀ + √(1−ᾱ)·ε̂`` là phép chiếu idempotent, chỉ
+    khác khi ``x̂₀`` bị clip). Thiếu bước này thì NFE = `2(S−1)` chứ không phải
+    `2S`, và con số chi phí bị báo thấp hơn thực tế.
+    """
     x = x0_img
     nfe = 0
     for t_cur, t_next in zip(schedule.timesteps[:-1], schedule.timesteps[1:]):
@@ -160,11 +174,21 @@ def invert(model, x0_img, schedule: Schedule, device):
         a_next = schedule._ab(t_next, device, x.dtype)
         x = a_next.sqrt() * x0_hat + (1 - a_next).sqrt() * eps_hat
         nfe += used
+    x0_hat, eps_hat, used = _predict(model, x, schedule.timesteps[-1], schedule, device)
+    a_max = schedule._ab(schedule.timesteps[-1], device, x.dtype)
+    x = a_max.sqrt() * x0_hat + (1 - a_max).sqrt() * eps_hat
+    nfe += used
     return x, nfe
 
 
 def reconstruct(model, x_t, schedule: Schedule, device):
-    """x_T → x̂₀ bằng S bước; trả `(recon, nfe)`."""
+    """Mốc cao nhất → x̂₀, **đúng S lượt mạng**; trả `(recon, nfe)`.
+
+    Bước cuối chạy mạng tại mốc 0 rồi **trả thẳng x̂₀** (ảnh sạch), thay vì cộng
+    thêm ``√(1−ᾱ₀)·ε̂ ≈ 0,01·ε̂``. Bản cũ dừng ở cặp ``(50, 0)`` nên không có
+    lượt nào tại mốc 0, và đầu ra còn ~0,5 % nhiễu — sai lệch nhỏ nhưng **có hệ
+    thống** trên mọi ảnh, tức là nó dịch cả phân bố DIRE.
+    """
     x = x_t
     nfe = 0
     for t_cur, t_prev in zip(schedule.timesteps[:0:-1], schedule.timesteps[-2::-1]):
@@ -172,7 +196,9 @@ def reconstruct(model, x_t, schedule: Schedule, device):
         a_prev = schedule._ab(t_prev, device, x.dtype)
         x = a_prev.sqrt() * x0_hat + (1 - a_prev).sqrt() * eps_hat
         nfe += used
-    return x, nfe
+    x0_hat, _eps, used = _predict(model, x, 0, schedule, device)
+    nfe += used
+    return x0_hat, nfe
 
 
 def dire_map(model, x0_img, schedule: Schedule | None = None, device: str | None = None):

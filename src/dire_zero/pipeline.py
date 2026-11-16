@@ -1,0 +1,354 @@
+"""Bốn bước của phép đo, viết thành hàm thuần để test được với mô hình tí hon.
+
+::
+
+    gen    → ảnh giả (R3)            : sinh từ checkpoint công khai, seed mình chọn
+    dire   → map cho cả hai phía (R1): |x − R(I(x))|, cùng một lịch, cùng một S
+    train  → detector (R2)           : ResNet-50, ngưỡng chọn trên val (G6)
+    report → số + khoảng tin cậy     : ACC@0,5, AP, AUC, CI bootstrap
+
+Mỗi hàm nhận `model` (hoặc factory) làm tham số, **không** tự nạp checkpoint.
+Nhờ vậy `tests/test_zero_pipeline.py` chạy trọn bốn bước trên U-Net 32×32 với
+8 ảnh trong 20 giây, không cần GPU và không cần tải 2,5 GB.
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import json
+import time
+from pathlib import Path
+from typing import Callable, Iterable, Sequence
+
+import torch
+from torch import Tensor
+
+from . import data as data_mod
+from . import metrics
+from .diffusion import ModelCounter, Schedule, dire_map, from_uint8, sample, to_uint8
+
+__all__ = [
+    "write_json",
+    "load_image",
+    "generate",
+    "compute_maps",
+    "train",
+    "evaluate",
+    "RunMeta",
+]
+
+
+def write_json(path: str | Path, payload: dict) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str) + "\n", encoding="utf-8")
+
+
+def _now() -> str:
+    return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def load_image(path: str | Path) -> Tensor:
+    """Ảnh trên đĩa → tensor ``(1, 3, H, W)`` trong ``[−1, 1]``."""
+    from PIL import Image  # noqa: PLC0415
+
+    with Image.open(path) as im:
+        im = im.convert("RGB")
+        arr = torch.frombuffer(bytearray(im.tobytes()), dtype=torch.uint8)
+        arr = arr.view(im.size[1], im.size[0], 3)
+    return from_uint8(arr.numpy())
+
+
+def save_png(arr: Tensor, path: str | Path) -> None:
+    from PIL import Image  # noqa: PLC0415
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(to_uint8(arr).squeeze(0).permute(1, 2, 0).numpy()).save(path, format="PNG")
+
+
+class RunMeta:
+    """Giữ mọi thứ cần để người khác dựng lại: checkpoint, bước, seed, phiên bản."""
+
+    def __init__(self, ckpt_sha256: str, steps: int, sampler: str = "ddim", eta: float = 0.0) -> None:
+        self.ckpt_sha256 = ckpt_sha256
+        self.steps = steps
+        self.sampler = sampler
+        self.eta = eta
+
+    def as_dict(self) -> dict:
+        return {
+            "ckpt_sha256": self.ckpt_sha256,
+            "sampler": self.sampler,
+            "eta": self.eta,
+            "steps": self.steps,
+            "t_max": Schedule(steps=self.steps).timesteps[-1],
+            "nfe_per_image": 2 * self.steps,
+            "created": _now(),
+        }
+
+
+def generate(
+    f: ModelCounter,
+    n: int,
+    out_dir: str | Path,
+    meta: RunMeta,
+    seed_base: int = 1000,
+    size: int = 256,
+    split_seed: int = 3407,
+    progress: Callable[[int], None] | None = None,
+) -> dict:
+    """R3 — sinh ``n`` ảnh, ghi PNG + `gen.json` (đủ trường để dựng lại)."""
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    sched = Schedule(steps=meta.steps, device=str(next(f.model.parameters()).device))
+    f.reset()
+    names: list[str] = []
+    t0 = time.time()
+    for i in range(n):
+        seed = seed_base + i
+        img = sample(f, (1, 3, size, size), sched, seed=seed)
+        name = f"{seed:06d}.png"
+        save_png(img, out / name)
+        names.append(name)
+        if progress and (i + 1) % 50 == 0:
+            progress(i + 1)
+
+    split = data_mod.split_indices(names, seed=split_seed, frac_train=0.8)
+    payload = meta.as_dict()
+    payload.update(
+        n=n,
+        seed_base=seed_base,
+        seeds=[seed_base + i for i in range(n)],
+        names=names,
+        seed_test=split_seed,
+        split={"train": [names[i] for i in split["train"]], "test": [names[i] for i in split["test"]]},
+        nfe_total=f.nfe,
+        seconds=round(time.time() - t0, 2),
+    )
+    write_json(out / "gen.json", payload)
+    return payload
+
+
+def compute_maps(
+    f: ModelCounter,
+    items: Sequence[tuple[str, int]],
+    out_dir: str | Path,
+    meta: RunMeta,
+    limit: int | None = None,
+    size: int = 256,
+    progress: Callable[[int], None] | None = None,
+) -> dict:
+    """R1 — tính DIRE map cho ``items`` (đường dẫn, nhãn). Lưu float16, thang ``[0, 2]``.
+
+    Lưu float16 chứ không uint8: thang ``[0, 2]`` chỉ có 256 mức trong uint8, và
+    DIRE sống ở **biên độ nhỏ** — lượng tử hoá 8-bit làm mất đúng phần tín hiệu
+    mà detector cần. Giá phải trả là gấp đôi dung lượng; đó là lựa chọn có ý thức.
+    """
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    sched = Schedule(steps=meta.steps, device=str(next(f.model.parameters()).device))
+    f.reset()
+    used = items[:limit] if limit else items
+    t0 = time.time()
+    made = []
+    skipped = 0
+    for i, (path, label) in enumerate(used, start=1):
+        img = load_image(path)
+        if img.shape[-1] != size or img.shape[-2] != size:
+            skipped += 1
+            continue
+        dm, _recon = dire_map(f, img, sched)
+        name = Path(path).stem + ".npy"
+        import numpy as np  # noqa: PLC0415
+
+        np.save(out / name, dm.squeeze(0).to(torch.float16).numpy())
+        made.append({"name": name, "label": int(label), "source": str(path)})
+        if progress and i % 50 == 0:
+            progress(i)
+
+    payload = meta.as_dict()
+    payload.update(
+        n=len(made),
+        skipped=skipped,
+        nfe_total=f.nfe,
+        seconds=round(time.time() - t0, 2),
+        scale="[0, 2] float16, không nhân 4, không clip",
+        items=made,
+    )
+    write_json(out / "dire.json", payload)
+    return payload
+
+
+def _split_maps(items: list[dict], seed: int = 3407, frac_train: float = 0.8) -> dict[str, list[dict]]:
+    names = [it["name"] for it in items]
+    idx = data_mod.split_indices(names, seed=seed, frac_train=frac_train)
+    return {k: [items[i] for i in v] for k, v in idx.items()}
+
+
+def _batch(maps: list[Path], labels: list[int], bs: int, crop: int, train: bool, gen: torch.Generator):
+    """Sinh batch: cắt ngẫu nhiên (train) hoặc giữa ảnh (test) + lật ngang."""
+    import numpy as np  # noqa: PLC0415
+
+    order = torch.randperm(len(maps), generator=gen).tolist()
+    for start in range(0, len(order), bs):
+        chunk = order[start:start + bs]
+        xs, ys = [], []
+        for i in chunk:
+            arr = np.load(maps[i]).astype("float32")
+            t = torch.from_numpy(arr)
+            if train:
+                top = int(torch.randint(0, t.shape[1] - crop + 1, (1,), generator=gen))
+                left = int(torch.randint(0, t.shape[2] - crop + 1, (1,), generator=gen))
+                t = t[:, top:top + crop, left:left + crop]
+                if torch.rand(1, generator=gen).item() < 0.5:
+                    t = torch.flip(t, dims=[2])
+            else:
+                top = (t.shape[1] - crop) // 2
+                left = (t.shape[2] - crop) // 2
+                t = t[:, top:top + crop, left:left + crop]
+            xs.append(t)
+            ys.append(float(labels[i]))
+        yield torch.stack(xs), torch.tensor(ys, dtype=torch.float32)
+
+
+@torch.no_grad()
+def _score(model, maps, labels, crop, device, bs=32) -> tuple[list[float], list[int]]:
+    model.eval()
+    scores, ys = [], []
+    gen = torch.Generator().manual_seed(0)
+    for xb, yb in _batch(maps, labels, bs, crop, False, gen):
+        p = model(xb.to(device)).float().cpu().tolist()
+        scores.extend(p)
+        ys.extend(int(v) for v in yb.tolist())
+    return scores, ys
+
+
+def train(
+    model_factory: Callable[[], torch.nn.Module],
+    maps: list[dict],
+    out_dir: str | Path,
+    epochs: int = 40,
+    lr: float = 1e-4,
+    bs: int = 32,
+    crop: int = 224,
+    device: str = "cpu",
+    seed: int = 3407,
+    split_seed: int = 3407,
+    patience: int = 5,
+    max_lr_drops: int = 3,
+    init: str = "scratch",
+    max_minutes: float | None = None,
+) -> dict:
+    """R2 — train detector. Ngưỡng chọn trên **val**, test chấm **một lần** (G6).
+
+    Early stop theo val AP (không theo val ACC): AP dùng được cả khi lớp mất cân
+    bằng và không phụ thuộc một ngưỡng cứng — chọn mô hình bằng ACC rồi báo AP
+    là trộn hai tiêu chí.
+    """
+    torch.manual_seed(seed)
+    out = Path(out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    parts = _split_maps(maps, split_seed)
+    # val lấy từ train, để test không bao giờ được nhìn
+    inner = data_mod.split_indices([m["name"] for m in parts["train"]], seed=split_seed + 1, frac_train=0.85)
+    tr = [parts["train"][i] for i in inner["train"]]
+    va = [parts["train"][i] for i in inner["test"]]
+    te = parts["test"]
+
+    model = model_factory().to(device)
+    opt = torch.optim.Adam(model.parameters(), lr=lr)
+    lossf = torch.nn.BCEWithLogitsLoss()
+    gen = torch.Generator().manual_seed(seed)
+
+    def packs(rows):
+        return [r["path"] for r in rows], [r["label"] for r in rows]
+
+    tr_p, tr_y = packs(tr)
+    va_p, va_y = packs(va)
+    te_p, te_y = packs(te)
+
+    best = {"ap": -1.0, "epoch": -1, "state": None}
+    drops = 0
+    history = []
+    t0 = time.time()
+    for epoch in range(1, epochs + 1):
+        model.train()
+        tot, seen = 0.0, 0
+        for xb, yb in _batch(tr_p, tr_y, bs, crop, True, gen):
+            xb, yb = xb.to(device), yb.to(device)
+            opt.zero_grad(set_to_none=True)
+            loss = lossf(model(xb), yb)
+            loss.backward()
+            opt.step()
+            tot += float(loss.detach()) * len(yb)
+            seen += len(yb)
+
+        vs, vy = _score(model, va_p, va_y, crop, device)
+        vap = metrics.average_precision(vs, vy)
+        history.append({"epoch": epoch, "loss": round(tot / max(seen, 1), 5), "val_ap": round(vap, 5)})
+        if vap > best["ap"] + 1e-4:
+            best = {"ap": vap, "epoch": epoch, "state": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}}
+            drops = 0
+        else:
+            if drops < max_lr_drops:
+                for g in opt.param_groups:
+                    g["lr"] = g["lr"] / 10
+                drops += 1
+            if epoch - best["epoch"] >= patience:
+                break
+        if max_minutes and (time.time() - t0) / 60 > max_minutes:
+            history.append({"stopped": f"quá {max_minutes} phút"})
+            break
+
+    if best["state"] is None:
+        # val chỉ có một lớp (thường vì quá ít ảnh) ⇒ AP = NaN, không có gì để chọn.
+        # Vẫn dùng mô hình cuối, nhưng ghi rõ vào `train.json` thay vì giả vờ đã chọn.
+        best = {"ap": float("nan"), "epoch": epoch, "state": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}}
+        history.append({"warning": "val có một lớp — không chọn được mô hình theo val AP"})
+
+    model.load_state_dict(best["state"])
+    vs, vy = _score(model, va_p, va_y, crop, device)
+    # Ngưỡng chọn trên **val** (G6) theo balanced accuracy — không theo ACC thường,
+    # và không bao giờ nhìn test. Val ít mẫu thì lùi về 0,5 và ghi rõ nguồn.
+    best_thr, thr_source = metrics.pick_threshold(vs, vy)
+    best_acc = metrics.accuracy(vs, vy, best_thr)
+
+    ts_, ty_ = _score(model, te_p, te_y, crop, device)
+    test = metrics.evaluate(ts_, ty_, threshold=best_thr, seed=seed)
+
+    torch.save(model.state_dict(), out / "detector.pth")
+    payload = {
+        "label": "R1+R2+R3",
+        "init": init,
+        "epochs_run": len(history),
+        "best_epoch": best["epoch"],
+        "best_val_ap": round(best["ap"], 5),
+        "threshold_from_val": best_thr,
+        "threshold_source": thr_source,
+        "val_acc_at_threshold": round(best_acc, 5),
+        "test": test,
+        "split": {"n_train": len(tr), "n_val": len(va), "n_test": len(te), "seed": split_seed},
+        "hparams": {"lr": lr, "batch": bs, "crop": crop, "seed": seed, "patience": patience},
+        "history": history,
+        "seconds": round(time.time() - t0, 2),
+        "honesty": (
+            "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; "
+            "con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, "
+            "khác generator)."
+        ),
+    }
+    write_json(out / "train.json", payload)
+    return payload
+
+
+def evaluate(scores: Sequence[float], labels: Sequence[int], threshold: float = 0.5, seed: int = 0) -> dict:
+    return metrics.evaluate(scores, labels, threshold=threshold, seed=seed)
+
+
+def collect_maps(dirs: Iterable[str | Path], labels: Iterable[int]) -> list[dict]:
+    """Gom ``.npy`` từ nhiều thư mục thành danh sách item cho `train`."""
+    out: list[dict] = []
+    for d, label in zip(dirs, labels):
+        for p in sorted(Path(d).glob("*.npy")):
+            out.append({"name": p.name, "path": str(p), "label": int(label)})
+    return out
