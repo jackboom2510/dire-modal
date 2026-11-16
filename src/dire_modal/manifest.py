@@ -67,6 +67,14 @@ class File:
     local: str  # path trên Volume /raw
     sha256: str = ""  # điền sau lần tải đầu (manifests/*_sha256.tsv)
     note: str = ""  # vì sao cần file này
+    #: Cho phép file này đi qua `NEVER` (xem :func:`is_never`).
+    #:
+    #: `NEVER` không có nghĩa "file này không bao giờ hữu ích" — nó có nghĩa
+    #: "KHÔNG tier mặc định nào được tự động kéo nó về". Hai vế đó khác nhau:
+    #: `recons/` vô dụng cho eval nhưng là **một nửa bằng chứng** của báo cáo
+    #: (ảnh tái tạo để đối chiếu với DIRE map). Nên cần một đường hẹp, khai báo
+    #: TỪNG FILE, thay vì nới `NEVER` cho cả cây 44 tar (25 GB).
+    allow_never: bool = False
 
 
 @dataclass(frozen=True)
@@ -325,6 +333,96 @@ CKPTS: list[Entry] = [
 ]
 
 
+# ============================================================================
+# gallery: BỘ BA ảnh gốc | ảnh tái tạo | DIRE map — cho BÁO CÁO, không cho eval
+# ============================================================================
+# Vì sao cần tier riêng: 3 nhánh `images/` `recons/` `dire/` là **triplet** theo
+# paper §3.3, nhưng trên Baidu chúng KHÔNG cùng tập file. Muốn trình bày "đây là
+# ảnh thật, đây là bản model tái tạo, đây là hiệu của chúng" thì phải lấy đúng
+# cặp ba khớp nhau — và `recons/` đang bị `NEVER` chặn ở mọi tier.
+#
+# Ba tên file KHÔNG luôn giống nhau giữa ba nhánh. Bảng dưới là bảng đối chiếu
+# duy nhất, lấy từ audit 2026-10-21 (số file + size thật in ra ở `download::audit`):
+#
+#   generator | images/                | recons/   | dire/
+#   real      | real                   | real      | real
+#   pndm      | pndm                   | pndm      | pndm
+#   ldm       | ldm                    | ldm       | ldm
+#   sdv2      | sdv2                   | sdv2      | sdv2
+#   vqdiffusion | vqdiffusion          | vqdiffusion | vqdiffusion
+#   projectedgan | projectedgan        | projectedgan | projectedgan
+#   midjourney | midjourney            | midjourney | **midjouney**  (typo gốc)
+#   stylegan  | **stylegan_official**  | stylegan  | stylegan
+#   adm       | adm                    | **KHÔNG CÓ** | adm
+#   ddpm/iddpm | có (? trong manifest) | **KHÔNG CÓ** | có
+#   sdv1      | **sdv1_new** (khác ảnh?) | **KHÔNG CÓ** | sdv1
+#
+# ⇒ `adm` — generator HEADLINE của paper — không có `recons/`. Muốn 3 panel cho
+# ADM thì phải tự tính x̂ (weight ADM 2.5 GB + GPU), đó là FR-2, không phải tier.
+#
+# Mặc định chỉ 3 generator RẺ nhất (real/pndm/ldm ≈ 674 MB) vì mục đích là
+# bằng chứng trực quan, không phải benchmark. Thêm generator khác bằng
+# `--paths ... --allow-never` (xem `download::main --help`).
+GALLERY_DIRS = {
+    "images": "images/test/lsun_bedroom",
+    "recons": "recons/test/lsun_bedroom/lsun_bedroom",
+    "dire": "dire/test/lsun_bedroom/lsun_bedroom",
+}
+
+#: ``generator -> {nhánh: tên file}``. Chỉ khai generator ĐÃ có đủ cả ba nhánh.
+GALLERY_TRIPLETS: dict[str, dict[str, str]] = {
+    "real": {"images": "real.tar.gz", "recons": "real.tar.gz", "dire": "real.tar.gz"},
+    "pndm": {"images": "pndm.tar.gz", "recons": "pndm.tar.gz", "dire": "pndm.tar.gz"},
+    "ldm": {"images": "ldm.tar.gz", "recons": "ldm.tar.gz", "dire": "ldm.tar.gz"},
+    "sdv2": {"images": "sdv2.tar.gz", "recons": "sdv2.tar.gz", "dire": "sdv2.tar.gz"},
+    "vqdiffusion": {"images": "vqdiffusion.tar.gz", "recons": "vqdiffusion.tar.gz",
+                    "dire": "vqdiffusion.tar.gz"},
+    "projectedgan": {"images": "projectedgan.tar.gz", "recons": "projectedgan.tar.gz",
+                     "dire": "projectedgan.tar.gz"},
+    # Hai ca tên LỆCH giữa các nhánh — đây là lý do phải có bảng thay vì ghép
+    # `{gen}.tar.gz` bằng vòng lặp: ghép theo pattern sẽ trượt đúng hai ca này,
+    # và trượt im lặng (tar không tồn tại ⇒ báo "chưa tải" thay vì "sai tên").
+    "midjourney": {"images": "midjourney.tar.gz", "recons": "midjourney.tar.gz",
+                   "dire": "midjouney.tar.gz"},
+    "stylegan": {"images": "stylegan_official.tar.gz", "recons": "stylegan.tar.gz",
+                 "dire": "stylegan.tar.gz"},
+}
+
+#: Generator mặc định của tier `gallery` — 3 cái RẺ nhất có đủ bộ ba.
+GALLERY_GENS: tuple[str, ...] = ("real", "pndm", "ldm")
+
+
+def gallery_files(gens: tuple[str, ...] | list[str] = GALLERY_GENS) -> list[File]:
+    """Các ``File`` của bộ ba cho ``gens``.
+
+    ``recons`` được đánh dấu ``allow_never`` — đó là toàn bộ lý do hàm này tồn
+    tại. ``images``/``dire`` để ``allow_never=False``: chúng đã nằm trong các
+    tier thường, không được hưởng ngoại lệ.
+    """
+    out: list[File] = []
+    for gen in gens:
+        trip = GALLERY_TRIPLETS.get(gen)
+        if trip is None:
+            raise KeyError(
+                f"{gen!r} không có bộ ba ảnh gốc/recons/dire. "
+                f"Có: {sorted(GALLERY_TRIPLETS)}"
+            )
+        for branch, name in trip.items():
+            remote = f"{GALLERY_DIRS[branch]}/{name}"
+            out.append(
+                File(
+                    remote=remote,
+                    local=remote,
+                    note=f"gallery: bộ ba {branch} của {gen} (cho báo cáo, KHÔNG cho eval)",
+                    allow_never=(branch == "recons"),
+                )
+            )
+    return out
+
+
+GALLERY: list[Entry] = gallery_files()
+
+
 TIERS: dict[str, list[Entry]] = {
     "e0": E0,
     "e1": E1,
@@ -340,6 +438,7 @@ TIERS: dict[str, list[Entry]] = {
     "rawx": RAWX,
     "rawxens": RAWXENS,
     "ckpts": CKPTS,
+    "gallery": GALLERY,
 }
 
 # Alias cho lệnh cũ (--tiers ckpt,A / pack::main --tiers A) để không gãy script.
@@ -377,8 +476,15 @@ NEVER: list[tuple[str, str]] = [
 ]
 
 
-def is_never(remote: str) -> str | None:
-    """Trả về lý do chặn nếu path rơi vào NEVER, ngược lại None."""
+def is_never(remote: str, allow: bool = False) -> str | None:
+    """Trả về lý do chặn nếu path rơi vào NEVER, ngược lại None.
+
+    ``allow=True`` chỉ dùng cho :class:`File` đã khai báo ``allow_never`` — tức
+    tier `gallery` và đường ``--paths --allow-never``. Không có nhánh nào cho
+    phép bỏ qua khi chưa nêu đích danh đường dẫn.
+    """
+    if allow:
+        return None
     low = remote.lower()
     for pat, why in NEVER:
         if pat.lower() in low:
@@ -572,7 +678,7 @@ def expand(
         if f.remote in seen:
             return
         seen.add(f.remote)
-        why = is_never(f.remote)
+        why = is_never(f.remote, allow=f.allow_never)
         if why:
             blocked.append((f, why))
         else:

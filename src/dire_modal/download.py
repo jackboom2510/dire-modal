@@ -927,7 +927,20 @@ def _clamp_concurrency(raw: int) -> int:
     return max(1, min(int(raw or 0), 8))
 
 
-def _files_from_paths(spec: str) -> list[File]:
+#: Vùng được phép mở bằng ``--allow-never``: CHỈ ảnh tái tạo.
+#: `*ddim*` (tar ablation rỗng/hỏng) và `lsun_bedroom.pt` (weight ADM 2.5 GB)
+#: KHÔNG nằm đây — chúng không phục vụ báo cáo nào, nên mở ra chỉ tạo đường
+#: tiêu tiền nhầm.
+ALLOW_NEVER_AREAS = ("recons/",)
+
+
+def _report_ok(remote: str) -> bool:
+    """``remote`` có thuộc vùng được mở bằng ``--allow-never`` không."""
+    low = remote.lower().lstrip("/")
+    return any(low.startswith(area) for area in ALLOW_NEVER_AREAS)
+
+
+def _files_from_paths(spec: str, allow_never: bool = False) -> list[File]:
     """Dựng danh sách ``File`` từ ``--paths a.tar.gz,b.pth``.
 
     Vì sao có: tier là đơn vị của *bộ dữ liệu*, nhưng để có **con số đầu tiên**
@@ -935,8 +948,10 @@ def _files_from_paths(spec: str) -> list[File]:
     7.4 giờ). Bắt người dùng sửa manifest cho một lần chạy là sai: ``--paths``
     là công tắc, không phải cấu hình.
 
-    Vẫn đi qua kiểm tra ``NEVER`` — không có đường tắt nào cho `recons/` hay
-    `*ddim*`, kể cả khi gõ tay.
+    Mặc định vẫn đi qua ``NEVER``. ``allow_never=True`` (cờ ``--allow-never``)
+    là đường **nêu đích danh từng file** để lấy `recons/` cho báo cáo — nó in
+    ra cảnh báo, và KHÔNG mở cho `*ddim*`/weight ADM (hai thứ đó vẫn bị chặn
+    vì không có lý do báo cáo nào cần).
     """
     out: list[File] = []
     for raw in spec.replace("\n", ",").split(","):
@@ -947,10 +962,17 @@ def _files_from_paths(spec: str) -> list[File]:
             raise SystemExit(
                 f"[!] --paths chỉ nhận {'/'.join(_KNOWN_SUFFIX)}: {p!r}"
             )
-        why = is_never(p)
+        why = is_never(p, allow=allow_never and _report_ok(p))
         if why:
-            raise SystemExit(f"[!] {p} bị NEVER chặn: {why}")
-        out.append(File(remote=p, local=p, note="chọn tay qua --paths"))
+            raise SystemExit(
+                f"[!] {p} bị NEVER chặn: {why}\n"
+                "    Lấy cho báo cáo (ảnh tái tạo): thêm --allow-never\n"
+                "    hoặc dùng tier `gallery` (bộ ba ảnh gốc/recons/dire, 674 MB)."
+            )
+        if allow_never and is_never(p):
+            print(f"[allow-never] {p} — bỏ qua NEVER theo yêu cầu tường minh")
+        out.append(File(remote=p, local=p, note="chọn tay qua --paths",
+                        allow_never=bool(allow_never and _report_ok(p))))
     if not out:
         raise SystemExit("[!] --paths rỗng")
     return out
@@ -984,7 +1006,7 @@ def _split_present(
 
 
 def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
-             force: bool = False, paths: str = "") -> None:
+             force: bool = False, paths: str = "", allow_never: bool = False) -> None:
     """Ruột của cả ``plan`` và ``main`` — tránh hai bản logic lệch nhau.
 
     ``concurrency`` > 0 ghi đè ``max_containers`` trong policy (clamp [1, 8]).
@@ -996,7 +1018,7 @@ def _execute(tiers: str, max_gb: float, do_fetch: bool, concurrency: int = 0,
 
     if paths.strip():
         # Danh sách tay: bỏ qua tier, nhưng vẫn qua guard dung lượng + NEVER.
-        files = _files_from_paths(paths)
+        files = _files_from_paths(paths, allow_never=allow_never)
         print(f"\n[paths] {len(files)} file chọn tay (bỏ qua tier)")
         _baidu_login()
         sizes = _size_map(files)
@@ -1278,11 +1300,15 @@ def audit(dirs: str = "") -> None:
         for name, size in sorted(listing.items()):
             rel = f"{d}/{name}"
             seen_remote.add(rel)
-            if is_never(rel):
+            # Thứ tự QUAN TRỌNG: file đã được một tier khai báo tường minh
+            # (tier `gallery` mang `recons/` cho báo cáo) thì in ✅ kèm tier,
+            # KHÔNG in ⛔ — nếu không, audit nói "bị chặn" trong khi vừa tải
+            # được nó, và người đọc mất tin vào cả báo cáo.
+            if rel in expected:
+                print(f"    ✅ {_human(size):>10}  {name}   tier={','.join(expected[rel])}")
+            elif is_never(rel):
                 tot_never += size
                 print(f"    ⛔ {_human(size):>10}  {name}   (NEVER)")
-            elif rel in expected:
-                print(f"    ✅ {_human(size):>10}  {name}   tier={','.join(expected[rel])}")
             else:
                 tot_unknown.append(rel)
                 print(f"    ❓ {_human(size):>10}  {name}   KHÔNG có trong manifest")
@@ -1472,13 +1498,13 @@ def probe_pair(
     timeout=1800,
 )
 def plan(tiers: str = POLICY.default_tiers, max_gb: float = POLICY.max_gb,
-         paths: str = "") -> None:
+         paths: str = "", allow_never: bool = False) -> None:
     """In bảng file + size thật từ Baidu. **Không tải gì.**
 
     ``modal run -m dire_modal.download::plan --tiers e2,e4``
     ``modal run -m dire_modal.download::plan --paths a.tar.gz,b.pth``
     """
-    _execute(tiers, max_gb, do_fetch=False, paths=paths)
+    _execute(tiers, max_gb, do_fetch=False, paths=paths, allow_never=allow_never)
 
 
 @app.function(
@@ -1498,6 +1524,7 @@ def main(
     concurrency: int = 0,
     force: bool = False,
     paths: str = "",
+    allow_never: bool = False,
 ) -> None:
     """Lên kế hoạch rồi (tuỳ chọn) tải — tự chạy nhiều vòng tới khi xong.
 
@@ -1527,6 +1554,7 @@ def main(
         concurrency=concurrency,
         force=force,
         paths=paths,
+        allow_never=allow_never,
     )
 
 

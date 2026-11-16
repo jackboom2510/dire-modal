@@ -65,6 +65,16 @@ from .fetchcore import (
 )
 from .manifest import BAIDU_ROOT, POLICY, TIERS, File, expand, is_never, resolve_many
 
+#: Vùng được mở bằng ``--allow-never`` — phải trùng `download.ALLOW_NEVER_AREAS`.
+#: Test `test_allow_never_areas_agree` chặn hai đường lệch nhau.
+ALLOW_NEVER_AREAS = ("recons/",)
+
+
+def _report_ok(remote: str) -> bool:
+    """``remote`` có thuộc vùng được mở cho báo cáo (ảnh tái tạo) không."""
+    low = remote.lower().lstrip("/")
+    return any(low.startswith(area) for area in ALLOW_NEVER_AREAS)
+
 # ---------------------------------------------------------------------------
 # Hằng số
 # ---------------------------------------------------------------------------
@@ -544,6 +554,9 @@ def _build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--baidu-bin", default="", help="đường dẫn tới BaiduPCS-Go")
     ap.add_argument("--no-remote", action="store_true",
                     help="verify/manifest: KHÔNG hỏi Baidu (kiểm bằng gzip -t + size local)")
+    ap.add_argument("--allow-never", action="store_true",
+                    help="cho phép tải CHỈ `recons/` (ảnh tái tạo) cho báo cáo; "
+                         "`*ddim*` và weight ADM vẫn bị chặn")
     ap.add_argument("--no-hash", action="store_true",
                     help="verify: bỏ qua sha256 (nhanh hơn nhiều trên ổ chậm)")
     return ap
@@ -580,7 +593,11 @@ def main(argv: list[str] | None = None) -> int:
     # --- chọn file -----------------------------------------------------------
     unresolved = []
     if paths.strip():
-        files = [File(remote=p.strip(), local=p.strip()) for p in paths.split(",") if p.strip()]
+        files = [
+            File(remote=p.strip(), local=p.strip(),
+                 allow_never=bool(args.allow_never and _report_ok(p.strip())))
+            for p in paths.split(",") if p.strip()
+        ]
         files = [f for f in files if not _never(f)]
     else:
         ents = resolve_many(args.tiers)
@@ -667,7 +684,15 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _never(f: File) -> bool:
-    """``True`` nếu file nằm trong vùng ``NEVER`` (recons/, weight ADM, ...)."""
+    """``True`` nếu file nằm trong vùng ``NEVER`` (recons/, weight ADM, ...).
+
+    ``File.allow_never`` (tier `gallery`, ``--allow-never``) được tôn trọng —
+    nếu không thì đường tải ở máy sẽ chặn đúng thứ đường Modal cho qua, và hai
+    đường lại lệch nhau.
+    """
+    if f.allow_never:
+        print(f"  ↪ {f.remote}: đi qua NEVER (khai báo tường minh, phục vụ báo cáo)")
+        return False
     why = is_never(f.remote)
     if why:
         print(f"  ⛔ NEVER chặn {f.remote}: {why}")

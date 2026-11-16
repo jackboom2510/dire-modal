@@ -277,6 +277,70 @@ Lưu ý dung lượng: Volume tính tiền theo **peak** đã dùng, nên đẩy
 xoá không làm hoá đơn nhỏ đi trong tháng đó. Chỉ đẩy `e2` + checkpoint là đủ cho
 Table 2 headline; `e4`/`e5` thêm khi thật cần ô đó.
 
+### Xem ảnh tái tạo (`recons/`) cho báo cáo — tier `gallery`
+
+Báo cáo cần **ảnh gốc** để chứng minh lớp `0_real` đúng là ảnh thật, và cần
+**ảnh tái tạo** để chứng minh `DIRE = |x − x̂|` là thật chứ không phải một tấm
+map vô nguồn gốc. Ba nhánh đó là triplet trong paper §3.3, nhưng trên Baidu
+chúng **không cùng tập file**.
+
+```bash
+# 9 file · ~674 MB · real + pndm + ldm (3 generator rẻ nhất có đủ bộ ba)
+modal run -m dire_modal.download::main --tiers gallery --mode fetch
+
+# hoặc từ máy (dữ liệu đã có trên ổ/USB) rồi đẩy lên Volume
+python -m dire_modal.local_fetch --tiers gallery --mode fetch
+modal run -m dire_modal.upload::main --tiers gallery --mode push
+```
+
+Xem và **kiểm chứng**:
+
+```bash
+python3 tools/triplet_view.py --raw data/raw --gen pndm --n 4
+python3 tools/triplet_view.py --raw data/raw --gen real --compare-with pndm --check
+```
+
+Lệnh thứ hai kiểm luôn tuyên bố gốc của paper **mà không cần weight ADM**: ảnh
+thật phải có `mean|x − x̂|` **lớn hơn** ảnh do model sinh. Nếu ngược chiều, mọi
+kết luận dựa trên `dire/` phải xem lại.
+
+Panel được ghi vào `docs/media/triplets/` (đã gitignore — đây là ảnh phái sinh
+từ dataset, sinh lại bằng một lệnh).
+
+#### Vì sao `recons/` vẫn nằm trong `NEVER`
+
+`NEVER` nghĩa là **"không tier nào tự động kéo về"**, không phải "file này vô
+dụng cho mọi mục đích". 44 tar `recons/` = 24 GB, trong khi eval chỉ cần `dire/`.
+Mở cả cây là tự tạo đường tiêu tiền nhầm.
+
+Nên ngoại lệ được khai báo **từng file**:
+
+| Đường | Được lấy `recons/`? | Ghi chú |
+|---|---|---|
+| `--tiers gallery` | ✅ 3 generator (real/pndm/ldm) | `File(allow_never=True)`, khai trong `manifest.GALLERY` |
+| `--paths recons/... --allow-never` | ✅ file nêu đích danh | in `[allow-never] <path>` để không ai quên |
+| `--paths recons/...` (không cờ) | ❌ `SystemExit` | giữ nguyên hành vi cũ |
+| `--paths images/...ddim...` + `--allow-never` | ❌ **vẫn chặn** | `ALLOW_NEVER_AREAS` chỉ có `recons/` |
+| `--paths checkpoints/lsun_bedroom.pt` + cờ | ❌ **vẫn chặn** | weight ADM 2.5 GB, không phục vụ báo cáo |
+
+#### Bảng bộ ba — có hai ca tên LỆCH
+
+`manifest.GALLERY_TRIPLETS` là bảng đối chiếu duy nhất (nguồn: audit 2026-10-21):
+
+| generator | `images/` | `recons/` | `dire/` |
+|---|---|---|---|
+| real · pndm · ldm · sdv2 · vqdiffusion · projectedgan | `{gen}` | `{gen}` | `{gen}` |
+| **midjourney** | `midjourney` | `midjourney` | **`midjouney`** (typo gốc) |
+| **stylegan** | **`stylegan_official`** | `stylegan` | `stylegan` |
+| **adm** (headline của paper) | `adm` | **KHÔNG CÓ** | `adm` |
+| ddpm · iddpm | có | **KHÔNG CÓ** | có |
+| sdv1 | `sdv1_new` (khác ảnh?) | **KHÔNG CÓ** | `sdv1` |
+
+⇒ **`adm` không có `recons/`**: muốn 3 panel cho ADM phải tự tính `x̂`
+(weight ADM 2.5 GB + GPU) — đó là FR-2, không phải tier này. Ghép tên bằng vòng
+lặp `{gen}.tar.gz` sẽ trượt đúng hai ca `midjourney`/`stylegan` **một cách im
+lặng** (báo "chưa tải" thay vì "sai tên"), nên bảng là bắt buộc.
+
 ### Tốc độ tải và resume xuyên container
 
 Ba thay đổi, mỗi cái nhắm một chi phí khác nhau:
