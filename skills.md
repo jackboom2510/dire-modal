@@ -6,7 +6,7 @@
 
 ---
 
-## Skill 0 — Tái lập thử nghiệm nhanh nhất (KHÔNG train)
+## Skill 0 — Tái lập thử nghiệm nhanh nhất (dùng checkpoint tác giả, không cần train)
 
 **Khi nào:** cần có con số đầu tiên trên dữ liệu thật, hoặc ai đó hỏi "tái lập
 DIRE thế nào". Đây là đường chính của dự án.

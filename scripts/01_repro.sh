@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-# QUY TRÌNH 1 — TÁI LẬP THỰC NGHIỆM CỦA TÁC GIẢ (không train lại)
+# QUY TRÌNH 1 — TÁI LẬP THỰC NGHIỆM CỦA TÁC GIẢ (dùng checkpoint tác giả)
 # ============================================================================
 # Mục tiêu: tái tạo khối "DIRE (ours)" của **Table 2** trong paper
 # (Wang et al., ICCV 2023 — arXiv:2303.09295v1):
@@ -146,6 +146,6 @@ Số của chúng ta ở:  /ckpt/results/<exp_id>/dire.csv + run.json
 Tải về:             modal volume get dire-ckpt results ./results
 
 Nếu đang chạy DETACH=1:  modal app list · modal app logs <app-id>
-Việc còn treo của quy trình này: xem plan.md (Table 4/5/6 cần TRAIN LẠI nên
-ngoài phạm vi — spec.md N1).
+Việc còn treo của quy trình này: xem plan.md. Table 4/5/6 cần TRAIN LẠI nên
+thuộc FR-8 (đối chiếu trọng số) — xem docs/adr-0004-retrain-for-reconciliation.md.
 EOF

@@ -13,7 +13,7 @@
 | 4. Pack shards | Modal CPU | ~$1–2 | `pack::stats` đếm đủ ảnh mỗi generator |
 | 5. Mirror công khai | Modal CPU + egress | ~$0–1 | `verify_hf` → `mismatch=0, missing=0` |
 | 6. Smoke test | **Kaggle** | **$0** | Notebook chạy 3 step train, loss giảm |
-| 7. **KHÔNG train** — lấy `lsun_adm.pth` | Modal CPU | ~$0.1 | `sha256` ckpt khớp manifest |
+| 7. **Không cần train** — lấy `lsun_adm.pth` | Modal CPU | ~$0.1 | `sha256` ckpt khớp manifest |
 | 8. Eval 15 generator | **Modal CPU** (ResNet50 inference) | ~$0.1 | Bảng ACC 15 dòng, **CỔNG S2 `ACC(adm) ≥ 0.99`** |
 | 9. Gallery + demo | Modal A100 + HF Spaces | ~$0.5 + $0 | Space public trả kết quả thật |
 | **Tổng** | | **≈ $3–6** (bỏ hẳn $8–20 train) | |
@@ -131,8 +131,9 @@ trong khi chỉ có `sdv1_new` / `sdv1_new2`. Nếu chạy `--mode fetch` trư�
 Con số "Tier A ≈ 40–70 GB" từng ghi trong docs là **sai 5.4–9.4 lần**: đó là số
 của cả cây gán nhầm cho Tier A. Tier A cũ (20 file) thực tế **7.42 GB**; mặc
 định mới `e2,e4` là **3.39 GB**. Toàn cây đã audit **61.40 GB**, trong đó
-**47 GB (77%) là dữ liệu train** — bỏ được gần hết vì ràng buộc là *chỉ cải
-thiện, không train lại*.
+**47 GB (77%) là dữ liệu train** — bỏ được gần hết vì đường báo cáo chính chỉ
+*eval checkpoint tác giả*. Chỉ FR-8 (train lại để đối chiếu) mới cần tier `train`
+(4 file / 5.74 GB) — xem `docs/adr-0004-retrain-for-reconciliation.md`.
 
 Chi phí thực tế chủ yếu là **thời gian chờ Baidu** (server chậm); CPU 0.25 core
 ≈ $0.012/giờ → rẻ. `fetch_one` là resumable và idempotent: chạy lại sẽ skip file
@@ -505,7 +506,7 @@ không đếm được. `-1 == -1` là phép so rỗng, và nó đã in ra "Số
 | + cross-domain ImageNet/CelebA-HQ | `--tiers e2,e3,e4` | 46 | 8.24 GB |
 | + ensemble & hiệu chỉnh ngưỡng | `--tiers e2,e3,e4,e5` | 57 | 10.35 GB |
 | + AEROBLADE mọi generator | `--tiers e2,e3,e4,e4x,e5` | 69 | 12.37 GB |
-| Train lại detector từ đầu | `--tiers train` | 4 | 5.74 GB |
+| Train lại để **đối chiếu** trọng số tác giả (FR-8) | `--tiers train` | 4 | 5.74 GB |
 | Train cả ensemble (3 detector nữa) | `--tiers train,trainens` | 7 | 20.34 GB |
 
 `e4 ⊂ e4x` và `expand()` khử trùng lặp theo đường dẫn remote, nên
@@ -629,12 +630,30 @@ python3 tools/free_quota.py --used kaggle=0
 
 ---
 
-## 7. KHÔNG train — dùng checkpoint tác giả
+## 7. KHÔNG cần train — nhưng train lại ĐƯỢC PHÉP để đối chiếu
 
-Ràng buộc dự án (spec.md N1): **chỉ cải thiện, không train lại**. Bước train của
-runbook cũ (`dire_modal.train::main`, ~$8–20, `train.py` vẫn là TODO) **không
-còn nằm trên đường chạy**. Nếu vì lý do mới mà cần train lại thì phải viết ADR
-riêng; xem `src/dire_modal/vendor/` (`train.py`, `utils/trainer.py` của DIRE gốc).
+Đường báo cáo chính dùng **checkpoint tác giả**, không train gì. Bước train của
+runbook cũ (~$8–20, `train.py` vẫn là TODO) **không còn nằm trên đường chạy**.
+
+Từ SPEC-001 v1.1, **N1 đã được nới** (`docs/adr-0004-retrain-for-reconciliation.md`):
+train lại **được phép**, nhưng chỉ ở chế độ **đối chiếu** — giải thích trọng số
+ResNet-50 mà tác giả đã train, bằng cách train lại trên đúng split của họ rồi in
+hai dòng cạnh nhau trên cùng test (`dire` vs `dire_retrained`). Ba điều kiện:
+
+1. Mọi câu "DIRE đạt X%" chỉ nói bằng checkpoint tác giả — retrain không thay thế.
+2. Chọn epoch/ngưỡng chỉ trên `val`; test không chạm.
+3. Báo cáo tách **hai bảng**, mỗi dòng mang `provenance: retrained`.
+
+Chi phí là phần phải nói thẳng: 400 epoch × 80k ảnh ≈ **$32–56 trên A100-80**
+(vượt credit $30), ~**$4–7 trên Vast 4090**, hoặc ~$2.5 cho subset 8k/lớp × 40
+epoch. Vì thế **luôn đo 1 epoch trước** (~$0.1) rồi mới cam kết.
+
+```bash
+modal run -m dire_modal.train::main --detector adm --mode plan   # 0 credit
+```
+
+Vẫn cần đọc `src/dire_modal/vendor/` (`train.py`, `utils/trainer.py` của DIRE gốc)
+khi port.
 
 Thay vào đó chỉ cần đưa `lsun_adm.pth` vào Volume — tier `e2min` đã gồm nó:
 

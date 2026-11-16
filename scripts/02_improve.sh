@@ -2,8 +2,10 @@
 # ============================================================================
 # QUY TRÌNH 2 — CẢI THIỆN (training-free, trên nền checkpoint tác giả)
 # ============================================================================
-# Ràng buộc C3/N1 của spec.md: **không train lại** detector. Nên mọi cải thiện
+# Ràng buộc C3 của spec.md: **cải thiện phải training-free**. Nên mọi cải thiện
 # phải nằm NGOÀI trọng số: hiệu chỉnh, kết hợp điểm, định tuyến, phân tích lỗi.
+# (Train lại chỉ được phép ở chế độ ĐỐI CHIẾU — FR-8/ADR-0004 — và không bao
+#  giờ được tính là "cải thiện", nên không có stage nào ở đây train gì.)
 #
 # Hai nguồn ý tưởng, ghi rõ nguồn để không lẫn "của mình" với "của paper":
 #

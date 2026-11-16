@@ -15,10 +15,11 @@ Ba cách có thể làm, và hai cách bị loại:
 1. **Vẽ đường cong cho đẹp** — bị loại. Đây đúng loại lỗi repo này đã sửa nhiều
    lần: một hình trông như dữ liệu nhưng không phải dữ liệu. Người xem không có
    cách nào phân biệt.
-2. **Train lại đúng 400 epoch như tác giả** — bị loại. Ràng buộc **N1** của dự án
-   là *không train lại*; ngoài ra 400 epoch trên A100 cho một video 4 phút là
-   tiêu tiền sai chỗ, và kết quả vẫn không thể so với paper (thiếu nhiều thứ
-   khác của pipeline tác giả).
+2. **Train lại đúng 400 epoch như tác giả** — bị loại *cho mục đích quay video*.
+   Từ ADR-0004, train lại **đã được phép** ở chế độ đối chiếu (FR-8), nhưng 400
+   epoch trên A100 cho một video 4 phút vẫn là tiêu tiền sai chỗ: video cần **một
+   đường loss thật**, không cần trọng số dùng được. FR-8 giữ nguyên ranh giới của
+   nó (ghi vào `results/`, hai bảng riêng) và không thay thế `demo_train`.
 3. **Train thật, quy mô nhỏ, có nhãn** — chọn cách này.
 
 Một chi tiết kỹ thuật quyết định chi phí: **train ResNet của DIRE không cần

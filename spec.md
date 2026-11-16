@@ -4,7 +4,7 @@
 |---|---|
 | **ID** | SPEC-001 |
 | **Trạng thái** | `draft` — chờ duyệt trước khi code |
-| **Phiên bản** | 1.0 |
+| **Phiên bản** | 1.1 — nới N1: cho phép train lại ở chế độ **đối chiếu** (FR-8), xem [ADR-0004](docs/adr-0004-retrain-for-reconciliation.md) |
 | **Ngày** | 2026-10-24 |
 | **Người viết** | Agent (Arena) |
 | **Tài liệu liên quan** | [AGENT.md](AGENT.md) · [instructions.md](instructions.md) · [plan.md](plan.md) · [skills.md](skills.md) · [docs/runbook-free.md](docs/runbook-free.md) · [docs/adr-0002-iaas.md](docs/adr-0002-iaas.md) |
@@ -35,18 +35,19 @@ nghĩa đường đo đó, và định nghĩa luôn phần **cải thiện** d�
 
 | # | Mục tiêu |
 |---|---|
-| G1 | Tái tạo được bảng eval của DIRE trên checkpoint tác giả, **không train lại** |
+| G1 | Tái tạo được bảng eval của DIRE trên checkpoint tác giả, **không cần train lại** |
 | G2 | Tự tính được DIRE map và chứng minh nó **khớp** với map tác giả phát hành |
 | G3 | Đo được AEROBLADE trên **cùng tập ảnh** để so sánh công bằng |
 | G4 | Định lượng **format bias** — yếu tố làm DIRE sụp trong thực tế |
 | G5 | Một detector kết hợp (training-free) tốt hơn từng cái ở chỗ yếu của nó |
 | G6 | Mọi con số báo cáo đều tái lập được: cùng lệnh, cùng seed, có manifest |
+| G7 | **Giải thích được trọng số ResNet-50 của tác giả**: train lại từ đúng split và siêu tham số của họ, rồi so với checkpoint phát hành |
 
 ## 3. Không phải mục tiêu (non-goals)
 
 | # | Không làm | Lý do |
 |---|---|---|
-| N1 | Train lại detector DIRE | Ràng buộc dự án: **chỉ cải thiện, không train lại**. Nếu sau này cần → ADR riêng |
+| N1 | Dùng trọng số **tự train** để tuyên bố kết quả hay "cải thiện" | Train lại **được phép** nhưng chỉ ở chế độ **đối chiếu** (FR-8): mọi câu "DIRE đạt X%" chỉ được nói bằng checkpoint tác giả. Trọng số tự train không thay `lsun_adm.pth`, không vào bảng Δ của paper, không dùng để chọn ngưỡng cho FR-5. Xem ADR-0004 |
 | N2 | Tái lập benchmark AEROBLADE trên LAION | Ảnh real LAION không phân phối được (bản quyền); xem §5 R4 |
 | N3 | Toàn bộ 200k ảnh rawx/rawxens | 12.1 GB + hàng chục giờ GPU, không cần cho mục tiêu G1–G5 |
 | N4 | Train từ đầu trên GenImage / benchmark ngoài DIRE | Ngoài Tier A |
@@ -93,7 +94,7 @@ số bảng/số trang.
 |---|---|---|
 | C1 | Compute **0đ**, chỉ free tier | Mọi bước phải có `preflight_cost`; không chạy 200k ảnh |
 | C2 | Máy local nhẹ, không train, không giữ dữ liệu gốc | Mọi thứ nặng trên Modal; local chỉ đọc CSV/JSON |
-| C3 | Không train lại detector | "Cải thiện" phải **training-free** (fusion, calibration, routing) |
+| C3 | **Cải thiện** phải **training-free** | FR-2…FR-6 không được dùng trọng số tự train. Train lại chỉ để **đối chiếu** với checkpoint tác giả (FR-8) và không bao giờ được tính là "cải thiện" |
 | C4 | Không phân phối lại ảnh LAION | Dùng ảnh real của bộ DIRE, không dùng LAION |
 | C5 | ~$30 credit Modal | Trần $5/lần chạy đã có; tổng spec phải < $20 |
 | C6 | Tái lập được | Mọi báo cáo kèm `git_sha`, seed, phiên bản thư viện |
@@ -203,11 +204,53 @@ tái tạo được map của tác giả.
 - **AC-7.2** CSV đúng schema §10, không có ô rỗng ở cột metric.
 - **AC-7.3** Mỗi con số trong báo cáo trỏ được về một dòng CSV.
 
+### FR-8 — Train lại để ĐỐI CHIẾU trọng số tác giả (không phải để cải thiện)
+
+Mục đích **duy nhất**: trả lời được câu "trọng số `lsun_adm.pth` mà tác giả phát
+hành có tái tạo được không, và nếu lệch thì lệch ở đâu". Đây là phép **giải
+thích**, không phải phép chứng minh ưu thế.
+
+- **Given** tier `train` (4 file / 5.74 GB): `dire/train/lsun_bedroom/{real,adm}`
+  và `dire/val/lsun_bedroom/{real,adm}`
+  **When** train ResNet-50 với **đúng** siêu tham số trong §5 F1 (1 logit +
+  `BCEWithLogitsLoss`, batch 64, Adam lr 1e-4 β1 0.9, resize 256 → crop 224,
+  hflip 0,5, seed 3407, 400 epoch, earlystop 5 kèm `lr/10`)
+  **Then** ghi `run.json` + `loss_log.json` + checkpoint vào
+  `/ckpt/results/<exp_id>/` với `detector=dire_retrained`, rồi eval trên **cùng**
+  test set của tác giả.
+- **Đầu vào là DIRE map đã phát hành**, không phải ảnh gốc ⇒ **không** cần
+  `compute_dire`, **không** cần weight ADM `lsun_bedroom.pt`, **không** phụ
+  thuộc FR-2. Đây là lý do FR-8 rẻ hơn nhiều so với "tự tính DIRE rồi train".
+- **AC-8.1** Tiền xử lý và nhãn dùng lại **chính** `eval.preprocess` /
+  `eval.label_of` — không có bản sao thứ hai (cùng nguyên tắc với `demo_train`).
+- **AC-8.2** Chọn epoch/ngưỡng **chỉ** trên `val`. Test không được chạm trong
+  lúc train hay chọn epoch; đây là điều kiện để bảng so sánh có nghĩa.
+- **AC-8.3** Báo cáo phải in **hai dòng cạnh nhau trên cùng một test set**:
+  `dire` (checkpoint tác giả) và `dire_retrained` (của ta), cùng schema §10.1.
+  Không được chỉ in một dòng.
+- **AC-8.4** Nếu `|ΔACC| > 2` điểm ở cột `adm` (detector mạnh nhất), kết luận
+  **bắt buộc** là "retrain của chúng tôi chưa khớp checkpoint tác giả", kèm
+  nguyên nhân đã kiểm (epoch dừng sớm, seed, phiên bản torch, tar thiếu ảnh).
+  **Không** được thay số của paper bằng số retrain.
+- **AC-8.5** Mọi artefact mang `provenance: "retrained"` + `git_sha` + seed +
+  số epoch thực tế + epoch early-stop. `report.py` phải **tách** bảng retrain
+  khỏi bảng tái lập paper — hai bảng, hai tiêu đề.
+- **AC-8.6** Preflight trước khi train; trần **$5/lần chạy** (NFR-2). Vượt trần
+  thì dừng và ghi lại đã tới epoch nào.
+- **AC-8.7** Train trên **subset** (ví dụ 8k ảnh/lớp × 40 epoch) vẫn hợp lệ để
+  giải thích *độ nhạy* của detector, nhưng mọi số mang nhãn `subset` và **không**
+  được gọi là "tái lập trọng số tác giả".
+
+> **Ranh giới cứng:** FR-8 là nguồn số cho câu "trọng số này học được gì", không
+> phải nguồn số cho câu "DIRE đạt X%". Câu thứ hai chỉ trả lời bằng checkpoint
+> tác giả (FR-1). Viết lẫn hai thứ này là cách nhanh nhất để một báo cáo trông
+> như tái lập thành công trong khi thực ra đang tự khen mô hình của mình.
+
 ## 8. Yêu cầu phi chức năng
 
 | ID | Yêu cầu | Ngưỡng |
 |---|---|---|
-| NFR-1 | Chi phí toàn spec | ≤ **$20** credit (C5), mỗi lần chạy có preflight |
+| NFR-1 | Chi phí toàn spec **trừ FR-8** | ≤ **$20** credit (C5), mỗi lần chạy có preflight. FR-8 (train lại đối chiếu) nằm **ngoài** ngưỡng này và cần quyết định riêng — xem §12.1 |
 | NFR-2 | Không lần chạy nào vượt | $5 (guard hiện có) |
 | NFR-3 | Thời gian một eval DIRE đầy đủ | ≤ 30 phút trên 1 GPU |
 | NFR-4 | Tất định | eval 2 lần cho cùng kết quả; nếu có randomness phải seed |
@@ -270,7 +313,8 @@ bash scripts/01_repro.sh            # e2,ckpts → cả 32 ô của Table 2 (m�
 | `e2` | 17 / 1.94 | 7.4 | **hàng ADM** (8 cột của Table 2) |
 | **`e2,ckpts`** | **22 / 3.25** | **12.4** | **32 ô của Table 2** (4 detector × 8 generator) |
 | `+ 3 file qua `--paths`` | +0.14 | +0.5 | Table 3 (cross-dataset ImageNet) |
-| Table 4/5/6, hàng baseline `CNNDet*`/`Patchfor*`/`F3Net*` | — | — | ❌ cần **train lại** ⇒ ngoài phạm vi (N1) |
+| `train` (FR-8) | 4 / 5.74 | — | ❌ không phủ bảng nào của paper — dùng để **đối chiếu** trọng số tác giả |
+| Table 4/5/6, hàng baseline `CNNDet*`/`Patchfor*`/`F3Net*` | — | — | ⚠ **mở khoá bởi FR-8** (vốn cần train lại trên subset ADM). Làm sau khi FR-8 chạy được, và luôn ghi nhãn "retrain của chúng tôi" |
 
 Số tham chiếu của Table 2 nằm ở `src/dire_modal/paper_table2.tsv` (kèm nguồn:
 arXiv:2303.09295v1, Table 2, trang 7). `eval::report` in Δ từng ô và đếm số ô
@@ -303,7 +347,7 @@ một phép so chưa được kiểm.
 | `compute_dire.py` | chưa chạy | FR-2 sửa tới khi AC-2.1/2.2 đạt |
 | `aero.py` | **chưa có** | Bọc AEROBLADE: nạp AE, tính khoảng cách, trả điểm thô |
 | `fusion.py` | **chưa có** | Rank-normalise + chọn trọng số trên val |
-| `train.py` | `NotImplementedError` | **Ngoài phạm vi** (N1) — chỉ ghi chú |
+| `train.py` | `NotImplementedError` | **FR-8**: đọc tar `/raw` (không đọc `/shards`), `--mode plan` mặc định, resume từng epoch, ghi `run.json` + `loss_log.json`. **Không** phải đường báo cáo chính |
 | `vendor/utils/datasets.py` | chưa vendor | **Không cần nữa**: `eval.py` tự dựng pipeline 256→224→Normalize và đọc tar trực tiếp |
 
 > Ghi chú: `vendor/utils/eval.py` tính ACC/AP/R_ACC/F_ACC nhưng **không** có
@@ -328,7 +372,7 @@ experiment_id,detector,generator,split,transform,n_real,n_fake,acc,ap,tpr_at_5fp
 
 | Cột | Kiểu | Ghi chú |
 |---|---|---|
-| `detector` | str | `dire` \| `aeroblade` \| `fusion` |
+| `detector` | str | `dire` \| `dire_retrained` \| `aeroblade` \| `fusion` — `dire_retrained` **luôn** nằm ở bảng riêng, không trộn với `dire` |
 | `generator` | str | tên như trên Baidu, **giữ nguyên typo** (`midjouney`) |
 | `split` | str | `test` \| `val` |
 | `transform` | str | `clean` \| `jpeg_90` \| … \| `noise_0.25` |
@@ -362,6 +406,7 @@ Mỗi yêu cầu ứng với **một stage** của hai quy trình trong `scripts
 | FR-5 | `bash scripts/02_improve.sh --stage fusion` |
 | FR-6 | `bash scripts/02_improve.sh --stage robustness` |
 | FR-7 | tự động: mỗi lần `eval::main` ghi `run.json`; `eval::report` gộp lại |
+| FR-8 | `modal run -m dire_modal.train::main --detector adm --mode plan` (chưa nối vào `scripts/` — stage `train` là việc của PR sau) |
 
 Gọi trực tiếp entrypoint cũng được:
 
@@ -371,6 +416,8 @@ modal run -m dire_modal.eval::report                      # Δ so với Table 2
 modal run -m dire_modal.compute_dire::equivalence --n 100 --exp-id fr2
 modal run -m dire_modal.aero::main --tiers e4 --exp-id fr3
 modal run -m dire_modal.fusion::fit --val-tier e5 --exp-id fr5
+modal run -m dire_modal.train::main --detector adm --mode plan        # FR-8: 0 credit
+modal run -m dire_modal.train::main --detector adm --mode run --exp-id fr8_adm
 ```
 
 > Các entrypoint `equivalence`, `aero::main`, `fusion::*` **chưa tồn tại** — đó
@@ -389,6 +436,7 @@ modal run -m dire_modal.fusion::fit --val-tier e5 --exp-id fr5
 | **S5** | FR-5 không rò test | test: trọng số chỉ phụ thuộc val | pass |
 | **S6** | FR-7 tái lập | chạy lại 1 eval → cùng CSV | diff = 0 |
 | **S7** | Tái lập Table 2 | `bash scripts/01_repro.sh --stage report` → 32 ô có Δ | \|ΔACC\| ≤ 0.5 điểm ở mọi ô |
+| **S8** | Retrain đối chiếu (FR-8) | 2 dòng `dire` / `dire_retrained` trên cùng test, cột `adm` | \|ΔACC\| ≤ 2 điểm, hoặc kết luận "chưa khớp" + nguyên nhân |
 
 Test code phải viết **trước** phần lớn nhất của spec: schema CSV (§10.1) và hợp
 đồng CLI (§10.3) kiểm được mà chưa cần GPU.
@@ -403,11 +451,34 @@ Test code phải viết **trước** phần lớn nhất của spec: schema CSV 
 | **M3** | Bọc AEROBLADE → **FR-3** | ~$2 | S4 |
 | **M4** | Format bias (FR-4) + fusion (FR-5) | ~$5 | S5 |
 | **M5** | Robustness (FR-6) + báo cáo tổng | ~$8 | — |
+| **M6** | **FR-8** — train lại để đối chiếu trọng số tác giả (chỉ khi cần giải thích) | **$4–56 tuỳ GPU/early-stop** (xem §12.1) | S8 |
 | Tái lập | Table 2 (4 detector × 8 generator) — **không nằm trong M0–M5**, chỉ là FR-1 chạy 4 lần | ~$0.2 (CPU) | **S2, S7** |
-| **Tổng** | | **≈ $17** | < C5 ($30) |
+| **Tổng** | | **≈ $17** (+ M6 nếu làm) | < C5 ($30) |
 
 Thứ tự **không đổi được**: M1 trước M2 (cần eval để đo), M2 trước M4 (FR-2 chặn
-FR-4), M1+M3 trước M4 (fusion cần hai điểm).
+FR-4), M1+M3 trước M4 (fusion cần hai điểm). **M6 độc lập** với M2–M5: nó không
+cần `compute_dire` (đầu vào là DIRE map phát hành), nhưng **cần M1** vì muốn so
+thì phải eval được cả hai checkpoint trên cùng test.
+
+### 12.1 FR-8 tốn bao nhiêu — nói thẳng
+
+Con số dưới đây là **ước tính từ paper + code tác giả** (80k ảnh train, batch 64 ⇒
+1 250 step/epoch, 400 epoch = 500k step), **chưa đo**. Đo thật trước khi cam kết.
+
+| Kịch bản | GPU | Thời gian | Chi phí |
+|---|---|---|---|
+| Đủ 400 epoch | Modal A100-80 ($2.50/h) | 13–22 h | **$32–56** |
+| Đủ 400 epoch | Vast/RunPod 4090 ($0.36/h) | 11–19 h | **~$4–7** |
+| Early-stop 40–80 epoch | A100-80 | 1.3–4.4 h | $3–11 |
+| Subset 8k/lớp × 40 epoch | A100-80 | ~1 h | ~$2.5 |
+| 1 epoch để đo `sec/epoch` | bất kỳ | 2–3 phút | **~$0.1** |
+
+Hệ quả lên ngân sách: **M6 KHÔNG nằm trong NFR-1 ($20)**. Nếu làm đủ 400 epoch
+trên Modal A100 thì một mình M6 đã vượt C5 ($30). Vì thế thứ tự bắt buộc:
+
+1. `--mode plan` (0 credit) → in cấu hình + ước tính.
+2. Train **1 epoch** để lấy `sec/epoch` thật (~$0.1).
+3. Từ số đo đó quyết định: early-stop trên Modal, hay subset, hay thuê GPU ngoài.
 
 ## 13. Rủi ro
 
@@ -420,6 +491,9 @@ FR-4), M1+M3 trước M4 (fusion cần hai điểm).
 | R5 | Generator `adm` khiến AEROBLADE sụp (không phải LDM) | **chắc chắn** | người đọc hiểu nhầm | AC-3.4: ghi rõ đây là kỳ vọng, không phải lỗi |
 | R6 | Credit cạn giữa M4 | trung bình | dừng giữa chừng | mỗi mốc là một lần chạy độc lập, có CSV riêng |
 | R7 | Dữ liệu test có generator chỉ 130 B (rỗng trong dataset gốc) | đã biết | eval sai | `NEVER` đã loại; AC-1.2 bắt `n_fake=0` |
+| R8 | Retrain không khớp checkpoint tác giả (khác torch/cuDNN, early-stop, tar thiếu ảnh) | **cao** | dễ bị đọc thành "paper sai" | AC-8.3/8.4: in hai dòng cạnh nhau, nếu lệch > 2 điểm thì kết luận là retrain chưa khớp + nêu nguyên nhân đã kiểm |
+| R9 | Retrain bị dùng làm "số của dự án" trong báo cáo | trung bình | trộn hai loại bằng chứng | `detector=dire_retrained` + `provenance` trong CSV/`run.json`; `report.py` tách bảng (AC-8.5) |
+| R10 | Chi phí train vượt credit ($32–56 cho 1 detector/400 epoch) | **cao** | cạn credit trước M4 | bắt buộc đo 1 epoch trước; trần $5/lần chạy; xét GPU ngoài Modal (ADR-0004) |
 
 ## 14. Câu hỏi mở
 

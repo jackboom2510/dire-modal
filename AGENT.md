@@ -11,11 +11,15 @@
 Pipeline tính **DIRE** (Diffusion Reconstruction Error) để phát hiện ảnh do
 diffusion model sinh ra, chạy trên **Modal**, dữ liệu tải từ **Baidu Netdisk**.
 
-Đường chạy đã chốt: **eval checkpoint `lsun_adm.pth` của tác giả, KHÔNG train
+Đường chạy đã chốt: **eval checkpoint `lsun_adm.pth` của tác giả, KHÔNG cần train
 lại ResNet50** (`modal run -m dire_modal.download::main --tiers e2min --mode fetch`
 → `modal run -m dire_modal.eval::main --tiers e2min`). Mọi hướng dẫn trong repo
-phải bám theo đường này; `train.py` + `train.py` là tham chiếu,
-không phải đường chính — `scripts/` cố ý **không** có script train.
+phải bám theo đường này.
+
+Ngoại lệ **hẹp và có kiểm soát**: `train.py` được phép train lại để **đối chiếu**
+trọng số tác giả (spec.md FR-8, ADR-0004), và `demo_train.py` train quy mô demo
+để quay video. Cả hai **không phải** nguồn số của báo cáo — `scripts/` cố ý
+**không** có script train.
 
 Ràng buộc chi phối mọi quyết định: **ngân sách compute 0đ, chỉ free tier**.
 Máy local là máy nhẹ — chỉ điều khiển và verify, **không** train, **không** giữ
