@@ -1,0 +1,3 @@
+# sha256 đã ghim cho đường from-scratch (tools/scratch_repro.sh --stage fetch)
+# cột: label\t byte\t sha256\t đường dẫn local
+# Dòng được ghi tự động lần tải đầu; commit lại để lần sau lệch là dừng.

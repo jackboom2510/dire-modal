@@ -83,6 +83,7 @@ một bước trong dãy 00…10 như trước. Chi tiết: [`scripts/README.md`
 |---|---|---|---|
 | **1 — Chấm lại** | "Đường đo của mình có ra đúng số paper trên cùng đặc trưng không?" (R0) | `scripts/01_repro.sh` | ~$0.2 (CPU) |
 | **2 — Cải thiện** | "Training-free, làm tốt hơn DIRE được không?" | `scripts/02_improve.sh` | ~$0–20 theo FR |
+| **3 — Từ đầu** | "Không dùng map/checkpoint tác giả, dựng lại được không?" (R1+R2+R3) | `tools/scratch_repro.sh` | < 1 GPU-giờ / 2 000 ảnh |
 
 ### Quy trình 1 — chấm lại Table 2 của paper (R0)
 
@@ -166,6 +167,7 @@ Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.m
 | Tài liệu | Nội dung |
 |---|---|
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
+| [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
 | [`docs/iaas-options.md`](docs/iaas-options.md) | So sánh ~16 nền tảng IaaS × 28 tiêu chí, ánh xạ workload, decision tree, 10 cái bẫy |
 | [`docs/storage-comparison.md`](docs/storage-comparison.md) | Modal Volume vs R2 vs Local vs Kaggle/HF — 18 tiêu chí, điểm hoà vốn, quy tắc ngưỡng |
 | [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |
