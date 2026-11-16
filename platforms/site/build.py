@@ -83,6 +83,9 @@ STATUS = [
      "note": "code + hướng dẫn; chờ checkpoint & gallery", "ref": "platforms/hf-spaces"},
     {"name": "Video giải thích (manim)", "state": "run",
      "note": "5 scene + kế hoạch 8 chương; **chưa render**", "ref": "tools/manim"},
+    {"name": "Local CLI + wrapper Modal (FR-9)", "state": "done",
+     "note": "`dire detect/batch/serve` chạy không cần Modal; `dire_modal.api` là wrapper. "
+             "Cùng lõi `dire_core` ⇒ điểm số khớp (cổng S9)", "ref": "adr-0005"},
     {"name": "Train lại detector (FR-8)", "state": "todo",
      "note": "**chỉ để đối chiếu** trọng số tác giả; KHÔNG dùng làm số của paper. "
              "400 epoch ước $32–56 ⇒ phải đo 1 epoch trước", "ref": "spec.md FR-8"},

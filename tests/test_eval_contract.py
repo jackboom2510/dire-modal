@@ -28,6 +28,20 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 
 
+def _restore_pil(prev):
+    """Trả ``sys.modules['PIL']`` về trạng thái trước test.
+
+    Vì sao không dùng ``setdefault``: nếu một test khác (hoặc plugin) đã import
+    PIL thật thì ``setdefault`` là no-op ⇒ ``score_pair`` mở ảnh giả bằng PIL
+    thật, mọi ảnh thành ``skipped``, test đỏ với ``n_real == 0``. Stub phải ép,
+    không phải "thử xem".
+    """
+    if prev is None:
+        sys.modules.pop("PIL", None)
+    else:
+        sys.modules["PIL"] = prev
+
+
 def _install_stub():
     """Stub Modal: decorator trả OBJECT, không trả hàm — giống Modal thật.
 
@@ -262,19 +276,24 @@ def test_preprocess_constants_match_author():
 def test_preprocess_includes_normalize():
     """`demo.py` của tác giả THIẾU Normalize ⇒ điểm demo lệch điểm test.
 
-    Test đọc AST của hàm `preprocess` để chắc nó gọi `Normalize` và `CenterCrop`
-    — không chỉ tin vào hằng số.
+    Từ khi tách `dire_core`, pipeline nằm ở **một** chỗ duy nhất:
+    `src/dire_core/preprocess.py`. Test đọc AST của hàm `preprocess` ở đó để chắc
+    nó gọi đủ 4 bước — không chỉ tin vào hằng số. `tests/test_core_parity.py`
+    kiểm thêm rằng `eval.py` KHÔNG có bản sao thứ hai.
     """
     import ast
 
-    src = (SRC / "dire_modal" / "eval.py").read_text(encoding="utf-8")
+    src = (SRC / "dire_core" / "preprocess.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "preprocess")
-    names = {
-        n.attr for n in ast.walk(fn) if isinstance(n, ast.Attribute)
-    }
+    # 4 bước nằm trong `build_transform`; `preprocess` phải gọi nó.
+    build = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "build_transform")
+    names = {n.attr for n in ast.walk(build) if isinstance(n, ast.Attribute)}
     for need in ("Resize", "CenterCrop", "ToTensor", "Normalize"):
-        assert need in names, f"preprocess thiếu {need}"
+        assert need in names, f"build_transform thiếu {need}"
+    # và `preprocess` phải thật sự dùng `build_transform`
+    called = {n.func.id for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    assert "build_transform" in called, "preprocess không gọi build_transform"
 
 
 def test_eval_reads_raw_tars_not_shards():
@@ -464,11 +483,12 @@ def test_score_pair_assigns_labels_from_each_archive():
     ev.preprocess = preprocess
     torch, model = _fake_torch()
     try:
-        sys.modules.setdefault("PIL", _fake_pil())
+        _prev_pil = sys.modules.get("PIL")
+        sys.modules["PIL"] = _fake_pil()
         r = ev.score_pair(model, real, fake, torch, None, "cpu", batch_size=1)
     finally:
         ev.preprocess = orig
-        sys.modules.pop("PIL", None)
+        _restore_pil(_prev_pil)
 
     assert r["n_real"] == 2 and r["n_fake"] == 2, r
     assert r["acc"] == 1.0, r
@@ -499,11 +519,12 @@ def test_score_pair_counts_unreadable_images_instead_of_crashing():
 
     torch, model = _fake_torch({0.0: 2.2})
     try:
-        sys.modules.setdefault("PIL", _fake_pil())
+        _prev_pil = sys.modules.get("PIL")
+        sys.modules["PIL"] = _fake_pil()
         r = ev.score_pair(model, real, fake, torch, None, "cpu", batch_size=8)
     finally:
         ev.preprocess = orig
-        sys.modules.pop("PIL", None)
+        _restore_pil(_prev_pil)
 
     assert r["skipped"] == 1, r
     assert r["n_real"] == 1, "ảnh hỏng không được tính là mẫu real"
@@ -535,11 +556,12 @@ def test_score_pair_honours_limit_budget():
 
     torch, model = _fake_torch({0.0: 0.0})
     try:
-        sys.modules.setdefault("PIL", _fake_pil())
+        _prev_pil = sys.modules.get("PIL")
+        sys.modules["PIL"] = _fake_pil()
         r = ev.score_pair(model, real, fake, torch, None, "cpu", batch_size=4, limit=2)
     finally:
         ev.preprocess = orig
-        sys.modules.pop("PIL", None)
+        _restore_pil(_prev_pil)
 
     assert r["n_real"] == 2 and r["n_fake"] == 2, r
 

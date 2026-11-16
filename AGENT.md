@@ -22,14 +22,27 @@ trọng số tác giả (spec.md FR-8, ADR-0004), và `demo_train.py` train quy 
 **không** có script train.
 
 Ràng buộc chi phối mọi quyết định: **ngân sách compute 0đ, chỉ free tier**.
-Máy local là máy nhẹ — chỉ điều khiển và verify, **không** train, **không** giữ
-bản dữ liệu gốc. Vì vậy mọi thứ nặng chạy trên Modal, và mọi thiết kế phải trả
-lời được "cái này tốn bao nhiêu credit".
+
+**Máy local chạy được thật** (từ ADR-0005): `dire detect/batch/serve` và eval 32 ô
+trên CPU, cùng một lõi với đường cloud. Không cần `modal` để import logic.
+
+| Nơi | Làm gì | Không làm gì |
+|---|---|---|
+| **Local** | eval CPU, `dire detect/batch`, sửa `compute_dire`/`train.py` (vòng lặp 20 s), batch lớn, tự tính DIRE 200k ảnh | thuê GPU, public endpoint, chạy song song nhiều job |
+| **Modal** | job GPU dài, `.map()` nhiều container, wrapper SaaS, demo | giữ logic (chỉ được là wrapper) |
+| **HF Spaces** | mặt tiền công khai, $0 | GPU |
+
+Ba lớp: `dire_core` (thuần) ← `dire_local` · `dire_modal`.
+Quy tắc cứng: **`dire_core` không được `import modal`**, và không ai được viết
+bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` giữ việc đó).
 
 ## Bản đồ repo
 
 | Đường dẫn | Nội dung |
 |---|---|
+| `src/dire_core/` | **Lõi thuần** — tiền xử lý, đọc checkpoint, `prob_fake`, nhãn, vòng lặp batch. Không import `modal`/`torch` ở tầng module |
+| `src/dire_local/` | Chạy ở máy nhà: `dire info|detect|batch|serve` + FastAPI (`server.py`) |
+| `src/dire_modal/api.py` | Wrapper SaaS: `/v1/detect`, `/healthz`, `max_containers=2`, weight nhúng image |
 | `src/dire_modal/download.py` | Tải Baidu → Volume `/raw`. Phần lớn nhất, nhiều cạm bẫy nhất. Có `--paths` (tải đúng danh sách file), **tự lặp vòng 20 h**, `from_hf` (kéo từ mirror HF) |
 | `src/dire_modal/manifest.py` | Inventory file + `Policy` + `load_policy()` |
 | `src/dire_modal/tiers.yaml` | **Nguồn sự thật của policy.** Không phải `configs/tiers.yaml` |

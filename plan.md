@@ -13,6 +13,10 @@ Phạm vi đã chốt: **Tier A** — eval trên checkpoint có sẵn. 47 GB (77
 train chỉ cần khi làm **FR-8** (train lại để đối chiếu trọng số tác giả —
 `docs/adr-0004-retrain-for-reconciliation.md`), không cần cho đường báo cáo chính.
 
+**Kiến trúc (ADR-0005):** `dire_core` (lõi thuần) ← `dire_local` (CLI/API ở máy) ·
+`dire_modal` (wrapper). Máy local chạy được **thật** — eval CPU, `dire detect/batch`,
+vòng lặp sửa `compute_dire` 20 s thay vì 5 phút/image.
+
 ## Đường chạy hiện tại (chốt 2026-10-25)
 
 Không train ResNet50. Nạp `lsun_adm.pth` của tác giả rồi eval:
@@ -155,6 +159,18 @@ viết xong một cái thì **xoá khỏi danh sách** — test sẽ đỏ nếu
 
 **Xong khi:** `pytest tests/ -q` xanh với test mới, và mỗi dòng `results/*.csv`
 truy được về một `run.json`.
+
+### 7a. ✅ Tách lõi local ↔ cloud (FR-9, ADR-0005)
+
+`dire_core` (thuần) · `dire_local` (CLI `dire` + FastAPI) · `dire_modal.api`
+(wrapper `/v1/detect`, `/healthz`). Trước đó **không cài `modal` thì không import
+được cả phần logic**; nay `pip install -e .` + `dire detect` chạy trên máy nhà.
+
+Kèm theo: `scripts/check.sh` dò `.venv/Scripts/python.exe` (Windows) thay vì
+hardcode `.venv/bin/python`, và ép `PYTHONIOENCODING=utf-8` để hết lỗi cp1252.
+
+**Còn lại của hướng này (không chặn gì):** S2 batch async (`/v1/jobs`), mặt tiền
+HF Spaces gọi API, rate limit theo key.
 
 ### 7b. Tái lập Table 2 — quy trình đã xong, SỐ thì chưa
 

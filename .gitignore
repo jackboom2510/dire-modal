@@ -31,3 +31,8 @@ docs/media/*.mp4
 # Panel triplet sinh bởi tools/triplet_view.py — dữ liệu phái sinh từ dataset,
 # sinh lại được bằng một lệnh, và không nên commit ảnh của dataset gốc.
 docs/media/triplets/
+
+# Build artefact của `pip install -e .` (sinh lại được) — không commit
+*.egg-info/
+build/
+dist/

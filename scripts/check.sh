@@ -35,28 +35,46 @@ if [ "${1:-}" = "--recreate" ]; then
   rm -rf "$VENV"
 fi
 
-if [ ! -x "$VENV/bin/python" ]; then
+# venv trên Windows đặt binary ở `Scripts/`, KHÔNG phải `bin/` — bản cũ hardcode
+# `.venv/bin/python` nên CỔNG 0 không bao giờ chạy được trên Git Bash, dù README
+# ghi "chạy trước mọi lệnh khác". Dò cả hai để một script chạy ở cả hai hệ.
+if [ -x "$VENV/Scripts/python.exe" ]; then
+  PY="$VENV/Scripts/python.exe"; PIP="$VENV/Scripts/pip.exe"
+elif [ -x "$VENV/bin/python" ]; then
+  PY="$VENV/bin/python"; PIP="$VENV/bin/pip"
+else
   echo "[i] tạo venv tại $VENV"
-  python3 -m venv "$VENV"
+  if command -v py >/dev/null 2>&1; then py -3 -m venv "$VENV"; else python3 -m venv "$VENV"; fi
+  if [ -x "$VENV/Scripts/python.exe" ]; then
+    PY="$VENV/Scripts/python.exe"; PIP="$VENV/Scripts/pip.exe"
+  else
+    PY="$VENV/bin/python"; PIP="$VENV/bin/pip"
+  fi
 fi
 
+# In tiếng Việt trên console cp1252 (Windows mặc định) sẽ nổ `UnicodeEncodeError`
+# giữa lúc chạy test. Ép UTF-8 cho mọi tiến trình con.
+export PYTHONIOENCODING=utf-8
+
 echo "[i] cài phụ thuộc dev (modal THẬT, không stub)"
-"$VENV/bin/pip" -q install -r requirements-dev.txt
+"$PIP" -q install -r requirements-dev.txt
+"$PIP" -q install -e . 2>/dev/null || echo "[i] bỏ qua 'pip install -e .' (không bắt buộc để test)"
 
 echo
 echo "[1/3] import bằng modal thật"
-"$VENV/bin/python" -m pytest tests/test_real_modal_import.py -q
+"$PY" -m pytest tests/test_real_modal_import.py -q
 
 echo
 echo "[2/3] toàn bộ test (stub + thật)"
-"$VENV/bin/python" -m pytest tests/ -q
+"$PY" -m pytest tests/ -q
 
 echo
 echo "[3/3] pyflakes trên code đã sửa"
-"$VENV/bin/python" -m pyflakes src/dire_modal/compute_dire.py tests/ || {
+"$PY" -m pyflakes src/dire_core src/dire_local src/dire_modal tests/ || {
   echo "[!] pyflakes báo lỗi — xem ở trên"; exit 1; }
 
 echo
 echo "✅ CỔNG 0 đạt — repo import được bằng Modal thật, test xanh."
+echo "   Chạy trên máy nhà (không Modal):  dire info && dire detect anh.jpg --weights <ckpt>"
 echo "   Quy trình 1 (tái lập paper):  bash scripts/01_repro.sh --quick"
 echo "   Quy trình 2 (cải thiện):      bash scripts/02_improve.sh --stage plan"

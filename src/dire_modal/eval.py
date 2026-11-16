@@ -32,24 +32,34 @@ CSV để một lần chạy không thể lẫn với lần chạy khác.
 import csv
 import datetime
 import json
-import math as _math
 import os
 import tarfile
 from pathlib import Path
 
+# Toàn bộ logic quyết định CON SỐ nằm ở `dire_core` — module THUẦN, không cần
+# Modal. `eval.py` chỉ còn phần phụ thuộc hạ tầng (Volume, .app.function, đọc
+# tar trong /raw). Nhờ vậy CLI ở máy nhà và eval trên Modal không thể lệch nhau
+# về tiền xử lý / nhãn / cách lấy P(fake).
+from dire_core import (
+    CROP,
+    FAKE,
+    MEAN,
+    PREPROC,
+    REAL,
+    RESIZE,
+    STD,
+    fc_out_features as _core_fc_out_features,
+    label_of as _core_label_of,
+    preprocess as _core_preprocess,
+    prob_fake as _core_prob_fake,
+)
+from dire_core.detector import load_detector as _core_load_detector
+
 from .common import app, cpu_image, gpu_image, vol_ckpt, vol_raw
 
-# Định danh pipeline tiền xử lý — ghi vào CSV + run.json để so sánh được.
-PREPROC = "resize256_centercrop224_normalize"
-
-RESIZE = 256
-CROP = 224
-# Hằng số ImageNet, đúng như `utils/datasets.py` gốc.
-MEAN = (0.485, 0.456, 0.406)
-STD = (0.229, 0.224, 0.225)
-
-# Nhãn: dataset DIRE dùng hai lớp `0_real` / `1_fake` (mode binary của ImageFolder).
-REAL, FAKE = 0, 1
+# Các hằng số dưới đây được tái xuất để tên cũ (`ev.RESIZE`, `ev.MEAN`, …) tiếp
+# tục dùng được trong test và trong `demo_train`. Nguồn thật là `dire_core`.
+__all__ = ["CROP", "FAKE", "MEAN", "PREPROC", "REAL", "RESIZE", "STD"]
 
 # Ngưỡng ACC. Giữ 0.5 cho khớp `accuracy_score(y_true, y_pred > 0.5)` của tác giả;
 # ngưỡng hiệu chỉnh trên val là việc của FR-5, không phải ở đây.
@@ -205,20 +215,12 @@ def metrics(y_true: list[int], y_score: list[float]) -> dict:
 # Đọc dữ liệu
 # ============================================================================
 def label_of(member_name: str, archive_name: str = "") -> int:
-    """Nhãn của một member trong tar.
+    """Nhãn của một member trong tar — xem :func:`dire_core.labels.label_of`.
 
-    Ưu tiên cấu trúc ``0_real``/``1_fake`` bên trong member (đó là convention
-    ImageFolder của dataset DIRE). Không thấy thì đoán theo TÊN ARCHIVE — vì một
-    tar một-generator thường chỉ có ảnh giả trong một thư mục.
+    Giữ tên này ở đây vì ``score_pair`` và nhiều test đã dùng nó; logic nằm
+    trong ``dire_core`` để CLI local không thể lệch.
     """
-    low = member_name.replace("\\", "/").lower()
-    if "0_real" in low or "/real/" in low or low.startswith("real/"):
-        return REAL
-    if "1_fake" in low or "/fake/" in low or low.startswith("fake/"):
-        return FAKE
-    base = Path(archive_name).name.lower()
-    return REAL if base.startswith("real") else FAKE
-
+    return _core_label_of(member_name, archive_name)
 
 def iter_images(archive: Path):
     """Yield ``(member_name, bytes)`` cho từng file ảnh trong tar.
@@ -369,130 +371,24 @@ def run_json(path: Path, *, experiment_id: str, tiers: str, n_images: dict,
 # Phần cần GPU (torch)
 # ============================================================================
 def preprocess(img, torch, transforms):
-    """Resize 256 → CenterCrop 224 → ToTensor → Normalize(ImageNet).
+    """Resize 256 → CenterCrop 224 → ToTensor → Normalize — **uỷ quyền** cho core.
 
-    Trả tensor CHW đã chuẩn hoá. Một chỗ duy nhất, để không có hai bản pipeline
-    lệch nhau như ``demo.py`` vs ``datasets.py`` của tác giả.
+    Không được có bản sao thứ hai: ``tests/test_core_parity.py`` đỏ nếu file này
+    chứa lại ``Normalize(...)``/``CenterCrop(...)`` trong thân hàm.
     """
-    tf = transforms.Compose(
-        [
-            transforms.Resize(RESIZE),
-            transforms.CenterCrop(CROP),
-            transforms.ToTensor(),
-            transforms.Normalize(MEAN, STD),
-        ]
-    )
-    return tf(img)
-
+    return _core_preprocess(img, torch, transforms)
 
 def fc_out_features(state: dict) -> int:
-    """Số unit của lớp cuối, đọc từ **chính checkpoint** — không đoán theo tên.
-
-    Vì sao phải đọc thay vì chọn một con số: DIRE gốc dùng
-    ``resnet(num_classes=1)`` + ``BCEWithLogitsLoss`` (một logit, ``sigmoid`` >
-    0.5 là fake), trong khi ResNet của torchvision/timm quen dùng 2 lớp +
-    ``CrossEntropyLoss``. Hai quy ước cho ra ``fc.weight`` shape ``[1, 2048]`` và
-    ``[2, 2048]``; chọn sai thì ``load_state_dict`` nổ:
-
-        size mismatch for fc.weight: copying a param with shape torch.Size([1, 2048])
-        from checkpoint, the shape in current model is torch.Size([2, 2048])
-
-    và đó là lỗi chặn TOÀN BỘ eval (lần chạy 2026-10-28) — sau khi đã trả tiền
-    bật container GPU.
-
-    Trả ``0`` nếu không thấy ``fc.weight`` (checkpoint lạ) để caller báo rõ.
-    """
-    for key in ("fc.weight", "module.fc.weight", "_orig_mod.fc.weight"):
-        w = state.get(key)
-        if w is None:
-            continue
-        shape = getattr(w, "shape", None)
-        if shape is None:
-            continue
-        try:
-            if len(shape) == 2:
-                return int(shape[0])
-        except TypeError:      # shape không phải chuỗi số
-            continue
-    return 0
-
+    """Đọc số unit lớp cuối từ checkpoint — uỷ quyền cho :mod:`dire_core.detector`."""
+    return _core_fc_out_features(state)
 
 def prob_fake(rows, n_out: int = 1):
-    """Logit thô → ``P(fake)``, theo đúng quy ước mà checkpoint được train.
-
-    ``n_out == 1``: ``sigmoid(z)`` — DIRE gốc, ``1_fake`` là lớp dương.
-    ``n_out >= 2``: ``softmax(z)[FAKE]``.
-
-    Nhận list ``float`` (một logit/ảnh) hoặc list ``list[float]`` (nhiều logit).
-    Tính bằng toán Python thuần trên list đã qua ``.tolist()``: batch 64 nên chi
-    phí không đáng kể, và đổi lại hàm này test được **không cần torch** — đúng
-    loại logic đã sai âm thầm một lần.
-    """
-    out: list[float] = []
-    for row in rows:
-        if n_out == 1:
-            z = float(row[0] if isinstance(row, (list, tuple)) else row)
-            # Chặn tràn số: sigmoid(-800) = 0.0 là đúng, math.exp sẽ raise.
-            if z >= 0:
-                out.append(1.0 / (1.0 + _math.exp(-z)))
-            else:
-                e = _math.exp(z)
-                out.append(e / (1.0 + e))
-            continue
-        vals = list(row) if isinstance(row, (list, tuple)) else [float(row)]
-        if len(vals) <= FAKE:
-            # Không đủ cột để lấy lớp fake — thà báo lỗi còn hơn bịa điểm.
-            raise ValueError(f"model trả {len(vals)} logit, cần > {FAKE}")
-        m = max(vals)
-        exps = [_math.exp(v - m) for v in vals]
-        out.append(exps[FAKE] / sum(exps))
-    return out
-
+    """Logit → ``P(fake)`` — uỷ quyền cho :func:`dire_core.score.prob_fake`."""
+    return _core_prob_fake(rows, n_out)
 
 def load_detector(ckpt: str, torch, resnet50, device):
-    """ResNet50 nhị phân của DIRE → ``(model, n_out)``.
-
-    ``n_out`` là số unit lớp cuối **đọc từ checkpoint** (xem
-    :func:`fc_out_features`): 1 với checkpoint gốc của tác giả, 2 với checkpoint
-    huấn luyện theo kiểu CrossEntropy. Nhờ vậy một checkpoint thuộc quy ước nào
-    cũng nạp được, và không có chỗ nào phải "đoán 2 cho chắc".
-
-    File checkpoint gốc lưu cả ``optimizer``/``epoch`` (269.4 MB so với 97.8 MB
-    của ResNet50 fp32), nên phải bóc đúng lớp: ``model``/``state_dict``/``net``,
-    rồi bỏ tiền tố ``module.`` do DataParallel.
-    """
-    state = torch.load(ckpt, map_location="cpu")
-    if isinstance(state, dict):
-        for key in ("model", "state_dict", "net", "model_state_dict"):
-            if key in state and isinstance(state[key], dict):
-                state = state[key]
-                break
-    state = {k[len("module."):] if k.startswith("module.") else k: v
-             for k, v in state.items()}
-
-    n_out = fc_out_features(state)
-    if n_out not in (1, 2):
-        raise SystemExit(
-            f"[!] Không đọc được lớp cuối của checkpoint: {ckpt}\n"
-            f"    Có {len(state)} tensor, không thấy `fc.weight` shape [n, 2048].\n"
-            f"    Khoá đầu tiên: {list(state)[:5]}\n"
-            "    Kiểm file có đúng là ResNet50 của DIRE không "
-            "(`modal run -m dire_modal.download::verify` in sha256 để đối chiếu)."
-        )
-
-    model = resnet50(num_classes=n_out)
-    try:
-        model.load_state_dict(state)
-    except RuntimeError as exc:
-        raise SystemExit(
-            f"[!] Checkpoint không khớp kiến trúc ResNet50: {ckpt}\n"
-            f"    n_out đọc từ checkpoint = {n_out}\n"
-            f"    {exc}\n"
-            "    Gợi ý: `fc.weight` [1,2048] = DIRE gốc (BCE, 1 logit); [2,2048] = 2 lớp."
-        ) from exc
-    model.to(device).eval()
-    return model, n_out
-
+    """Nạp ResNet50 DIRE → ``(model, n_out)`` — uỷ quyền cho ``dire_core``."""
+    return _core_load_detector(ckpt, torch, resnet50, device)
 
 def score_pair(
     model, real: Path, fake: Path, torch, transforms, device,

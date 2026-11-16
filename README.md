@@ -6,7 +6,32 @@ Tái lập **DIRE — Diffusion Reconstruction Error** (Wang et al., ICCV 2023) 
 > Mục tiêu: từ máy tính cá nhân + **0 ₫** (chỉ free tier) → có detector, có bảng eval, có demo công khai,
 > và có mirror dữ liệu để người khác tái lập.
 
-## Bắt đầu nhanh
+## Chạy trên máy nhà (không cần Modal)
+
+```bash
+pip install -e .                                  # chỉ cần Python để chạy `dire info`
+python -m pip install torch torchvision pillow    # cho detect/batch/serve
+python -m dire_modal.local_fetch --tiers e2min --mode fetch   # 3 file ≈ 400 MB
+dire info                                         # in cấu hình tiền xử lý
+dire detect anh.jpg --weights checkpoints/lsun_adm.pth
+dire batch ./thu_muc --out scores.csv
+dire serve --port 8000                            # FastAPI + uvicorn
+```
+
+Ba lớp, **một chiều phụ thuộc** — xem [`docs/adr-0005-local-first-modal-wrapper.md`](docs/adr-0005-local-first-modal-wrapper.md):
+
+```
+dire_core    ← lõi thuần (tiền xử lý, đọc checkpoint, logit → P(fake))
+  ↑     ↑
+dire_local   dire_modal            ← CLI/API tại máy · wrapper @app.function
+```
+
+Vì sao phải tách: trước đó **mọi** module đều `from .common import ...`, mà
+`common.py` import `modal` ngay dòng đầu ⇒ không cài `modal` thì **không import
+được cả phần logic**. Và nếu bản local được viết mới thì nó sẽ có pipeline tiền
+xử lý thứ hai — đúng lỗi `demo.py` của tác giả (thiếu `Normalize`).
+
+## Bắt đầu nhanh (đường cloud)
 
 ```bash
 cp .env.example .env      # điền token (Modal, R2, HF, Kaggle)
@@ -15,6 +40,21 @@ bash scripts/setup.sh           # tạo secret trên Modal từ .env
 bash scripts/check.sh           # CỔNG 0: modal thật + test + pyflakes (0 credit)
 python3 tools/free_quota.py     # xem còn bao nhiêu quota miễn phí
 ```
+
+### SaaS: bọc Modal quanh cùng lõi
+
+```bash
+modal serve -m dire_modal.api      # URL tạm để thử
+modal deploy -m dire_modal.api     # deploy thật
+curl -s -X POST "$URL/v1/detect" -H 'content-type: application/json' \
+  -d "{\"image_b64\": \"$(base64 -w0 anh.jpg)\"}"
+```
+
+Wrapper **không chứa logic**: nó nạp model một lần/container, giới hạn
+`max_containers=2`, `scaledown_window=120` (scale-to-zero), nhúng weight vào image
+để cold start ~1 s, và gọi `dire_local.server.score_payload` — cùng đường decode
+với bản local. **Auth**: tạo secret `modal secret create dire-api-key DIRE_API_KEY=...`;
+không có secret thì `/healthz` báo `auth: "disabled"` và endpoint mở.
 
 Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **eval checkpoint tác giả**, bỏ hẳn khoản $8–20 của A100).
 
@@ -251,7 +291,17 @@ package** chứ không phải `configs/`, vì Modal chỉ đóng gói thư mục
 ## Cấu trúc
 
 ```
-src/dire_modal/
+src/dire_core/      # LÕI THUẦN — không import modal, không import torch ở tầng module
+  preprocess.py     #   Resize 256 → CenterCrop 224 → Normalize  (một chỗ duy nhất)
+  detector.py       #   đọc `fc.weight` từ chính checkpoint (1 logit vs 2 lớp)
+  score.py          #   sigmoid / softmax → P(fake)
+  labels.py         #   0_real / 1_fake
+  batch.py          #   vòng lặp batch + `Detector` (dùng chung eval/CLI/API)
+src/dire_local/     # CHẠY Ở MÁY NHÀ
+  cli.py            #   `dire info|detect|batch|serve`
+  server.py         #   FastAPI thuần (uỷ quyền bởi dire_modal.api)
+src/dire_modal/     # CONTROL PLANE trên Modal
+  api.py            #   wrapper @modal.fastapi_endpoint → /v1/detect, /healthz
   common.py         # Modal app, images, volumes, secrets
   manifest.py       # INVENTORY dữ liệu theo MỤC TIÊU (e0–e5, train, never)
   tiers.yaml        # POLICY: tier mặc định, trần GB, số container song song
