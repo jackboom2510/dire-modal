@@ -203,7 +203,7 @@
   },
   "status": {
     "counts": {
-      "done": 0,
+      "done": 1,
       "run": 6,
       "todo": 4,
       "out": 0
@@ -256,6 +256,12 @@
         "state": "run",
         "note": "5 scene + kế hoạch 8 chương; **chưa render**",
         "ref": "tools/manim"
+      },
+      {
+        "name": "Local CLI + wrapper Modal (FR-9)",
+        "state": "done",
+        "note": "`dire detect/batch/serve` chạy không cần Modal; `dire_modal.api` là wrapper. Cùng lõi `dire_core` ⇒ điểm số khớp (cổng S9)",
+        "ref": "adr-0005"
       },
       {
         "name": "Train lại detector (FR-8)",

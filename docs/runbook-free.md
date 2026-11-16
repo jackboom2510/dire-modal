@@ -708,6 +708,52 @@ split: train trên test là leakage và mọi con số sau đó vô nghĩa.
 
 ---
 
+## 7b. Chạy trên máy nhà — không cần Modal
+
+Từ ADR-0005, mọi thứ quyết định con số nằm trong `dire_core` (lõi thuần), nên
+máy nhà chạy được **cùng** pipeline với cloud. Không cần `pip install modal`.
+
+```bash
+pip install -e .
+python -m pip install torch torchvision pillow     # cho detect/batch
+
+# 3 file ≈ 400 MB qua đường local (nhanh hơn Baidu 1–2 bậc)
+export DIRE_LOCAL_ROOT=/d/dire-raw
+python -m dire_modal.local_fetch --tiers e2min --mode fetch
+
+dire info                                          # không cần torch
+dire detect anh.jpg --weights "$DIRE_LOCAL_ROOT/checkpoints/lsun_adm.pth"
+dire batch ./thu_muc --out scores.csv --batch-size 64
+dire serve --port 8000                             # FastAPI + uvicorn
+```
+
+Ba lệnh này và `eval::main` gọi **cùng** `dire_core`, nên `P(fake)` phải khớp
+(`tests/test_core_parity.py`, cổng **S9**).
+
+### Wrapper SaaS trên Modal
+
+`src/dire_modal/api.py` bọc `dire_local.server.score_payload`:
+
+```bash
+modal secret create dire-api-key DIRE_API_KEY=<chuoi-bi-mat>   # tuỳ chọn nhưng nên có
+modal serve  -m dire_modal.api     # URL tạm
+modal deploy -m dire_modal.api     # deploy thật
+```
+
+| Quyết định | Giá trị | Lý do |
+|---|---|---|
+| Weight nhúng image | `checkpoints/lsun_adm.pth` nếu có | cold start ~1 s thay vì 2–5 s đọc Volume |
+| `max_containers` | **2** | endpoint public = đường đốt credit nhanh nhất |
+| `scaledown_window` | **120 s** | scale-to-zero; `keep_warm` 24/7 tốn ~$8.6/tháng |
+| Auth | header `x-api-key` ↔ `DIRE_API_KEY` | không có secret ⇒ `/healthz` báo `auth: "disabled"` |
+
+⚠ **Compute không phải chi phí của SaaS này** — 10k ảnh/tháng ≈ $0.01. Chi phí là
+`keep_warm` (~$8.6/tháng) và **abuse** (không rate limit ⇒ $30 trong vài giờ).
+Vì thế mặt tiền công khai nên là **HF Spaces free**, còn Modal chỉ để làm GPU /
+batch / DIRE map.
+
+---
+
 ## 8. Eval 15 generator (~$0 compute, chỉ CPU)
 
 ```bash

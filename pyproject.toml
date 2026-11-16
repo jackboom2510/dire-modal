@@ -9,5 +9,17 @@ dependencies = [
     "tqdm>=4.66",
 ]
 
+# `dire` — CLI tại máy nhà. Cùng lõi `dire_core` với đường Modal, nên điểm số
+# không thể lệch. Chạy `pip install -e .` là có lệnh; hoặc python -m dire_local.cli.
+[project.scripts]
+dire = "dire_local.cli:main"
+
+[project.optional-dependencies]
+# Chỉ cần cho `dire detect/batch/serve` và cho eval thật.
+infer = ["torch>=2.0", "torchvision>=0.15", "pillow>=10.0"]
+# `dire serve` / `dire_modal.api`.
+api = ["fastapi>=0.110", "uvicorn>=0.29"]
+
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["dire_core*", "dire_local*", "dire_modal*"]

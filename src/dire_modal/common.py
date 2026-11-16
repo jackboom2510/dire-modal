@@ -48,6 +48,23 @@ gpu_image = (
     )
 )
 
+# ---------- Code mount ----------
+# Từ khi tách `dire_core` (lõi thuần) và `dire_local` (CLI/API), container phải
+# thấy CẢ BA package. Modal tự đóng gói package của entrypoint (`dire_modal`)
+# nhưng **không** tự kéo package anh em — thiếu dòng dưới thì `import dire_core`
+# chết trong container với ModuleNotFoundError, trong khi máy local vẫn chạy
+# bình thường. Đó đúng loại lỗi "chỉ nổ trên cloud".
+def mount_python_sources(img):
+    add = getattr(img, "add_local_python_source", None)
+    if add is None:            # stub trong test không có method này
+        return img
+    return add("dire_core", "dire_local", "dire_modal")
+
+
+cpu_image = mount_python_sources(cpu_image)
+gpu_image = mount_python_sources(gpu_image)
+
+
 # ---------- Volumes ----------
 # Tách 3 vai trò rõ ràng (đã bàn ở lượt trước)
 RAW_VOLUME = "dire-raw"   # tên CLI cần, vd. `modal volume rm dire-raw /raw/.bench -r`

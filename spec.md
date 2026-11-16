@@ -93,7 +93,7 @@ số bảng/số trang.
 | ID | Ràng buộc | Hệ quả lên thiết kế |
 |---|---|---|
 | C1 | Compute **0đ**, chỉ free tier | Mọi bước phải có `preflight_cost`; không chạy 200k ảnh |
-| C2 | Máy local nhẹ, không train, không giữ dữ liệu gốc | Mọi thứ nặng trên Modal; local chỉ đọc CSV/JSON |
+| C2 | Máy local **nhẹ nhưng chạy được thật** (CPU), không train | Lõi `dire_core` chạy độc lập với Modal; `dire detect/batch/serve` trên máy nhà. Dữ liệu gốc **có thể** ở local (`DIRE_LOCAL_ROOT`), không hard-code ổ đĩa. Train và job lớn vẫn trên Modal |
 | C3 | **Cải thiện** phải **training-free** | FR-2…FR-6 không được dùng trọng số tự train. Train lại chỉ để **đối chiếu** với checkpoint tác giả (FR-8) và không bao giờ được tính là "cải thiện" |
 | C4 | Không phân phối lại ảnh LAION | Dùng ảnh real của bộ DIRE, không dùng LAION |
 | C5 | ~$30 credit Modal | Trần $5/lần chạy đã có; tổng spec phải < $20 |
@@ -407,6 +407,7 @@ Mỗi yêu cầu ứng với **một stage** của hai quy trình trong `scripts
 | FR-6 | `bash scripts/02_improve.sh --stage robustness` |
 | FR-7 | tự động: mỗi lần `eval::main` ghi `run.json`; `eval::report` gộp lại |
 | FR-8 | `modal run -m dire_modal.train::main --detector adm --mode plan` (chưa nối vào `scripts/` — stage `train` là việc của PR sau) |
+| FR-9 | `dire detect` · `dire batch` · `dire serve` · `modal serve -m dire_modal.api` (không nằm trong `scripts/`: CLI/API không phải quy trình thực nghiệm) |
 
 Gọi trực tiếp entrypoint cũng được:
 
@@ -437,6 +438,7 @@ modal run -m dire_modal.train::main --detector adm --mode run --exp-id fr8_adm
 | **S6** | FR-7 tái lập | chạy lại 1 eval → cùng CSV | diff = 0 |
 | **S7** | Tái lập Table 2 | `bash scripts/01_repro.sh --stage report` → 32 ô có Δ | \|ΔACC\| ≤ 0.5 điểm ở mọi ô |
 | **S8** | Retrain đối chiếu (FR-8) | 2 dòng `dire` / `dire_retrained` trên cùng test, cột `adm` | \|ΔACC\| ≤ 2 điểm, hoặc kết luận "chưa khớp" + nguyên nhân |
+| **S9** | Local ↔ Modal cùng lõi (FR-9) | `pytest tests/test_core_parity.py tests/test_local_server.py -q` | pass; không có bản sao thứ hai; API trả 200/400/401 đúng |
 
 Test code phải viết **trước** phần lớn nhất của spec: schema CSV (§10.1) và hợp
 đồng CLI (§10.3) kiểm được mà chưa cần GPU.
@@ -451,6 +453,7 @@ Test code phải viết **trước** phần lớn nhất của spec: schema CSV 
 | **M3** | Bọc AEROBLADE → **FR-3** | ~$2 | S4 |
 | **M4** | Format bias (FR-4) + fusion (FR-5) | ~$5 | S5 |
 | **M5** | Robustness (FR-6) + báo cáo tổng | ~$8 | — |
+| **M0b** ✅ | Tách `dire_core` + `dire_local` + wrapper `dire_modal.api` → **FR-9** (ADR-0005) | $0 | S9 |
 | **M6** | **FR-8** — train lại để đối chiếu trọng số tác giả (chỉ khi cần giải thích) | **$4–56 tuỳ GPU/early-stop** (xem §12.1) | S8 |
 | Tái lập | Table 2 (4 detector × 8 generator) — **không nằm trong M0–M5**, chỉ là FR-1 chạy 4 lần | ~$0.2 (CPU) | **S2, S7** |
 | **Tổng** | | **≈ $17** (+ M6 nếu làm) | < C5 ($30) |
