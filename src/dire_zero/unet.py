@@ -193,6 +193,26 @@ class ZeroUNet(nn.Module):
             p.detach().zero_()
 
     # ------------------------------------------------------------------ #
+    def half(self) -> "ZeroUNet":
+        """fp16 cho conv/linear, **giữ các lớp norm ở float32** (đúng như ADM).
+
+        `nn.Module.half()` đổi mọi tham số, kể cả `GroupNorm32`. Nhưng lớp đó
+        cố ý tính ở float32 — nên nếu tham số của nó cũng thành fp16 thì mỗi lượt
+        phải đổi dtype, và quên một chỗ là `mixed dtype`. Giữ norm ở float32 vừa
+        đúng số học vừa không tốn phép đổi nào.
+        """
+        super().half()
+        self.norms_to_float32()
+        return self
+
+    def norms_to_float32(self) -> "ZeroUNet":
+        """Đưa mọi `GroupNorm32` về float32 (sau `.half()` hoặc `.to(dtype=...)`)."""
+        for module in self.modules():
+            if isinstance(module, GroupNorm32):
+                module.float()
+        return self
+
+    # ------------------------------------------------------------------ #
     def forward(self, x: Tensor, timesteps: Tensor) -> Tensor:
         # `time_embedding` **luôn** trả float32: sin/cos của `f_i·t` mất chính xác
         # nhanh ở fp16 (tới 1000 ⇒ mất ~3 chữ số), nên tính ở float32 rồi mới đổi

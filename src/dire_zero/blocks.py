@@ -33,9 +33,30 @@ __all__ = [
 
 
 class GroupNorm32(nn.GroupNorm):
-    """GroupNorm 32 nhóm, tính ở float32, trả lại dtype đầu vào."""
+    """GroupNorm 32 nhóm, tính ở float32, trả lại dtype đầu vào.
+
+    Vì sao phải đổi **cả** `weight`/`bias`, không chỉ `x`
+    ----------------------------------------------------
+    Chuẩn hoá theo nhóm cộng dồn trên hàng nghìn phần tử; ở fp16 nó mất chính
+    xác đúng ở chỗ tín hiệu DIRE sống (biên độ nhỏ). Nên `x` được đưa lên
+    float32 để tính — đó là chủ ý. Nhưng `model.half()` biến **tham số** của
+    chính module này thành fp16, và `F.group_norm` từ chối hai dtype khác nhau::
+
+        RuntimeError: mixed dtype (CPU): expect parameter to have scalar type of Float
+
+    Lỗi này chỉ hiện trên đường fp16, tức chỉ trên GPU. `ZeroUNet.half()` giữ
+    các lớp norm ở float32 để không phải đổi mỗi lượt; phép đổi dưới đây là lưới
+    an toàn cho trường hợp ai đó gọi `.to(torch.float16)` thẳng, bỏ qua `half()`.
+    """
 
     def forward(self, x: Tensor) -> Tensor:
+        if self.weight is not None and self.weight.dtype != torch.float32:
+            return torch.nn.functional.group_norm(
+                x.float(), self.num_groups,
+                self.weight.float(),
+                None if self.bias is None else self.bias.float(),
+                self.eps,
+            ).type(x.dtype)
         return super().forward(x.float()).type(x.dtype)
 
 
