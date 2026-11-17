@@ -58,6 +58,61 @@ def test_checkpoint_keeps_its_filename_so_nothing_has_to_be_downloaded_again():
     assert modal_app.CKPT.endswith("adm_lsun.pt")
 
 
+# --------------------------------------------------------------------------- #
+# `::train --generator`: một dòng của Table 2, không phải bài toán gộp
+# --------------------------------------------------------------------------- #
+
+def _maps(tmp_path: Path, gens: dict[str, int], n_real: int = 3, split: str = "test") -> Path:
+    """Cây `maps/<split>/<gen>/*.npy` giả — đủ để `collect_maps` đọc."""
+    root = tmp_path / "maps"
+    for gen, n in [("real", n_real), *gens.items()]:
+        d = root / split / gen
+        d.mkdir(parents=True, exist_ok=True)
+        for i in range(n):
+            (d / f"{gen}{i}.npy").write_bytes(b"npy")
+    return root
+
+
+def test_train_rejects_a_generator_that_has_no_maps(tmp_path: Path, monkeypatch):
+    import ast
+    from pathlib import Path as P
+
+    src = P(modal_app.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "train")
+    body = ast.unparse(fn)
+    # Lời nhắn phải chỉ đúng lệnh cần chạy trước, không chỉ "không tìm thấy".
+    assert "::dire --generator" in body
+    assert 'generator: str=' in body and "'auto'" in body
+
+
+def test_collect_maps_labels_come_from_directory_names(tmp_path: Path):
+    """Nhãn đọc từ tên thư mục generator, nên gộp 14 generator không thể lẫn nhãn."""
+    pytest.importorskip("torch")        # `pipeline` import torch ở tầng module
+    from dire_zero.pipeline import collect_maps
+
+    root = _maps(tmp_path, {"adm": 2, "pndm": 4})
+    maps = collect_maps(root)
+    assert sum(1 for m in maps if m["label"] == 0) == 3            # real
+    assert sum(1 for m in maps if m["label"] == 1) == 6
+    assert {m["generator"] for m in maps} == {"real", "adm", "pndm"}
+    # lọc đúng như `::train --generator adm`
+    only = [m for m in maps if m["generator"] in ("real", "adm")]
+    assert len(only) == 5 and {m["label"] for m in only} == {0, 1}
+
+
+def test_train_payload_carries_the_scope_note(tmp_path: Path):
+    """`train.json` phải tự nói bài toán là một generator hay gộp nhiều cái."""
+    import ast
+    from pathlib import Path as P
+
+    src = P(modal_app.__file__).read_text(encoding="utf-8")
+    body = ast.unparse(next(n for n in ast.parse(src).body
+                            if isinstance(n, ast.FunctionDef) and n.name == "train"))
+    assert "generators_used" in body and "note_scope" in body
+    assert "Table 2" in body
+
+
 def test_gpu_functions_declare_a_gpu():
     """Bước nào cần GPU phải khai GPU trong decorator — thiếu thì Modal chạy CPU
     và mọi ước lượng thời gian sai một bậc, không có lỗi nào báo."""
@@ -216,6 +271,75 @@ def test_extra_pngs_outside_the_manifest_warn_but_do_not_block(volume_gia: Path)
     assert report["problems"] == []
     assert report["n_png_on_disk"] == report["n_rows"] + 3
     assert any("ours_adm" in w for w in report["warnings"])
+
+
+def _write_multi(volume_gia: Path, n_real: int, gens: dict[str, int], split: str = "test") -> None:
+    """`{tên generator: số ảnh}`, ảnh thật `n_real`. Đúng cấu trúc DiffusionForensics."""
+    import hashlib
+
+    data = volume_gia / "data"
+    rows = [HDR]
+    for gen, n in [("real", n_real), *gens.items()]:
+        label = 0 if gen == "real" else 1
+        d = data / split / gen
+        d.mkdir(parents=True, exist_ok=True)
+        for i in range(n):
+            png = d / f"{gen}{i:012x}.png"
+            png.write_bytes(b"png" + bytes([i % 251]))
+            rows.append(f"{split}/{gen}/{png.name}\t{label}\t{gen}\t{split}\tlsun\t"
+                        f"\tmember\t{hashlib.sha256(png.read_bytes()).hexdigest()}\t256\t256\n")
+    (data / "manifest.tsv").write_text("".join(rows), encoding="utf-8")
+    (data / "data_card.json").write_text(json.dumps({
+        "label": "R1+R2", "fake_source": "author", "dataset": "lsun_bedroom",
+        "license": "research-only", "comparable_to_paper": True,
+    }), encoding="utf-8")
+
+
+def test_many_generators_against_one_real_class_is_not_an_imbalance(volume_gia: Path):
+    """Ca thật: 1000 thật + 12 368 giả của **14** generator (mỗi cái ~1000).
+
+    Bản cũ kiểm tỉ lệ trên tổng ⇒ 1:12,4 ⇒ chặn, trong khi mỗi bài toán
+    `real vs một generator` vẫn 1:1. Table 2 chính là từng bài toán như vậy.
+    """
+    _write_multi(volume_gia, 40, {"adm": 40, "pndm": 40, "stylegan": 40, "ldm": 40})
+    report = _run(skip_sha=True)
+
+    assert report["problems"] == []
+    assert report["n_real"] == 40 and report["n_fake"] == 160
+    assert len(report["tasks"]) == 4
+    assert all(t["ok"] and t["ratio"] == 1.0 for t in report["tasks"])
+    # nhưng phải cảnh báo rằng gộp tất cả là bài toán khác Table 2
+    assert any("Table 2" in w for w in report["warnings"])
+
+
+def test_one_unbalanced_task_is_still_caught(volume_gia: Path):
+    _write_multi(volume_gia, 20, {"adm": 20, "pndm": 400})
+    with pytest.raises(RuntimeError) as exc:
+        _run(skip_sha=True)
+    msg = str(exc.value)
+    assert "test/pndm" in msg and "lệch quá 5:1" in msg
+    assert "test/adm" not in msg                      # bài toán cân vẫn ổn
+
+
+def test_generator_without_real_images_in_the_same_split_blocks(volume_gia: Path):
+    _write_multi(volume_gia, 20, {"adm": 20}, split="test")
+    ad = volume_gia / "data" / "train" / "adm"      # fixture đã tạo sẵn thư mục này
+    (ad / "x.png").write_bytes(b"x")
+    rows = (volume_gia / "data" / "manifest.tsv").read_text(encoding="utf-8")
+    import hashlib
+    (volume_gia / "data" / "manifest.tsv").write_text(
+        rows + f"train/adm/x.png\t1\tadm\ttrain\tlsun\t\tmember\t"
+               f"{hashlib.sha256(b'x').hexdigest()}\t256\t256\n", encoding="utf-8")
+    with pytest.raises(RuntimeError) as exc:
+        _run(skip_sha=True)
+    assert "không có ảnh thật cùng split" in str(exc.value) and "train/adm" in str(exc.value)
+
+
+def test_max_ratio_is_configurable(volume_gia: Path):
+    _write_multi(volume_gia, 10, {"adm": 30})         # 3:1
+    assert _run(skip_sha=True)["problems"] == []
+    with pytest.raises(RuntimeError):
+        _run(skip_sha=True, max_ratio=2.0)
 
 
 def test_tampered_png_is_caught_by_sha(volume_gia: Path):

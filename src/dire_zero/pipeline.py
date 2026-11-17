@@ -280,6 +280,7 @@ def train(
     max_lr_drops: int = 3,
     init: str = "scratch",
     max_minutes: float | None = None,
+    extra: dict | None = None,
 ) -> dict:
     """R2 — train detector. Ngưỡng chọn trên **val**, test chấm **một lần** (G6).
 
@@ -382,6 +383,9 @@ def train(
             "khác generator)."
         ),
     }
+    # `extra`: bối cảnh mà hàm này không biết (ví dụ: đã lọc bài toán theo
+    # generator nào). Ghi cùng chỗ với số liệu, để đọc `train.json` là đủ.
+    payload.update(extra or {})
     write_json(out / "train.json", payload)
     return payload
 

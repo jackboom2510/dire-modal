@@ -337,6 +337,25 @@ phải để một lệnh tự động sửa cả cây dữ liệu; `plan` vẫn
 dữ liệu để ai muốn thì quyết định có căn cứ. Dữ liệu sinh từ máy local vẫn đi
 đường `modal volume put` quen thuộc (mục 4.4).
 
+#### Cân bằng lớp phải xét **từng bài toán**, không xét tổng
+
+Manifest của cây DiffusionForensics có 1 000 ảnh thật và 12 368 ảnh giả của **14
+generator** (mỗi cái ~1 000). Nhìn tổng là 1:12,4 — và bản đầu của `checkdata`
+chặn đúng vì con số đó. Nhưng:
+
+* Table 2 của bài báo là **từng dòng = từng generator**: một detector cho
+  `real vs adm`, một detector cho `real vs pndm`, …
+* `::dire --generator adm` đã dựng đúng bài toán đó, và ở đó tỉ lệ là **1000:1000**.
+
+Nay `checkdata` dựng `tasks` = danh sách `{split, generator, real, fake, ratio, ok}`
+và chỉ chặn khi **một bài toán** lệch quá `--max-ratio` (mặc định 5) hoặc khi một
+generator không có ảnh thật cùng split. Gộp mọi generator thành một lớp giả vẫn
+được phép, nhưng báo cáo thêm cảnh báo rằng con số đó không so được với Table 2.
+
+`::train --generator <tên>` chọn đúng một bài toán; `train.json` ghi
+`generators_used` và `note_scope` để không ai đọc nhầm phạm vi. `auto` (mặc định)
+gộp mọi generator — đúng khi muốn đo "real vs bất kỳ fake", sai khi muốn so bảng.
+
 #### `::checkdata` trên 200 nghìn file: timeout là bài toán độ trễ, không phải băng thông
 
 Lần chạy thật với `cpu=2`, **một luồng**, timeout 1800 s đã bị cắt giữa đường.

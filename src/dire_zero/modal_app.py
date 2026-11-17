@@ -149,9 +149,16 @@ def selfcheck() -> dict:
     return report
 
 
+#: Trần mất cân bằng **trong một bài toán nhị phân** (real vs một generator).
+#: Không áp cho tổng gộp: 1000 thật + 14×1000 giả là cấu trúc chuẩn của
+#: DiffusionForensics cho Table 2, không phải dữ liệu hỏng.
+MAX_IMBALANCE = 5.0
+
+
 def _check_data(
     skip_sha: bool = False,
     workers: int = 64,
+    max_ratio: float = MAX_IMBALANCE,
     splits: str = "",
     sample: int = 0,
     count_png: bool = False,
@@ -249,16 +256,53 @@ def _check_data(
         )
     if bad:
         problems.append(f"{len(bad)} ảnh lệch sha256/xoá: {bad[:2]}")
-    if n_real and n_fake and max(n_real, n_fake) / max(min(n_real, n_fake), 1) > 5:
-        problems.append(f"hai lớp lệch {n_real}:{n_fake} — ACC sẽ bị lớp đông lấn át")
+    # Cân bằng lớp phải xét **từng bài toán**, không xét tổng.
+    # `::dire --generator adm` dựng bài toán `real vs adm`; 14 generator × 1000
+    # ảnh cộng lại là 1:12, nhưng **mỗi** generator vẫn 1000:1000. Kiểm trên tổng
+    # là chặn oan đúng cấu trúc mà Table 2 cần để so từng dòng.
+    reals = collections.Counter(r["split"] for r in rows if r["label"] == 0)
+    gen_counts = collections.Counter((r["split"], r["generator"]) for r in rows if r["label"] == 1)
+    tasks, unbalanced, no_real = [], [], []
+    for (split, gen), n_fake_gen in sorted(gen_counts.items()):
+        n_real_gen = reals.get(split, 0)
+        ratio = max(n_real_gen, n_fake_gen) / max(min(n_real_gen, n_fake_gen), 1)
+        entry = {"split": split, "generator": gen, "real": n_real_gen,
+                 "fake": n_fake_gen, "ratio": round(ratio, 2),
+                 "ok": n_real_gen > 0 and ratio <= max_ratio}
+        tasks.append(entry)
+        if n_real_gen == 0:
+            no_real.append(f"{split}/{gen}")
+        elif ratio > max_ratio:
+            unbalanced.append(f"{split}/{gen}: thật {n_real_gen} vs giả {n_fake_gen} "
+                              f"({ratio:.1f}:1)")
+
     if not n_real or not n_fake:
         problems.append(f"thiếu một lớp (thật {n_real}, giả {n_fake})")
+    if no_real:
+        problems.append(
+            f"{len(no_real)} generator không có ảnh thật cùng split ⇒ không dựng được "
+            f"bài toán nhị phân: {', '.join(no_real[:5])}"
+        )
+    if unbalanced:
+        problems.append(
+            f"{len(unbalanced)} bài toán lệch quá {max_ratio:g}:1 — ACC sẽ bị lớp đông "
+            f"lấn át: {', '.join(unbalanced[:5])}"
+        )
     if card.get("fake_source") == "author" and "R3" in label:
         problems.append("data_card nói ảnh giả là của tác giả nhưng nhãn lại có R3")
 
     # Không phải lỗi: `::gen` ghi thêm `data/<split>/ours_adm` mà manifest (do
     # ingest tạo) không biết. Nhưng chênh lệch lớn thì phải nói ra.
     warnings = []
+    n_gen = len({g for (_sp, g) in gen_counts})
+    if n_gen > 1:
+        pooled = max(n_real, n_fake) / max(min(n_real, n_fake), 1)
+        warnings.append(
+            f"{n_gen} generator trong manifest ⇒ gộp tất cả thành một lớp giả cho "
+            f"{n_real}:{n_fake} ({pooled:.1f}:1), **không** so được với Table 2. "
+            "Table 2 là từng dòng = từng generator: chạy `::dire --generator <tên>` "
+            "rồi `::train` trên `maps/` chỉ có generator đó."
+        )
     if n_png is not None and rows and n_png != len(rows):
         warnings.append(
             f"{n_png} PNG trên đĩa vs {len(rows)} dòng manifest — chênh "
@@ -275,7 +319,9 @@ def _check_data(
         "n_rows": len(rows),
         "n_real": n_real,
         "n_fake": n_fake,
-        "by_split_generator": {f"{s}/{g}": n for (s, g), n in sorted(counts.items())},
+        "by_split_generator": {f"{sp}/{g}": n for (sp, g), n in sorted(counts.items())},
+        "tasks": tasks,
+        "max_ratio": max_ratio,
         "n_png_on_disk": n_png,
         "manifest_sha_ok": ok,
         "sha_scope": ("sample" if sampled else "full") if (has_manifest and not skip_sha)
@@ -298,7 +344,8 @@ def _check_data(
 #: một luồng, timeout 1800 s đã bị cắt trước khi băm xong.
 @app.function(volumes=VOLUMES, cpu=8, timeout=4 * 3600)
 def checkdata(skip_sha: bool = False, workers: int = 64, splits: str = "",
-              sample: int = 0, count_png: bool = False) -> dict:
+              sample: int = 0, count_png: bool = False,
+              max_ratio: float = MAX_IMBALANCE) -> dict:
     """Cổng dữ liệu — xem `_check_data`.
 
     Ví dụ::
@@ -308,7 +355,7 @@ def checkdata(skip_sha: bool = False, workers: int = 64, splits: str = "",
         modal run -m dire_zero.modal_app::checkdata                 # toàn bộ, 64 luồng
     """
     return _check_data(skip_sha, workers=workers, splits=splits, sample=sample,
-                       count_png=count_png)
+                       count_png=count_png, max_ratio=max_ratio)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
@@ -439,8 +486,15 @@ def _generators_in(root: str) -> list[str]:
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
-def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, seed: int = 3407) -> dict:
-    """R2 — train detector trên map **của mình**."""
+def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
+          seed: int = 3407, generator: str = "auto") -> dict:
+    """R2 — train detector trên map **của mình**.
+
+    `generator` chọn **một** generator để dựng bài toán `real vs generator đó` —
+    đúng một dòng của Table 2. `auto` giữ mọi generator, nghĩa là bài toán
+    `real vs bất kỳ fake`; đó là một phép đo khác, không so được với Table 2, và
+    báo cáo phải nói rõ (xem `generators_used`).
+    """
     from .pipeline import collect_maps, train as train_fn
 
     from .detector import ResNetDetector, resnet50
@@ -448,6 +502,21 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, see
     maps = collect_maps(MAPS)
     if not maps:
         raise FileNotFoundError(f"không có .npy trong {MAPS} — chạy `dire` trước")
+
+    available = sorted({m["generator"] for m in maps if m["generator"] != "real"})
+    if generator != "auto":
+        if generator not in available:
+            raise ValueError(
+                f"không có map của generator {generator!r} trong {MAPS}. "
+                f"Có: {available or '(chưa có generator nào)'}. "
+                f"Chạy `::dire --generator {generator}` trước."
+            )
+        maps = [m for m in maps if m["generator"] in ("real", generator)]
+        used = [generator]
+    else:
+        used = available
+    if not used:
+        raise FileNotFoundError(f"chỉ có map `real` trong {MAPS} — chưa có ảnh giả nào")
     payload = train_fn(
         lambda: ResNetDetector(resnet50()),
         maps,
@@ -459,9 +528,20 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, see
         device="cuda",
         seed=seed,
         init="scratch",
+        extra={
+            "generators_used": used,
+            "generator_filter": generator,
+            "note_scope": (
+                "một generator ⇒ so được với đúng một dòng của Table 2"
+                if len(used) == 1 else
+                f"{len(used)} generator gộp lại ⇒ bài toán `real vs bất kỳ fake`, "
+                "KHÔNG so được với Table 2 (mỗi dòng của bảng là một generator)"
+            ),
+        },
     )
     vol.commit()
     print({k: payload[k] for k in ("best_epoch", "best_val_ap", "threshold_from_val")}, flush=True)
+    print("[phạm vi]", payload["note_scope"], flush=True)
     print("[test]", payload["test"], flush=True)
     return payload
 
