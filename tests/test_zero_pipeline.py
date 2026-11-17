@@ -15,6 +15,7 @@ im lặng — không exception, không cảnh báo.
 
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -211,3 +212,106 @@ def test_dire_map_normalises_device_of_the_input_image():
     dm, recon = dire_map(f, img, sched)
     assert dm.device == img.device and recon.shape == img.shape
     assert f.nfe == 4
+
+
+def test_save_png_moves_the_tensor_to_cpu_before_numpy(tmp_path):
+    """Lỗi thật trên Modal (A10G): `TypeError: can't convert cuda:0 device type tensor to numpy`.
+
+    `to_uint8` giữ nguyên thiết bị của đầu vào, nên `save_png` gọi `.numpy()` trên
+    tensor CUDA và chết ngay ảnh đầu tiên — sau khi đã trả tiền nạp checkpoint.
+    CPU không tái hiện được lỗi, nên test này khoá **hai** thứ: (a) đường CPU vẫn
+    ghi đúng, (b) mã nguồn có `.cpu()` **trước** `.numpy()` trong chuỗi gọi.
+
+    Cách (b) hơi thô, nhưng đây là lỗi mà test chức năng không thể bắt nếu không
+    có GPU: kiểm thứ tự trong chuỗi là cách duy nhất còn lại. Cùng lý do với
+    `test_compute_maps_moves_images_to_the_model_device` dùng thiết bị `meta`.
+    """
+    from PIL import Image
+    import numpy as np
+
+    from dire_zero.pipeline import save_png, to_hwc_uint8
+
+    img = torch.full((1, 3, 8, 8), -1.0)
+    img[:, :, :4, :] = 1.0          # nửa trên trắng, nửa dưới đen
+    out = tmp_path / "sub" / "a.png"
+    save_png(img, out)
+
+    with Image.open(out) as im:
+        arr = np.asarray(im.convert("RGB"))
+    assert arr.shape == (8, 8, 3)
+    assert arr[0, 0].tolist() == [255, 255, 255]    # +1 → 255
+    assert arr[7, 0].tolist() == [0, 0, 0]          # −1 → 0
+
+    src = inspect.getsource(to_hwc_uint8)
+    body = src.split('"""')[-1] if '"""' in src else src
+    assert ".cpu()" in body and ".numpy()" in body
+    assert body.index(".cpu()") < body.index(".numpy()"), \
+        "phải `.cpu()` TRƯỚC `.numpy()`; đảo lại là crash trên CUDA"
+    assert ".detach()" in body
+
+
+def test_save_png_accepts_a_bare_channel_image_and_one_channel_maps(tmp_path):
+    from PIL import Image
+
+    from dire_zero.pipeline import save_png
+
+    save_png(torch.zeros(3, 4, 4), tmp_path / "bare.png")
+    save_png(torch.zeros(1, 1, 4, 4), tmp_path / "gray.png")
+    with Image.open(tmp_path / "bare.png") as im:
+        assert im.size == (4, 4) and im.mode == "RGB"
+    with Image.open(tmp_path / "gray.png") as im:
+        assert im.size == (4, 4) and im.mode == "L"
+
+
+def test_save_png_refuses_a_batch_instead_of_writing_the_first_image(tmp_path):
+    from dire_zero.pipeline import save_png
+
+    with pytest.raises(ValueError, match="batch"):
+        save_png(torch.zeros(2, 3, 4, 4), tmp_path / "x.png")
+    with pytest.raises(ValueError, match="tensor"):
+        save_png(torch.zeros(4, 4), tmp_path / "y.png")
+
+
+def test_no_module_converts_a_device_tensor_without_cpu():
+    """Quét cả `src/` theo **từng hàm**: `.numpy()` phải có `.cpu()` đứng trước.
+
+    Đây là bài kiểm bắt **cả lớp lỗi**, không chỉ một chỗ: bất kỳ ai viết lại
+    `to_uint8(x).permute(...).numpy()` ở một module khác cũng sẽ chết y như vậy
+    trên GPU, và trên laptop thì không thấy gì.
+
+    Quét theo hàm chứ theo dòng, vì cách viết đúng thường tách `.cpu()` ra một
+    dòng riêng:
+
+    ::
+
+        u8 = to_uint8(arr).detach().cpu()   # dòng 1
+        hwc = u8.permute(1, 2, 0).numpy()   # dòng 2 — vẫn đúng
+
+    Điều kiện chỉ áp cho hàm *có* chuyển ảnh sang numpy sau `permute`/`to_uint8`;
+    các chỗ khác (ví dụ `load_image` đọc ảnh đã ở CPU) không bị đụng.
+    """
+    import ast
+
+    root = Path(__file__).resolve().parent.parent / "src"
+    bad = []
+    for py in root.rglob("*.py"):
+        text = py.read_text(encoding="utf-8")
+        lines = text.splitlines()
+        for node in ast.walk(ast.parse(text)):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            body_start = node.lineno
+            if (node.body and isinstance(node.body[0], ast.Expr)
+                    and isinstance(node.body[0].value, ast.Constant)
+                    and isinstance(node.body[0].value.value, str)):
+                # Bỏ docstring: nó nhắc tới `.numpy()`/`.cpu()` bằng lời, và lời
+                # không phải là thứ tự thực thi.
+                body_start = node.body[0].end_lineno + 1
+            seg = "\n".join(lines[body_start - 1: node.end_lineno])
+            if ".numpy()" not in seg:
+                continue
+            if ".permute(" not in seg and "to_uint8(" not in seg:
+                continue
+            if ".cpu()" not in seg or seg.index(".cpu()") > seg.index(".numpy()"):
+                bad.append(f"{py.relative_to(root.parent)}:{node.lineno} {node.name}()")
+    assert not bad, "hàm chuyển tensor sang numpy mà thiếu `.cpu()` trước đó:\n" + "\n".join(bad)

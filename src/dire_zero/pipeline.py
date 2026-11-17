@@ -30,6 +30,8 @@ from .diffusion import ModelCounter, Schedule, dire_map, from_uint8, sample, to_
 __all__ = [
     "write_json",
     "load_image",
+    "to_hwc_uint8",
+    "save_png",
     "generate",
     "compute_maps",
     "train",
@@ -59,11 +61,39 @@ def load_image(path: str | Path) -> Tensor:
     return from_uint8(arr.numpy())
 
 
+def to_hwc_uint8(arr: Tensor) -> "object":
+    """Tensor ảnh → mảng uint8 ``(H, W[, 3])`` **trên CPU** — mọi đường ghi đĩa đi qua đây.
+
+    Ba bước, theo đúng thứ tự này:
+
+    1. ``.detach()`` — ảnh sinh ra trong ``inference_mode`` nhưng hàm này cũng được
+       gọi từ chỗ khác, và ``.numpy()`` trên tensor cần grad sẽ ném;
+    2. ``.cpu()`` — **bắt buộc**, không phải tối ưu: ``to_uint8`` giữ nguyên thiết bị
+       của đầu vào, mà ``gen`` chạy trên A10G. Thiếu bước này, ``.numpy()`` ném
+       ``TypeError: can't convert cuda:0 device type tensor to numpy`` — sau khi đã
+       trả tiền cho checkpoint và bước sinh đầu tiên (xem §3.7 của
+       ``docs/from-zero-clean-room.md``);
+    3. ``.contiguous()`` — ``permute`` trả view không liền mạch; Pillow cần bộ đệm
+       liền mạch, và ``.numpy()`` trên view lạ có thể cho mảng có stride lạ.
+
+    Nhận cả ``(1, C, H, W)`` và ``(C, H, W)``; trả ``(H, W)`` khi ``C = 1``.
+    """
+    u8 = to_uint8(arr).detach().cpu()
+    if u8.dim() == 4:
+        if u8.shape[0] != 1:
+            raise ValueError(f"save_png nhận đúng một ảnh, nhận batch {tuple(u8.shape)}")
+        u8 = u8.squeeze(0)
+    if u8.dim() != 3:
+        raise ValueError(f"cần tensor (1, C, H, W) hoặc (C, H, W), nhận {tuple(u8.shape)}")
+    hwc = u8.permute(1, 2, 0).contiguous().numpy()
+    return hwc[..., 0] if hwc.shape[-1] == 1 else hwc
+
+
 def save_png(arr: Tensor, path: str | Path) -> None:
     from PIL import Image  # noqa: PLC0415
 
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(to_uint8(arr).squeeze(0).permute(1, 2, 0).numpy()).save(path, format="PNG")
+    Image.fromarray(to_hwc_uint8(arr)).save(path, format="PNG")
 
 
 class RunMeta:
