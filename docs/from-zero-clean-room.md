@@ -327,17 +327,46 @@ là lời khuyên sai (nó chỉ làm hoá đơn của phần chạy dở đắt
 | Tiền/ảnh | **0,00112 USD** | đọc dòng `sẽ tính N` rồi nhân |
 
 Ba con số cuối là công cụ duy nhất cần: `N × 0,00112 USD` và `N × 1,834 s`.
-`::dire` nay tự kiểm cả hai và, khi vượt thời gian, in **nhóm generator** cụ thể:
+`::dire` nay tự kiểm cả hai và, khi vượt thời gian, in **lệnh copy–paste được**
+cho từng nhóm, kèm ước tính của chính nhóm đó.
+
+Bản đầu của tính năng này in ra nhóm **sai**, và người dùng bị chặn lần thứ hai
+với đúng bản gợi ý vừa đọc — một vòng lặp tốn thời gian mà lỗi nằm ở chỗ khó thấy:
 
 ```text
-ước tính 9.88 GPU-h > trần thời gian 4.50 h (timeout 6 h × 75%).
-Chạy theo nhóm dưới đây, mỗi nhóm một lần (map đã có được dùng lại nhờ --skip-existing):
-  --generator adm,dalle2,ddpm,diff-projectedgan,diff-stylegan,iddpm,if
-  --generator ldm,midjourney,ours_adm,pndm,projectedgan,sdv2,stylegan,vqdiffusion
+[kế hoạch] 5500 ảnh … 7 generator …          # 5,20 GPU-h, trần 4,50 h
+  --generator adm,iddpm,dalle2,ddpm,diff-projectedgan,diff-stylegan   ← 4 000 ảnh = 4,08 h
+  --generator if
 ```
 
-Nhóm là greedy theo số ảnh, và `real` **không** vào nhóm nào: nó có trong mọi
-lệnh, nên với `--skip-existing` chỉ được tính đúng một lần (ở lệnh đầu).
+Nhóm đầu "vừa dưới trần" 4,08 h — nhưng **mỗi lệnh còn mang theo `real`**, và 600
+ảnh `real` chưa có map ⇒ lệnh thật là 4 000 + 600 = 4,69 h > 4,50 h ⇒ `GateError`
+y như cũ. Bài học: một bản gợi ý mà **không tự kiểm bằng chính cổng của mình** thì
+không phải là gợi ý.
+
+Hai sửa:
+
+1. `real` được tính vào **nhóm chạy đầu tiên** (chỉ nhóm đó trả tiền cho nó; lệnh
+   sau dùng lại map nhờ `--skip-existing`);
+2. chia **cân bằng** (LPT: việc lớn nhất vào nhóm đang nhẹ nhất) thay vì "nhét
+   đầy" nhóm đầu — nhóm sát trần chỉ cần chậm 10 % là bị kill. Số nhóm bắt đầu từ
+   `ceil(tổng / trần)` và **tăng dần cho tới khi mọi nhóm nằm dưới trần** (LPT chỉ
+   bảo đảm ≤ 4/3 OPT, không bảo đảm ≤ trần: 10 000 ảnh với trần 2 940 ảnh chia 4
+   nhóm vẫn ra 3 000 ảnh/nhóm).
+
+Kết quả cho đúng ca trên:
+
+```text
+  modal run -m …::dire --n 500 --steps 20 --splits train,test --skip-existing \
+      --generator diff-projectedgan,iddpm,if
+      # 2600 ảnh (gồm 600 real chưa có map) = 2.65 GPU-h ≈ 2.92 USD
+  modal run -m …::dire --n 500 --steps 20 --splits train,test --skip-existing \
+      --generator adm,dalle2,ddpm,diff-stylegan
+      # 2500 ảnh = 2.55 GPU-h ≈ 2.81 USD
+```
+
+2,65 h và 2,55 h — cách trần 4,5 h gần 2 h, và mỗi lệnh đều dưới `--max-usd` mặc
+định 5 USD (2,92 USD).
 
 **Chia nhỏ không làm tăng tiền** — tổng NFE như cũ — nhưng làm ba điều:
 
@@ -351,7 +380,8 @@ map mới.
 
 > Cùng một bài học với 3.6: một con số "trông hợp lý" (10,87 USD) không nói gì về
 > việc lượt chạy có **kết thúc** được hay không. Trần tiền và trần thời gian là
-> hai câu hỏi khác nhau.
+> hai câu hỏi khác nhau — và bản gợi ý chia nhỏ phải được kiểm bằng **chính cổng
+> vừa chặn**, nếu không thì nó chỉ là một vòng lặp thứ hai.
 
 > Bài học chung của 3.5–3.8: **ước lượng, thiết bị và tính "đã có hay chưa" đều
 > là thứ "trông đúng" khi chỉ đọc code.** Cái thứ nhất chỉ sai trên GPU, cái thứ
