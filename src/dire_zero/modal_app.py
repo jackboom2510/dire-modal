@@ -148,9 +148,14 @@ def selfcheck() -> dict:
     return report
 
 
-@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
-def checkdata() -> dict:
-    """Cổng dữ liệu: kiểm manifest + data_card **trước** khi tiêu GPU.
+def _check_data(skip_sha: bool = False) -> dict:
+    """Thân của `checkdata`, tách riêng để test được mà không cần Modal.
+
+    `modal.Function` không phải callable và không lộ hàm gốc, nên một entrypoint
+    gộp cả logic thì chỉ kiểm được bằng cách chạy thật trên Volume — đúng thứ
+    đang hỏng. Đây là toàn bộ lý do hàm này tồn tại.
+
+    Cổng dữ liệu: kiểm manifest + data_card **trước** khi tiêu GPU.
 
     Kiểm bốn thứ mà một lần chạy GPU 3 tiếng sẽ không báo:
 
@@ -159,6 +164,10 @@ def checkdata() -> dict:
     3. `data_card.label` phù hợp với nguồn ảnh giả (`author` ⇒ không được `R3`);
     4. rò rỉ pixel giữa hai lớp (nếu ingest đã chạy, việc này đã chặn; ở đây
        kiểm lại trên bản đã đẩy lên vì Volume có thể bị ghi đè từ ngoài).
+
+    `skip_sha=True` bỏ bước băm (nhanh, dùng khi chỉ muốn kiểm cấu trúc). Mặc
+    định **không** bỏ: đẩy 200 nghìn file là chỗ hỏng thật đã xảy ra, và chỉ có
+    băm mới phát hiện được file đẩy dở.
     """
     import collections
     import json  # noqa: PLC0415
@@ -167,16 +176,40 @@ def checkdata() -> dict:
 
     card = json.load(open(DATA_CARD, encoding="utf-8")) if os.path.exists(DATA_CARD) else {}
     label = card.get("label", "?")
-    ok, bad = verify_manifest(MANIFEST) if os.path.exists(MANIFEST) else (0, ["thiếu manifest.tsv"])
+    has_manifest = os.path.exists(MANIFEST)
+    ok, bad = verify_manifest(MANIFEST) if has_manifest and not skip_sha else (0, [])
 
-    rows = read_manifest_tsv(MANIFEST) if os.path.exists(MANIFEST) else []
+    rows = read_manifest_tsv(MANIFEST) if has_manifest else []
+
+    # Đếm PNG thật trên đĩa: manifest có thể thiếu dòng, hoặc Volume có file
+    # không ai khai (ví dụ `::gen` ghi thêm `ours_adm` sau khi ingest).
+    n_png = 0
+    for split in os.listdir(DATA) if os.path.isdir(DATA) else []:
+        for dirpath, _dirnames, filenames in os.walk(os.path.join(DATA, split)):
+            n_png += sum(1 for f in filenames if f.endswith(".png"))
     counts = collections.Counter((r["split"], r["generator"]) for r in rows)
     n_real = sum(1 for r in rows if r["label"] == 0)
     n_fake = sum(1 for r in rows if r["label"] == 1)
 
     problems = []
-    if not rows:
-        problems.append("manifest rỗng — chạy `python -m dire_zero ingest` rồi đẩy lên")
+    # Ba nguyên nhân khác nhau của "không có dòng nào", ba cách sửa khác nhau.
+    # Gộp chúng thành "manifest rỗng" là đã dẫn người dùng đi sai một lần.
+    if not has_manifest:
+        problems.append(
+            f"thiếu {MANIFEST} — file này nằm ở **gốc** cây local, nên đẩy từng thư mục "
+            "con sẽ bỏ sót. Đẩy riêng:\n"
+            f"  modal volume put {V.VOLUME_NAME} <local>/manifest.tsv data/manifest.tsv"
+        )
+    elif not rows:
+        problems.append(
+            f"{MANIFEST} chỉ có dòng tiêu đề — tệp rỗng. Chạy `python -m dire_zero ingest` "
+            "trên máy rồi đẩy lại (manifest + data_card), không cần đẩy lại ảnh."
+        )
+    if not os.path.exists(DATA_CARD):
+        problems.append(
+            f"thiếu {DATA_CARD} — cùng gốc với manifest; thiếu nó thì không biết nhãn "
+            "tối đa được nói (R0/R1+R2/R1+R2+R3) và không kiểm được nguồn ảnh giả."
+        )
     if bad:
         problems.append(f"{len(bad)} ảnh lệch sha256/xoá: {bad[:2]}")
     if n_real and n_fake and max(n_real, n_fake) / max(min(n_real, n_fake), 1) > 5:
@@ -185,6 +218,16 @@ def checkdata() -> dict:
         problems.append(f"thiếu một lớp (thật {n_real}, giả {n_fake})")
     if card.get("fake_source") == "author" and "R3" in label:
         problems.append("data_card nói ảnh giả là của tác giả nhưng nhãn lại có R3")
+
+    # Không phải lỗi: `::gen` ghi thêm `data/<split>/ours_adm` mà manifest (do
+    # ingest tạo) không biết. Nhưng chênh lệch lớn thì phải nói ra.
+    warnings = []
+    if rows and n_png != len(rows):
+        warnings.append(
+            f"{n_png} PNG trên đĩa vs {len(rows)} dòng manifest — chênh "
+            f"{n_png - len(rows):+d}. Bình thường nếu đã chạy `::gen` (ảnh `ours_adm` "
+            "không nằm trong manifest); không bình thường nếu vừa ingest xong."
+        )
 
     report = {
         "label": label,
@@ -196,13 +239,22 @@ def checkdata() -> dict:
         "n_real": n_real,
         "n_fake": n_fake,
         "by_split_generator": {f"{s}/{g}": n for (s, g), n in sorted(counts.items())},
+        "n_png_on_disk": n_png,
         "manifest_sha_ok": ok,
+        "sha_checked": has_manifest and not skip_sha,
+        "warnings": warnings,
         "problems": problems,
     }
     print(json.dumps(report, ensure_ascii=False, indent=2), flush=True)
     if problems:
         raise RuntimeError("dữ liệu chưa dùng được:\n  " + "\n  ".join(problems))
     return report
+
+
+@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
+def checkdata(skip_sha: bool = False) -> dict:
+    """Cổng dữ liệu — xem `_check_data` cho bốn thứ được kiểm."""
+    return _check_data(skip_sha)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
