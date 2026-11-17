@@ -78,7 +78,9 @@ def generate(
     for i, seed in enumerate(all_seeds):
         x0, nfe = sample(model, (1, 3, 256, 256), schedule, device, seed)
         nfe_total += nfe
-        arr = to_uint8(x0).squeeze(0).permute(1, 2, 0).numpy()
+        # `.cpu()` trước `.numpy()`: `sample` chạy trên CUDA, còn Pillow cần bộ nhớ
+        # host. Cùng lỗi với `pipeline.to_hwc_uint8` (§3.7 của from-zero-clean-room).
+        arr = to_uint8(x0).detach().cpu().squeeze(0).permute(1, 2, 0).contiguous().numpy()
         _save_png(arr, out / f"{i:06d}_s{seed}.png")
         written += 1
         if written % 25 == 0:

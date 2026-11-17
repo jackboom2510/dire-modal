@@ -79,16 +79,17 @@ phát triển, và nó là test duy nhất bắt được lỗi *ngữ nghĩa*: 
 **sau** phép tăng mẫu vẫn ra ảnh đúng hình dạng, vẫn hội tụ, nhưng tốn gấp 4 lần
 compute và lệch hẳn kết quả.
 
-## 3. Sáu lỗi tìm được khi viết lại
+## 3. Bảy lỗi tìm được khi viết lại
 
-Viết lại từ công thức không chỉ để "sạch". Sáu lỗi dưới đây lộ ra vì phải suy
+Viết lại từ công thức không chỉ để "sạch". Bảy lỗi dưới đây lộ ra vì phải suy
 nghĩ lại từng chỉ số — và phần lớn nằm trong **đường đang chạy** của repo, tức
 là đường mà `docs/runbook-local-manual.md` bảo người dùng chạy.
 
 **Trạng thái:** 3.1–3.3 đã sửa trong `src/dire_modal/ddim.py`, có test riêng
 (`tests/test_ddim_protocol.py`, 11 test, chạy bằng mô hình "tiên tri" nên không
-cần GPU lẫn checkpoint). 3.4–3.6 lộ ra khi chạy thật: 3.4 qua `::selfcheck` trên
-A10G, 3.5 và 3.6 qua lượt `::dire` đầu tiên trên A10G (cùng một traceback).
+cần GPU lẫn checkpoint). 3.4–3.7 lộ ra khi chạy thật: 3.4 qua `::selfcheck` trên
+A10G, 3.5 và 3.6 qua lượt `::dire` đầu tiên trên A10G (cùng một traceback), 3.7
+qua lượt `::gen` đầu tiên trên A10G.
 
 ### 3.1 `ᾱ[0] = 1,0` ⇒ DIRE map toàn `NaN` (đường cũ)
 
@@ -212,6 +213,47 @@ Test canh: `test_plan_images_caps_every_cell_by_n_and_not_the_whole_tree`.
 > Bài học chung của 3.5–3.6: **ước lượng và thiết bị đều là thứ "trông đúng" khi
 > chỉ đọc code.** Một cái chỉ sai trên GPU, một cái chỉ sai khi có `--n` nhỏ hơn
 > kích thước cây. Cả hai đều phải chạy thật mới lộ.
+
+
+### 3.7 `save_png` gọi `.numpy()` trên tensor CUDA — chết ở ảnh đầu tiên
+
+Lượt `::gen` đầu tiên:
+
+```text
+[tiền] 500 ảnh × 50 NFE = 25000 NFE · 0.64 GPU-h · 0.70 USD (khoảng 0.56–1.12) @ A10G 1.10/h
+[nạp] /zero/ckpt/adm_lsun.pt · float16 · 10.7s · sha256 a37c32fffd31…
+Traceback (most recent call last):
+  File "/root/dire_zero/pipeline.py", line 111, in generate
+    save_png(img, out / name)
+  File "/root/dire_zero/pipeline.py", line 66, in save_png
+    Image.fromarray(to_uint8(arr).squeeze(0).permute(1, 2, 0).numpy()).save(path, format="PNG")
+TypeError: can't convert cuda:0 device type tensor to numpy. Use Tensor.cpu() to copy the tensor to host memory first.
+```
+
+Đã trả tiền nạp checkpoint và chạy xong bước sinh **đầu tiên** rồi mới chết, vì
+`to_uint8` cố ý **giữ nguyên thiết bị** của đầu vào (nó là hàm số học thuần, không
+phải hàm I/O). Đường CPU không bao giờ thấy lỗi này — đúng như 3.4, 3.5: ba lỗi
+liên tiếp, cùng một dạng "chỉ tồn tại trên GPU".
+
+Sửa: mọi đường ghi ảnh đi qua **một** hàm `pipeline.to_hwc_uint8()`, làm đúng ba
+bước theo thứ tự `.detach() → .cpu() → .contiguous()`, và nhận cả `(1, C, H, W)`
+lẫn `(C, H, W)` (map 1 kênh trả ảnh `L`). Cùng lỗi trong
+`src/dire_modal/scratch_gen.py` cũng được sửa — nó sẽ chết y như vậy ở lần chạy
+sau, chỉ muộn hơn.
+
+**Test canh, và vì sao phải có hai lớp:**
+
+* `test_save_png_moves_the_tensor_to_cpu_before_numpy` — ghi thật một PNG rồi đọc
+  lại (đúng số học), **và** kiểm thứ tự `.cpu()` trước `.numpy()` trong chuỗi gọi;
+* `test_no_module_converts_a_device_tensor_without_cpu` — quét **từng hàm** trong
+  `src/`: hàm nào có `.numpy()` sau `permute`/`to_uint8` mà `.cpu()` không đứng
+  trước thì fail. Bài này bắt **cả lớp lỗi**, nên lần sau ai viết lại ở module
+  khác cũng bị chặn — đó là điều test chức năng không làm được khi máy không có GPU.
+
+> Bài học chung của 3.4–3.7: **bốn lỗi, một nguyên nhân.** CPU và GPU khác nhau ở
+> dtype (fp16), ở thiết bị (CUDA vs host), và ở chỗ nào *ghi ra đĩa*. Mọi hàm
+> `to_*`/`save_*` phải tự nói rõ nó trả tensor ở đâu, và mọi `.numpy()` phải có
+> `.cpu()` ngay trước — không có ngoại lệ "chắc là CPU rồi".
 
 ## 4. Chạy
 
