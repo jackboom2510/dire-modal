@@ -388,9 +388,9 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print("\nĐẩy lên Volume — **CHỈ SAU KHI** tải lại archive hỏng và chạy lại:")
     else:
         print("\nĐẩy lên Volume:")
-    print(f"  modal volume put dire-raw {out} zero/data -r")
-    print("  modal volume put dire-raw " + str(manifest) + " zero/data/manifest.tsv")
-    print("  modal volume put dire-raw " + str(cardpath) + " zero/data/data_card.json")
+    print(f"  modal volume put dire-zero {out} data -r")
+    print("  modal volume put dire-zero " + str(manifest) + " data/manifest.tsv")
+    print("  modal volume put dire-zero " + str(cardpath) + " data/data_card.json")
     print("\nRồi:  modal run -m dire_zero.modal_app::checkdata")
     if stats["partial_archives"]:
         print("\n[KHÔNG ĐẦY ĐỦ] có archive đọc dở ⇒ kế hoạch NFE/chi phí tính trên số ảnh"

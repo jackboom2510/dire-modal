@@ -1028,7 +1028,7 @@ def write_manifest_tsv(path: str | Path, items: list[Item], root: str | Path | N
 
     Vì sao phải tương đối: có ổ dự phòng nghĩa là cùng một bộ dữ liệu có thể được
     ghi ở ``F:/…`` hôm nay và ``./data/…`` hôm sau, và cùng một manifest có thể
-    được đẩy lên Volume với gốc ``/raw/zero/data``. Đường dẫn tuyệt đối làm
+    được đẩy lên Volume với gốc ``/zero/data``. Đường dẫn tuyệt đối làm
     ``verify_manifest`` chỉ đúng trên đúng một máy — hỏng ở mọi nơi khác, và hỏng
     **im lặng** (nó báo "lệch sha256" trong khi ảnh vẫn tốt, chỉ là tìm sai chỗ).
     """
@@ -1065,7 +1065,7 @@ def verify_manifest(path: str | Path, root: str | Path | None = None) -> tuple[i
 
     Đường dẫn tương đối được hiểu là **so với thư mục chứa manifest** (mặc định)
     hoặc so với ``root``. Nhờ vậy cùng một manifest kiểm được ở ``F:/``, ở
-    ``./data``, và ở ``/raw/zero/data`` trong container — ba gốc khác nhau, một
+    ``./data``, và ở ``/zero/data`` trong container — ba gốc khác nhau, một
     manifest. Dòng kiểu cũ (đường tuyệt đối) vẫn kiểm được.
     """
     p = Path(path)

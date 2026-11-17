@@ -340,7 +340,9 @@ def test_cli_ingest_end_to_end(tree: Path, tmp_path: Path, capsys):
                    "--limit", "2"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "modal volume put dire-raw" in text
+    # Volume mới: `dire-zero`, gốc `data/` (bố cục cũ `dire-raw` + `zero/data` đã bị thay)
+    assert "modal volume put dire-zero" in text
+    assert "data" in text and "zero/data" not in text
     assert "checkdata" in text
     assert (out / "manifest.tsv").exists() and (out / "data_card.json").exists()
     card = json.loads((out / "data_card.json").read_text(encoding="utf-8"))
