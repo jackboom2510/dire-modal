@@ -136,9 +136,10 @@ chưa có `sec_per_step` | **không in tiền**. Khoảng thực tế 0,05–2,5
 ### 3.3 `ingest` — chuẩn hoá (0 đồng, vài phút)
 
 ```bash
-python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
+python -m dire_zero ingest --root F:/du-lieu \
                            --dataset lsun_bedroom --license research-only \
                            --splits train val test --limit 500
+# mặc định ghi vào ./data/dire-zero-norm — muốn chỗ khác thì thêm --out
 ```
 
 - giải nén **trực tiếp** từ `.tar.gz`, không cần giải ra đĩa trước;
@@ -157,7 +158,69 @@ python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
   và ghi chú; xem 3.4);
 - `--no-resume` — ghi lại cả PNG đã có (mặc định bỏ qua file đã đúng).
 
+#### Chỗ ghi: `./data/dire-zero-norm` trước, `F:/dire-zero-norm` khi thiếu chỗ
+
+Thứ tự, và lý do của từng bậc:
+
+| Bậc | Đường dẫn | Khi nào dùng |
+|---|---|---|
+| 1 | `--out` bạn gõ | luôn thắng, **trừ khi** không đủ chỗ (xem dưới) |
+| 2 | `./data/dire-zero-norm` | mặc định, **tương đối** ⇒ không khoá vào ổ nào |
+| 3 | `F:/dire-zero-norm` | chỉ khi bậc 1/2 **không đủ dung lượng** |
+
+`F:` là **dự phòng dung lượng**, không phải chỗ mặc định. Không bao giờ nhảy sang
+`F:` chỉ vì thư mục đích chưa tồn tại — thư mục ra thường chưa có, đó là chuyện
+bình thường; nhảy ổ vì lý do đó là làm dữ liệu rơi vào chỗ bạn không ngờ.
+
+Trước khi ghi, `ingest` trả lời ba câu và **in cả ba**:
+
+```text
+Ước lượng đầu ra: ≤ 6.1 GB (1,25 × dung lượng nguồn (chưa biết số ảnh))
+  chỗ ghi: data/dire-zero-norm
+  lý do:   ổ chính đủ chỗ (còn 45.0 GB, cần ≤ 6.1 GB)
+```
+
+Nếu phải dùng `F:`:
+
+```text
+  chỗ ghi: F:/dire-zero-norm
+  lý do:   ổ chính không dùng được (chỉ còn 0.4 GB, cần ≤ 6.1 GB + 0.5 GB dự trữ)
+           — dùng ổ dự phòng #1
+```
+và cùng dòng đó vào `data_card.json` (`out_root`, `out_reason`,
+`warnings: ["[dự phòng dung lượng] …"]`) lẫn `stderr`.
+
+Bốn chi tiết:
+
+- **Ước lượng là trần, không phải trung bình.** Không `--limit`: `1,25 × dung
+  lượng nguồn` (chỉ `stat`, tức thì) — PNG 256² đã cắt giữa nhỏ hơn hoặc xấp xỉ
+  ảnh nguồn. Có `--limit`: đếm thật `n` ảnh (tar dừng ngay sau ảnh thứ `n`) rồi
+  nhân `200 448 B`/ảnh. Đoán thấp rồi chết giữa đường đúng là lỗi mục này sinh ra
+  để tránh.
+- **Chừa 0,5 GB** cho hệ điều hành (`--min-free-gb`). Ghi kín ổ là cách làm hỏng
+  cả máy lẫn Windows, và Windows còn tệ hơn khi đầy.
+- **"Không truy cập được" ≠ "hết chỗ".** Ổ `F:` chưa cắm hoặc bị chặn quyền được
+  báo riêng, không gộp thành "hết chỗ" — hai chuyện cần hai cách xử lý khác nhau.
+- **Không có ứng viên nào đủ ⇒ dừng trước khi ghi** (`OutOfSpaceError`, exit 3), in
+  số của từng ứng viên. Chết giữa đường ở 40 % thì đã để lại thư mục dở dang.
+
+Tắt dự phòng: `--no-out-fallback` (thiếu chỗ thì dừng). Đổi ứng viên:
+`--out-fallback D:/khac E:/khac2`.
+
+#### `manifest.tsv` ghi đường dẫn **tương đối**
+
+Có ổ dự phòng nghĩa là cùng một bộ dữ liệu có thể nằm ở `F:/…` hôm nay, `./data/…`
+hôm sau, và `/raw/zero/data` trong container. Đường dẫn tuyệt đối làm
+`verify_manifest` chỉ đúng trên đúng một máy — và **hỏng im lặng**: nó báo "lệch
+sha256" trong khi ảnh vẫn tốt, chỉ là tìm sai chỗ. Nên cột `png` là
+`test/<gen>/<sha16>.png`, `verify_manifest` giải theo thư mục chứa manifest (hoặc
+`root=` bạn truyền). Dòng kiểu cũ (tuyệt đối) vẫn kiểm được.
+
 ### 3.4 Khi ingest gặp lỗi — bốn đường dự phòng, và một điều cấm
+
+> Đừng lẫn với mục 3.3: ở đó là dự phòng **chỗ ghi** (thiếu dung lượng), ở đây là
+> dự phòng **dữ liệu** (hỏng giữa đường). Hai chuyện khác nhau, hai cơ chế khác
+> nhau, và cả hai đều phải khai báo chứ không được im lặng.
 
 Cây 12 GB đọc từ ổ ngoài, tải tay từ Baidu. Hỏng giữa đường là **chuyện thường**:
 tar thiếu đuôi, một JPEG cụt, ổ đầy đúng lúc ghi. Trước đây một trong số đó làm
@@ -258,10 +321,11 @@ Hai điều phải nói rõ, vì chúng quyết định nhãn:
 Đường rẻ nhất có ý nghĩa khoa học, và giờ **đã làm được dòng ADM**:
 
 ```bash
-python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
+python -m dire_zero ingest --root F:/du-lieu \
         --dataset lsun_bedroom --license research-only \
         --splits train val test --fake-source author --limit 500
-modal volume put dire-raw F:/dire-zero-norm zero/data -r
+# → ./data/dire-zero-norm (tự sang F:/dire-zero-norm nếu ổ hiện tại không đủ chỗ)
+modal volume put dire-raw ./data/dire-zero-norm zero/data -r
 modal run -m dire_zero.modal_app::checkdata       # sha256 + hai lớp + tỉ lệ ≤5:1
 modal run -m dire_zero.modal_app::bench           # ĐO sec/step trước khi tin bảng giá
 modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20

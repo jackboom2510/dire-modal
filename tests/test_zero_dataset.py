@@ -544,3 +544,144 @@ def test_cli_strict_flag_turns_fallback_off(tmp_path: Path, capsys):
                    "--license", "research-only", "--splits", "test", "--strict"])
     assert rc == 3
     assert not any((tmp_path / "norm").rglob("*.png"))   # strict: không ghi gì dở dang
+
+
+# --------------------------------------------------------------------------- #
+# Chỗ ghi: ổ chính trước, ổ F: dự phòng khi thiếu dung lượng
+# --------------------------------------------------------------------------- #
+
+def test_choose_out_prefers_primary_when_it_has_space(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(ds, "free_bytes", lambda p: 500 * 10**9)
+    c = ds.choose_out_root(tmp_path / "data", fallbacks=(str(tmp_path / "F"),), needed=10**9)
+    assert c.path == tmp_path / "data"
+    assert not c.redirected
+    assert "đủ chỗ" in c.reason
+
+
+def test_choose_out_falls_back_to_F_when_primary_is_full(tmp_path: Path, monkeypatch):
+    """Đúng yêu cầu: F: là **dự phòng cho dung lượng**, không phải chỗ mặc định."""
+    def free(p):
+        return 200 * 10**6 if "data" in str(p) else 900 * 10**9
+    monkeypatch.setattr(ds, "free_bytes", free)
+
+    c = ds.choose_out_root(tmp_path / "data", fallbacks=(str(tmp_path / "F"),), needed=5 * 10**9)
+    assert c.path == tmp_path / "F"
+    assert c.redirected
+    assert "dự phòng" in c.reason
+    assert "200 MB" in c.reason          # số phải đọc được, không phải "0.0 GB"
+
+
+def test_choose_out_keeps_reserve_for_the_os(tmp_path: Path, monkeypatch):
+    """Còn trống 1 GB nhưng cần 0,8 GB + 0,5 GB dự trữ ⇒ **không** ghi vào đó."""
+    monkeypatch.setattr(ds, "free_bytes",
+                        lambda p: 10**9 if str(p).endswith("primary") else 50 * 10**9)
+    c = ds.choose_out_root(tmp_path / "primary", fallbacks=(str(tmp_path / "spare"),),
+                           needed=8 * 10**8)
+    assert c.path == tmp_path / "spare" and c.redirected
+
+
+def test_choose_out_skips_a_drive_that_does_not_exist(tmp_path: Path, monkeypatch):
+    """`free_bytes` trả None = **không biết**, khác với 0 = hết chỗ. Không thử rồi chết."""
+    monkeypatch.setattr(ds, "free_bytes", lambda p: None if str(p).endswith("F") else 10**8)
+    with pytest.raises(ds.OutOfSpaceError) as ei:
+        ds.choose_out_root(tmp_path / "data", fallbacks=(str(tmp_path / "F"),), needed=10**9)
+    # ổ chưa cắm có thông báo riêng, không bị gộp thành "hết chỗ"
+    assert "không truy cập được" in str(ei.value)
+
+
+def test_choose_out_fails_loudly_with_numbers(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(ds, "free_bytes", lambda p: 10**8)
+    with pytest.raises(ds.OutOfSpaceError) as ei:
+        ds.choose_out_root(tmp_path / "a", fallbacks=(str(tmp_path / "b"),), needed=9 * 10**9)
+    msg = str(ei.value)
+    assert "100 MB" in msg and "9.0 GB" in msg          # đủ số để quyết định
+    assert str(tmp_path / "a") in msg and str(tmp_path / "b") in msg
+
+
+def test_choose_out_dedupes_when_fallback_is_the_primary(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(ds, "free_bytes", lambda p: 10**12)
+    c = ds.choose_out_root(tmp_path / "x", fallbacks=(str(tmp_path / "x"),), needed=1)
+    assert len(c.tried) == 1
+
+
+def test_estimate_without_limit_bounds_by_source_size(tree: Path):
+    items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
+    est = ds.estimate_output_bytes(items)
+    src = sum(it.source.stat().st_size for it in items)
+    assert est["need"] == int(src * 1.25)
+    assert est["n_images"] is None                 # chưa đếm, và không cần đếm
+
+
+def test_estimate_with_limit_counts_images_and_stops_early(tree: Path):
+    items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
+    est = ds.estimate_output_bytes(items, limit_per_archive=2)
+    assert est["n_images"] == 2 * len(items)       # mỗi archive đóng góp đúng `limit`
+    assert est["need"] == est["n_images"] * ds.BYTES_PER_PNG
+    assert ds.BYTES_PER_PNG >= 256 * 256 * 3       # trần, không phải trung bình
+
+
+def test_manifest_paths_are_relative_and_survive_moving_the_tree(tree: Path, tmp_path: Path):
+    """Có ổ dự phòng thì đường dẫn tuyệt đối trong manifest là lỗi chờ ngày nổ."""
+    items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
+    out = tmp_path / "a" / "norm"
+    made, _ = ds.ingest(items, out, size=32)
+    manifest = ds.write_manifest_tsv(out / "manifest.tsv", made, root=out)
+
+    rows = ds.read_manifest_tsv(manifest)
+    assert all(not Path(r["png"]).is_absolute() for r in rows)
+    assert all(r["png"].count("/") == 2 for r in rows)      # test/<gen>/<sha>.png
+    ok, bad = ds.verify_manifest(manifest)
+    assert ok == len(rows) and not bad
+
+    moved = tmp_path / "b" / "norm"
+    moved.parent.mkdir(parents=True)
+    out.rename(moved)                                        # "đổi ổ" / đổi máy
+    ok2, bad2 = ds.verify_manifest(moved / "manifest.tsv")
+    assert ok2 == len(rows) and not bad2
+
+
+def test_verify_manifest_still_accepts_old_absolute_rows(tree: Path, tmp_path: Path):
+    items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
+    out = tmp_path / "norm"
+    made, _ = ds.ingest(items, out, size=32)
+    manifest = ds.write_manifest_tsv(out / "manifest.tsv", made)   # kiểu cũ: tuyệt đối
+    rows = ds.read_manifest_tsv(manifest)
+    assert all(Path(r["png"]).is_absolute() for r in rows)
+    ok, bad = ds.verify_manifest(manifest)
+    assert ok == len(rows) and not bad
+
+
+def test_cli_ingest_redirects_to_fallback_and_records_it(tree: Path, tmp_path: Path, monkeypatch, capsys):
+    """Thiếu chỗ ở ổ chính ⇒ ghi sang F:, nhưng **phải nói** và ghi vào data_card."""
+    primary = tmp_path / "primary"
+    fb = tmp_path / "F_drive"
+    monkeypatch.setattr(ds, "free_bytes",
+                        lambda p: 10**8 if "primary" in str(p) else 800 * 10**9)
+
+    rc = cli_main(["ingest", "--root", str(tree), "--out", str(primary),
+                   "--out-fallback", str(fb), "--license", "research-only",
+                   "--splits", "test", "--limit", "1"])
+    assert rc == 0
+    assert (fb / "manifest.tsv").exists() and (fb / "data_card.json").exists()
+    assert not (primary / "manifest.tsv").exists()      # không ghi nửa vời sang ổ chính
+
+    card = json.loads((fb / "data_card.json").read_text(encoding="utf-8"))
+    assert card["out_root"] == str(fb)
+    assert "dự phòng" in card["out_reason"]
+    assert any("[dự phòng dung lượng]" in w for w in card["warnings"])
+    assert "dự phòng" in capsys.readouterr().err        # cảnh báo ra stderr
+
+
+def test_cli_ingest_without_fallback_stops_before_writing(tree: Path, tmp_path: Path, monkeypatch):
+    monkeypatch.setattr(ds, "free_bytes", lambda p: 10**8)     # chỉ còn 0,1 GB
+    primary = tmp_path / "primary"
+    rc = cli_main(["ingest", "--root", str(tree), "--out", str(primary),
+                   "--no-out-fallback", "--license", "research-only", "--splits", "test"])
+    assert rc == 3
+    assert not primary.exists() or not any(primary.rglob("*.png"))
+
+
+def test_cli_ingest_default_out_is_relative(tmp_path: Path, monkeypatch, capsys):
+    """Mặc định không được khoá vào ổ nào: `./data/dire-zero-norm` theo thư mục hiện tại."""
+    assert not Path(ds.DEFAULT_OUT_ROOT).is_absolute()
+    assert ds.DEFAULT_OUT_FALLBACKS == ("F:/dire-zero-norm",)

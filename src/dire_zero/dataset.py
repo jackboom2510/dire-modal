@@ -47,6 +47,7 @@ import hashlib
 import io
 import json
 import re
+import shutil
 import tarfile
 import time
 import zlib
@@ -74,6 +75,13 @@ __all__ = [
     "SPLITS",
     "generator_of",
     "label_for_generator",
+    "choose_out_root",
+    "estimate_output_bytes",
+    "free_bytes",
+    "OutChoice",
+    "OutOfSpaceError",
+    "DEFAULT_OUT_ROOT",
+    "DEFAULT_OUT_FALLBACKS",
 ]
 
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".bmp", ".webp", ".tif", ".tiff")
@@ -810,6 +818,185 @@ def _archive_is_readable(path: Path) -> tuple[bool, str]:
         return False, f"{type(exc).__name__}: {exc}"
 
 
+# --------------------------------------------------------------------------- #
+# Chọn thư mục đầu ra: ổ chính trước, ổ dự phòng khi thiếu dung lượng
+# --------------------------------------------------------------------------- #
+
+#: Chỗ ghi mặc định — **tương đối**, để không khoá vào ổ nào.
+DEFAULT_OUT_ROOT = "data/dire-zero-norm"
+
+#: Ổ dự phòng mặc định. Chỉ dùng khi ổ chính **không đủ chỗ**, không bao giờ dùng
+#: chỉ vì ổ chính chưa tồn tại (thư mục ra thường chưa có, đó là chuyện bình thường).
+DEFAULT_OUT_FALLBACKS = ("F:/dire-zero-norm",)
+
+#: Chừa lại cho hệ điều hành. Ghi kín ổ là cách làm hỏng cả máy lẫn Windows.
+RESERVE_BYTES = 512 * 1024 * 1024
+
+#: Trần byte cho một PNG 256² RGB: 256·256·3. PNG có thể nhích hơn vài phần nghìn
+#: với ảnh nhiễu, nên dùng trần + 2 % thay vì con số lý thuyết.
+BYTES_PER_PNG = int(256 * 256 * 3 * 1.02)
+
+
+def _fmt_size(n: int | None) -> str:
+    """Số byte → chuỗi đọc được. ``None`` = không biết, **không** phải 0."""
+    if n is None:
+        return "không rõ"
+    if n >= 10**9:
+        return f"{n / 1e9:.1f} GB"
+    return f"{n / 1e6:.0f} MB"
+
+
+class OutOfSpaceError(RuntimeError):
+    """Không ứng viên nào đủ chỗ. Dừng **trước** khi ghi, không chết giữa đường."""
+
+
+def _nearest_existing(path: Path) -> Path | None:
+    """Đi lên tới thư mục/ổ gần nhất đang tồn tại. ``F:/`` chưa cắm ⇒ ``None``."""
+    p = Path(path)
+    for _ in range(64):
+        try:
+            if p.exists():
+                return p
+        except OSError:                     # ổ tháo giữa lúc kiểm
+            return None
+        if p.parent == p:
+            return None
+        p = p.parent
+    return None
+
+
+def free_bytes(path: str | Path) -> int | None:
+    """Dung lượng còn trống của **ổ chứa** ``path``; ``None`` nếu không truy cập được.
+
+    Đo trên thư mục gần nhất đang tồn tại: ``F:/dire-zero-norm`` chưa tạo vẫn đo
+    được dung lượng của ``F:/``. Trả ``None`` (không trả 0) để phân biệt "không
+    biết" với "hết chỗ" — hai chuyện khác nhau và cần thông báo khác nhau.
+    """
+    base = _nearest_existing(Path(path))
+    if base is None:
+        return None
+    try:
+        return shutil.disk_usage(base).free
+    except OSError:
+        return None
+
+
+def estimate_output_bytes(items: list[Item], limit_per_archive: int | None = None) -> dict:
+    """Ước lượng **trần** dung lượng PNG đầu ra — đo bằng ``stat``, không giải nén.
+
+    Hai chế độ, vì hai thứ đã biết khác nhau:
+
+    * **không ``--limit``** ⇒ chưa biết số ảnh, nên lấy trần theo dung lượng
+      nguồn: PNG 256² đã cắt giữa *nhỏ hơn* hoặc xấp xỉ ảnh nguồn, nên
+      ``1,25 × tổng byte archive`` là trần an toàn. Chỉ ``stat``, tức thì.
+    * **có ``--limit``** ⇒ biết chính xác bao nhiêu ảnh sẽ ghi, và đếm được rẻ
+      (``tarfile`` dừng ngay sau ảnh thứ ``limit``). Dùng ``n × BYTES_PER_PNG``.
+
+    Ước lượng **trần** là lựa chọn có ý thức: đoán thấp rồi chết giữa đường đúng
+    là loại lỗi mà cả mục này sinh ra để tránh.
+    """
+    src_bytes = 0
+    n_unknown = 0
+    for it in items:
+        try:
+            src_bytes += it.source.stat().st_size
+        except OSError:
+            continue
+        if not _is_archive(it.source):
+            n_unknown += 1                 # ảnh rời: 1 file = 1 ảnh
+    archives = [it.source for it in items if _is_archive(it.source)]
+
+    if limit_per_archive is None:
+        n_images = None
+        need = int(src_bytes * 1.25)
+        basis = "1,25 × dung lượng nguồn (chưa biết số ảnh)"
+    else:
+        n_images = n_unknown
+        for a in archives:
+            try:
+                n_images += min(peek_archive(a, limit=limit_per_archive)["n_images"], limit_per_archive)
+            except (OSError, tarfile.TarError, EOFError, zlib.error):
+                continue
+        need = n_images * BYTES_PER_PNG
+        basis = f"{n_images} ảnh × {BYTES_PER_PNG} B"
+    return {"need": need, "src_bytes": src_bytes, "n_images": n_images,
+            "n_archives": len(archives), "basis": basis}
+
+
+@dataclass
+class OutChoice:
+    """Kết quả chọn chỗ ghi — kèm **lý do**, vì lý do phải đi theo dữ liệu."""
+
+    path: Path
+    reason: str
+    needed: int
+    free: int | None
+    redirected: bool
+    tried: list[dict] = field(default_factory=list)
+
+    def as_warning(self) -> str:
+        return f"[dự phòng dung lượng] ghi vào {self.path}: {self.reason}"
+
+
+def _same_path(a: Path, b: Path) -> bool:
+    try:
+        return a.resolve() == b.resolve()
+    except OSError:                        # ổ chưa tồn tại ⇒ resolve vẫn chạy, nhưng chắc ăn
+        return str(a).lower() == str(b).lower()
+
+
+def choose_out_root(
+    preferred: str | Path,
+    fallbacks: tuple[str, ...] | list[str] = DEFAULT_OUT_FALLBACKS,
+    needed: int = 0,
+    reserve: int = RESERVE_BYTES,
+) -> OutChoice:
+    """Chọn chỗ ghi: ``preferred`` nếu đủ chỗ, ngược lại thử ``fallbacks`` theo thứ tự.
+
+    Ba quyết định ở đây, mỗi cái đều là để tránh một kiểu hỏng cụ thể:
+
+    * **Dự phòng chỉ vì dung lượng**, không vì "thư mục chưa tồn tại". Thư mục ra
+      thường chưa có; coi đó là lý do để nhảy sang ổ khác thì dữ liệu rơi vào chỗ
+      người dùng không ngờ.
+    * **Đo trên ổ chứa**, không đo trên thư mục (``shutil.disk_usage`` đo ổ).
+    * **Không biết dung lượng ⇒ không chọn.** Ổ chưa cắm, quyền bị chặn: bỏ ứng
+      viên đó và ghi lý do, thay vì thử rồi chết giữa đường.
+    """
+    tried: list[dict] = []
+    candidates: list[Path] = [Path(preferred)]
+    for f in fallbacks:
+        pf = Path(f)
+        if not any(_same_path(pf, c) for c in candidates):
+            candidates.append(pf)
+
+    for idx, cand in enumerate(candidates):
+        free = free_bytes(cand)
+        if free is None:
+            tried.append({"path": str(cand), "free": None, "ok": False,
+                          "reason": "không truy cập được (ổ chưa cắm / không có quyền?)"})
+            continue
+        if free < needed + reserve:
+            tried.append({"path": str(cand), "free": free, "ok": False,
+                          "reason": f"chỉ còn {_fmt_size(free)}, cần ≤ {_fmt_size(needed)} "
+                                    f"+ {_fmt_size(reserve)} dự trữ"})
+            continue
+        tried.append({"path": str(cand), "free": free, "ok": True, "reason": "đủ chỗ"})
+        if idx == 0:
+            reason = f"ổ chính đủ chỗ (còn {_fmt_size(free)}, cần ≤ {_fmt_size(needed)})"
+        else:
+            why = tried[0]["reason"]
+            reason = f"ổ chính không dùng được ({why}) — dùng ổ dự phòng #{idx}"
+        return OutChoice(path=cand, reason=reason, needed=needed, free=free,
+                         redirected=idx != 0, tried=tried)
+
+    lines = "\n".join(f"  - {t['path']}: {t['reason']}" for t in tried)
+    raise OutOfSpaceError(
+        f"không chỗ nào đủ để ghi (cần ≤ {_fmt_size(needed)} + "
+        f"{_fmt_size(reserve)} dự trữ):\n{lines}\n"
+        "Dọn ổ, hoặc giảm --limit, hoặc trỏ --out sang ổ khác."
+    )
+
+
 def _seed_pix_seen(out_root: Path) -> dict[str, tuple[int, str]]:
     """Nhặt ``sha16 → (nhãn, nguồn)`` từ PNG **đã có** trong ``out_root``.
 
@@ -836,12 +1023,26 @@ def _seed_pix_seen(out_root: Path) -> dict[str, tuple[int, str]]:
 # Manifest + data card
 # --------------------------------------------------------------------------- #
 
-def write_manifest_tsv(path: str | Path, items: list[Item]) -> Path:
+def write_manifest_tsv(path: str | Path, items: list[Item], root: str | Path | None = None) -> Path:
+    """Ghi manifest. ``root`` ⇒ cột ``png`` thành **tương đối** so với gốc đó.
+
+    Vì sao phải tương đối: có ổ dự phòng nghĩa là cùng một bộ dữ liệu có thể được
+    ghi ở ``F:/…`` hôm nay và ``./data/…`` hôm sau, và cùng một manifest có thể
+    được đẩy lên Volume với gốc ``/raw/zero/data``. Đường dẫn tuyệt đối làm
+    ``verify_manifest`` chỉ đúng trên đúng một máy — hỏng ở mọi nơi khác, và hỏng
+    **im lặng** (nó báo "lệch sha256" trong khi ảnh vẫn tốt, chỉ là tìm sai chỗ).
+    """
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
+    base = Path(root) if root is not None else None
     lines = ["\t".join(MANIFEST_COLUMNS)]
     for it in sorted(items, key=lambda i: (i.split, i.generator, i.png)):
         row = it.as_row()
+        if base is not None and row["png"]:
+            try:
+                row["png"] = Path(row["png"]).relative_to(base).as_posix()
+            except ValueError:             # ngoài gốc (đường khác ổ) ⇒ giữ tuyệt đối
+                pass
         lines.append("\t".join(str(row[c]) for c in MANIFEST_COLUMNS))
     p.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return p
@@ -859,19 +1060,30 @@ def read_manifest_tsv(path: str | Path) -> list[dict]:
     return rows
 
 
-def verify_manifest(path: str | Path) -> tuple[int, list[str]]:
-    """Kiểm sha256 từng PNG so với manifest — bắt file bị sửa/xoá sau ingest."""
+def verify_manifest(path: str | Path, root: str | Path | None = None) -> tuple[int, list[str]]:
+    """Kiểm sha256 từng PNG so với manifest — bắt file bị sửa/xoá sau ingest.
+
+    Đường dẫn tương đối được hiểu là **so với thư mục chứa manifest** (mặc định)
+    hoặc so với ``root``. Nhờ vậy cùng một manifest kiểm được ở ``F:/``, ở
+    ``./data``, và ở ``/raw/zero/data`` trong container — ba gốc khác nhau, một
+    manifest. Dòng kiểu cũ (đường tuyệt đối) vẫn kiểm được.
+    """
+    p = Path(path)
+    base = Path(root) if root is not None else p.parent
     bad, ok = [], 0
-    for r in read_manifest_tsv(path):
+    for r in read_manifest_tsv(p):
+        target = Path(r["png"])
+        if not target.is_absolute():
+            target = base / target
         try:
-            got = sha256_file(r["png"])
+            got = sha256_file(target)
         except OSError as exc:
-            bad.append(f"{r['png']}: {exc}")
+            bad.append(f"{target}: {exc}")
             continue
         if got == r["sha256"]:
             ok += 1
         else:
-            bad.append(f"{r['png']}: sha256 lệch")
+            bad.append(f"{target}: sha256 lệch")
     return ok, bad
 
 
@@ -894,6 +1106,8 @@ class DataCard:
     manifest_sha256: str = ""
     warnings: list[str] = field(default_factory=list)
     created: str = ""
+    out_root: str = ""              # chỗ ghi thật (có thể là ổ dự phòng)
+    out_reason: str = ""            # vì sao ghi ở đó — để người sau kiểm lại được
 
     def as_dict(self) -> dict:
         return {
@@ -912,6 +1126,8 @@ class DataCard:
             "manifest_sha256": self.manifest_sha256,
             "warnings": self.warnings,
             "created": self.created,
+            "out_root": self.out_root,
+            "out_reason": self.out_reason,
             "note": (
                 "nếu fake_source='author', ảnh giả KHÔNG phải của mình ⇒ nhãn tối đa là R1+R2; "
                 "không được nói R3"
