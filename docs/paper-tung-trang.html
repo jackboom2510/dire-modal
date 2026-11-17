@@ -1,0 +1,2652 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DIRE — đọc bài báo từng trang, kèm luận cứ và hạn chế</title>
+<style>
+  :root{
+    --ink:#17262d; --muted:#5c6f7a; --line:#dbe3e7; --bg:#f6f7f4; --paper:#ffffff;
+    --accent:#0f4c5c; --accent2:#17697a; --accent-soft:#eaf2f4;
+    --amber:#8a5a06; --amber-bg:#fdf5e5; --amber-line:#e6c98c;
+    --red:#7d2530; --red-bg:#fbeeef; --red-line:#e3b6bb;
+    --green:#1c6b4a; --green-bg:#edf6f1; --green-line:#b6d8c6;
+    --code:#8a3a1e;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--serif); font-size:16.5px; line-height:1.62;
+    display:grid; grid-template-columns:274px minmax(0,1fr);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- sidebar ---------- */
+  aside#side{
+    position:sticky; top:0; height:100vh; overflow-y:auto; overscroll-behavior:contain;
+    background:#10333d; color:#cfe0e4; padding:22px 0 30px;
+    border-right:1px solid #0b252c; display:flex; flex-direction:column;
+  }
+  .brand{padding:0 20px 16px; border-bottom:1px solid rgba(255,255,255,.10)}
+  .brand .k{font:600 10px/1.4 var(--sans); letter-spacing:.2em; text-transform:uppercase; color:#7fb3bf; margin:0 0 8px}
+  .brand h1{font-family:var(--serif); font-size:19px; line-height:1.28; margin:0 0 6px; color:#fff; font-weight:600}
+  .brand .meta{font:11.5px/1.5 var(--sans); color:#8fb2bb; margin:0}
+  .brand .meta a{color:#a9ccd4}
+  .toc-hint{display:none; font:11px/1 var(--sans); color:#8fd3e0; margin:10px 0 0; letter-spacing:.02em}
+  @media (max-width:980px){ .toc-hint{display:block} .brand{cursor:pointer} }
+  nav#tocList{flex:1; padding:14px 12px 8px; overflow-y:auto}
+  .toc-group{font:600 9.5px/1 var(--sans); letter-spacing:.18em; text-transform:uppercase;
+    color:#6ea3af; margin:18px 8px 7px}
+  .toc-group:first-child{margin-top:2px}
+  a.toc-item{display:flex; gap:9px; align-items:baseline; text-decoration:none; color:#bcd3d9;
+    font:12.5px/1.35 var(--sans); padding:4px 8px; border-radius:5px; border-left:2px solid transparent}
+  a.toc-item:hover{background:rgba(255,255,255,.07); color:#fff}
+  a.toc-item.on{background:rgba(255,255,255,.11); color:#fff; border-left-color:#4fb3c6}
+  a.toc-item .tn{font:11px/1 var(--mono); color:#7fa9b4; min-width:16px; text-align:right; font-variant-numeric:tabular-nums}
+  a.toc-item.on .tn{color:#8fd3e0}
+  .side-foot{padding:12px 20px 0; border-top:1px solid rgba(255,255,255,.10);
+    font:11px/1.6 var(--sans); color:#82a7b0}
+  kbd{font:10.5px/1 var(--mono); background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.16);
+    border-radius:4px; padding:2px 5px; color:#dcebed}
+
+  /* ---------- top bar ---------- */
+  main{min-width:0; display:flex; flex-direction:column}
+  header#bar{
+    position:sticky; top:0; z-index:30; background:rgba(246,247,244,.94);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line);
+  }
+  .bar-in{max-width:1220px; margin:0 auto; padding:9px 38px 8px; display:flex; gap:14px; align-items:center}
+  .bar-t{font:600 12px/1.4 var(--sans); color:var(--muted); letter-spacing:.02em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex:1}
+  .bar-t b{color:var(--accent); font-weight:600}
+  .counter{font:11.5px/1 var(--mono); color:var(--muted); font-variant-numeric:tabular-nums; white-space:nowrap}
+  .navbtn{border:1px solid var(--line); background:#fff; color:var(--accent); width:30px; height:28px;
+    border-radius:6px; cursor:pointer; font:14px/1 var(--sans); display:grid; place-items:center; padding:0}
+  .navbtn:hover:not(:disabled){background:var(--accent-soft); border-color:#b9d2d8}
+  .navbtn:disabled{opacity:.35; cursor:default}
+  .filters{display:flex; gap:10px; align-items:center; font:11.5px/1 var(--sans); color:var(--muted)}
+  .filters label{display:flex; gap:5px; align-items:center; cursor:pointer; white-space:nowrap}
+  .filters input{accent-color:var(--accent); margin:0; width:13px; height:13px}
+  .progress{height:2.5px; background:#e3e9ec}
+  .progress i{display:block; height:100%; width:0; background:linear-gradient(90deg,#0f4c5c,#2f93a6);
+    transition:width .28s ease}
+  select#jump{display:none; font:12px var(--sans); padding:4px 6px; border:1px solid var(--line);
+    border-radius:6px; background:#fff; color:var(--ink); max-width:180px}
+
+  /* ---------- page ---------- */
+  .page{display:none}
+  .page.on{display:block; animation:fade .22s ease}
+  @keyframes fade{from{opacity:0; transform:translateY(4px)} to{opacity:1; transform:none}}
+  .page-in{max-width:1220px; margin:0 auto; padding:34px 38px 108px}
+  .kicker{font:600 10.5px/1.4 var(--sans); letter-spacing:.17em; text-transform:uppercase;
+    color:#8195a0; margin:0 0 10px}
+  .kicker .sep{color:#c2ced4; margin:0 7px}
+  h2.title{font-size:31px; line-height:1.2; margin:0 0 10px; color:var(--accent); font-weight:700; letter-spacing:-.01em}
+  .lede{font-size:17px; color:#3f535c; margin:0 0 20px; max-width:78ch; font-style:italic}
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin:0 0 26px}
+  .chip{font:10.5px/1 var(--sans); letter-spacing:.06em; text-transform:uppercase; color:#4a626c;
+    background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 9px}
+  .chip.src{color:#0f4c5c; border-color:#b9d2d8; background:#f2f8f9}
+
+  .page-body{display:grid; grid-template-columns:minmax(0,1fr) 350px; gap:38px; align-items:start}
+  .page-body.wide{grid-template-columns:minmax(0,1fr)}
+  .prose{min-width:0}
+  .prose p{margin:0 0 13px}
+  .prose p:last-child{margin-bottom:0}
+  .prose h3{font:600 12px/1.4 var(--sans); letter-spacing:.1em; text-transform:uppercase;
+    color:#6d8390; margin:26px 0 10px}
+  .prose h3:first-child{margin-top:0}
+  .prose ul,.prose ol{margin:0 0 14px; padding-left:22px}
+  .prose li{margin:0 0 7px}
+  .prose strong{color:#0d3542}
+  .prose em{color:#41565f}
+  .drop::first-letter{font-size:44px; line-height:.9; float:left; padding:5px 7px 0 0; color:var(--accent); font-weight:600}
+
+  aside.side{display:flex; flex-direction:column; gap:14px; position:sticky; top:56px}
+  .blk{border:1px solid var(--line); background:var(--paper); border-radius:9px; padding:13px 15px 14px}
+  .blk > h4{font:600 10px/1 var(--sans); letter-spacing:.16em; text-transform:uppercase;
+    margin:0 0 11px; display:flex; align-items:center; gap:7px; color:#677d88}
+  .blk > h4 .ico{font:600 11px/1 var(--sans); width:17px; height:17px; border-radius:4px;
+    display:grid; place-items:center; flex:0 0 auto}
+  .k-arg{border-left:3px solid var(--accent2)}
+  .k-arg > h4{color:var(--accent)}
+  .k-arg > h4 .ico{background:var(--accent-soft); color:var(--accent)}
+  .k-gap{background:var(--amber-bg); border-color:var(--amber-line); border-left:3px solid #c99a3e}
+  .k-gap > h4{color:var(--amber)}
+  .k-gap > h4 .ico{background:#f3e2bd; color:var(--amber)}
+  .k-lim{background:var(--red-bg); border-color:var(--red-line); border-left:3px solid #a94a55}
+  .k-lim > h4{color:var(--red)}
+  .k-lim > h4 .ico{background:#f0d2d6; color:var(--red)}
+  .k-num{border-left:3px solid #6b8fa0}
+  .k-num > h4{color:#45636f}
+  .k-num > h4 .ico{background:#eaf0f3; color:#45636f}
+
+  .steps{list-style:none; margin:0; padding:0; counter-reset:s}
+  .steps > li{position:relative; margin:0 0 11px; padding-left:30px; font-size:14.2px; line-height:1.55}
+  .steps > li::before{counter-increment:s; content:"P" counter(s); position:absolute; left:0; top:1px;
+    font:600 9.5px/15px var(--mono); color:var(--accent); background:var(--accent-soft);
+    border-radius:3px; width:22px; text-align:center}
+  .steps > li:last-child{margin-bottom:0}
+  .concl{margin-top:12px; padding:9px 11px; background:var(--green-bg); border:1px solid var(--green-line);
+    border-radius:6px; font-size:13.8px; line-height:1.5}
+  .concl b{font:600 9.5px/1 var(--sans); letter-spacing:.12em; text-transform:uppercase; color:var(--green);
+    display:block; margin-bottom:4px}
+  .blk p{margin:0 0 9px; font-size:14px; line-height:1.55}
+  .blk p:last-child{margin-bottom:0}
+  .blk ul{margin:0; padding-left:17px; font-size:13.8px; line-height:1.5}
+  .blk li{margin:0 0 6px}
+  .blk li:last-child{margin-bottom:0}
+  .status{font:600 9.5px/1 var(--sans); letter-spacing:.1em; text-transform:uppercase;
+    border-radius:3px; padding:3px 5px; display:inline-block; margin-top:8px}
+
+  /* ---------- quotes / equations / tables ---------- */
+  blockquote.orig{margin:0 0 16px; padding:12px 16px; background:#fff; border:1px solid var(--line);
+    border-left:3px solid #b7c9d0; font-size:14.6px; line-height:1.55; color:#33474f}
+  blockquote.orig p{margin:0 0 7px}
+  blockquote.orig p:last-child{margin:0}
+  blockquote.orig cite{display:block; margin-top:7px; font:11px/1 var(--sans); font-style:normal;
+    color:#8498a2; letter-spacing:.03em}
+  .eq{display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center;
+    background:#f4f8f9; border:1px solid #e0eaed; border-left:3px solid #a9c6ce;
+    border-radius:6px; padding:12px 15px; margin:0 0 15px; overflow-x:auto}
+  .eq math{font-size:1.06em}
+  .eq .no{font:11px/1 var(--mono); color:#7b939d; font-variant-numeric:tabular-nums; white-space:nowrap}
+  .eq .cap{grid-column:1/-1; font:11.5px/1.5 var(--sans); color:#6f858f; margin-top:2px}
+  .eq .cap b{color:#3f5c66; font-weight:600}
+  math{font-family:"Latin Modern Math","STIX Two Math","Cambria Math",math,serif}
+  .fig{margin:0 0 18px; background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 14px 10px}
+  .fig svg{display:block; width:100%; height:auto}
+  .fig figcaption{font:11.5px/1.55 var(--sans); color:#6f858f; margin-top:9px; border-top:1px solid #eef2f4; padding-top:8px}
+  .fig figcaption b{color:#3f5c66}
+  .fig .fignum{font:600 10px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-right:6px}
+
+  .tablewrap{overflow-x:auto; margin:0 0 16px; border:1px solid var(--line); border-radius:8px; background:#fff}
+  table.data{width:100%; border-collapse:collapse; font-size:12.8px; font-variant-numeric:tabular-nums}
+  table.data caption{caption-side:top; text-align:left; padding:10px 12px 8px;
+    font:600 11px/1.5 var(--sans); color:#546c77; letter-spacing:.02em}
+  table.data th{background:#0f4c5c; color:#fff; text-align:left; padding:7px 9px;
+    font:600 11px/1.35 var(--sans); white-space:nowrap}
+  table.data th.g{background:#155b6c; text-align:center}
+  table.data td{padding:6px 9px; border-bottom:1px solid #e8eef0; white-space:nowrap}
+  table.data tr:last-child td{border-bottom:0}
+  table.data td.n{font-family:var(--mono); font-size:11.8px; color:var(--code)}
+  table.data td.c,table.data th.c{text-align:center}
+  table.data tr.hi td{background:#eaf6f0; font-weight:600}
+  table.data tr.mid td{background:#f7fafb}
+  table.data td.name{font-family:var(--sans); font-size:12.2px; white-space:normal; min-width:120px}
+  table.data td.best{color:#0d5c3f; font-weight:700}
+  table.data td.worst{color:#8c3540}
+  .tnote{font:11px/1.55 var(--sans); color:#7b8f99; margin:-8px 0 18px; padding-left:2px}
+
+  .callout{background:#fff; border:1px solid var(--line); border-left:3px solid var(--accent);
+    border-radius:6px; padding:12px 15px; margin:0 0 16px; font-size:14.4px}
+  .callout b{color:var(--accent)}
+  .callout.warn{background:var(--amber-bg); border-color:var(--amber-line); border-left-color:#c99a3e}
+  .callout.warn b{color:var(--amber)}
+  .kv{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px}
+  .kv span{font:11.5px/1 var(--sans); background:#fff; border:1px solid var(--line);
+    border-radius:5px; padding:6px 9px; color:#4a626c}
+  .kv span b{color:var(--accent); font-family:var(--mono); font-weight:600}
+  .printbtn{font:12.5px/1 var(--sans); color:#fff; background:var(--accent); border:0;
+    border-radius:6px; padding:9px 13px; cursor:pointer; letter-spacing:.02em}
+  .printbtn:hover{background:var(--accent2)}
+  code{font-family:var(--mono); font-size:.86em; color:var(--code); background:#f7f0ec;
+    padding:1px 5px; border-radius:3px}
+
+  /* ---------- pager ---------- */
+  .pager{display:flex; gap:12px; align-items:stretch; margin-top:34px; border-top:1px solid var(--line); padding-top:18px}
+  .pager button{flex:1; text-align:left; background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:11px 14px; cursor:pointer; font-family:var(--sans); color:var(--ink); min-width:0}
+  .pager button:hover:not(:disabled){border-color:#a9c6ce; background:#f8fbfb}
+  .pager button:disabled{opacity:.4; cursor:default}
+  .pager .dir{display:block; font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:#8ba0aa; margin-bottom:4px}
+  .pager .lbl{display:block; font-size:13px; line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .pager button.next{text-align:right}
+
+  .endnote{max-width:1220px; margin:0 auto; padding:0 38px 60px; font:11.5px/1.7 var(--sans); color:#8ba0aa}
+  .endnote a{color:#5a7d88}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:1180px){
+    .page-body{grid-template-columns:minmax(0,1fr) 310px; gap:26px}
+    .page-in{padding:28px 26px 96px}
+    .bar-in{padding:8px 26px}
+  }
+  @media (max-width:980px){
+    body{grid-template-columns:1fr}
+    aside#side{position:static; height:auto; max-height:none; padding-bottom:8px}
+    nav#tocList{display:none}
+    aside#side.open nav#tocList{display:block; max-height:60vh}
+    .brand{border-bottom:0; padding-bottom:8px}
+    .brand h1{font-size:17px}
+    .page-body{grid-template-columns:minmax(0,1fr)}
+    aside.side{position:static}
+    select#jump{display:block}
+    .filters{display:none}
+  }
+  @media (max-width:620px){
+    body{font-size:16px}
+    h2.title{font-size:24px}
+    .page-in{padding:22px 16px 90px}
+    .bar-in{padding:7px 14px; gap:8px}
+    .bar-t{display:none}
+    .pager{flex-direction:column}
+    .pager button.next{text-align:left}
+    .eq{padding:10px; font-size:.92em}
+    table.data{font-size:12px}
+  }
+  /* filters */
+  body.f-arg .k-arg{display:none}
+  body.f-gap .k-gap{display:none}
+  body.f-lim .k-lim{display:none}
+
+  @media print{
+    body{display:block; background:#fff; font-size:10.5pt}
+    aside#side,header#bar,.pager,.filters{display:none!important}
+    .page{display:block!important; break-after:page}
+    .page-in{padding:0; max-width:none}
+    .page-body{grid-template-columns:1fr 1fr; gap:18px}
+    aside.side{position:static}
+    .k-gap,.k-lim{break-inside:avoid}
+  }
+</style>
+<noscript><style>.page{display:block!important} .pager{display:none}</style></noscript>
+</head>
+<body>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;overflow:hidden">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#33525e"/>
+    </marker>
+    <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#a94a55"/>
+    </marker>
+  </defs>
+</svg>
+
+<aside id="side">
+  <div class="brand">
+    <p class="k">Đọc bài báo · từng trang</p>
+    <h1>DIRE for Diffusion-Generated Image Detection</h1>
+    <p class="meta">Wang, Bao, Zhou, Wang, Hu, Chen, Li<br>arXiv:2303.09295v1 · 25 trang đọc</p>
+    <p class="toc-hint">☰ chạm để mở mục lục</p>
+  </div>
+  <nav id="tocList" aria-label="Mục lục"></nav>
+  <div class="side-foot">
+    <kbd>←</kbd> <kbd>→</kbd> chuyển trang · <kbd>Home</kbd> <kbd>End</kbd><br>
+    Bấm vào mục lục để nhảy. Mọi số liệu chép từ bản arXiv v1.
+  </div>
+</aside>
+
+<main>
+  <header id="bar">
+    <div class="bar-in">
+      <div class="bar-t"><b id="barTitle">Cách đọc bản này</b> <span id="barPart" style="color:#9aadb6"></span></div>
+      <div class="filters" role="group" aria-label="Ẩn hiện các khối">
+        <label><input type="checkbox" id="fArg" checked> Luận cứ</label>
+        <label><input type="checkbox" id="fGap" checked> Chưa chứng minh</label>
+        <label><input type="checkbox" id="fLim" checked> Hạn chế</label>
+      </div>
+      <select id="jump" aria-label="Nhảy tới trang"></select>
+      <button class="navbtn" id="prev" aria-label="Trang trước">‹</button>
+      <span class="counter" id="counter">1 / 25</span>
+      <button class="navbtn" id="next" aria-label="Trang sau">›</button>
+    </div>
+    <div class="progress"><i id="prog"></i></div>
+  </header>
+
+<!-- ============================== TRANG 0 ============================== -->
+<section class="page" id="p0" data-group="Mở đầu" data-short="Cách đọc bản này" data-part="Bìa">
+  <div class="page-in">
+    <p class="kicker">Bản đọc tương tác<span class="sep">/</span>arXiv:2303.09295v1<span class="sep">/</span>25 trang</p>
+    <h2 class="title">Một bài báo, đọc từng trang một</h2>
+    <p class="lede">Không phải bản dịch. Đây là bản đọc lại: mỗi trang dựng lại (a) tác giả nói gì, (b) luận cứ nối các phát biểu ấy, và (c) chỗ chuỗi luận cứ bị hở — kèm số liệu nguyên văn để bạn tự kiểm.</p>
+
+    <div class="kv">
+      <span>Tác giả: <b>Z. Wang, J. Bao, W. Zhou, W. Wang, H. Hu, H. Chen, H. Li</b></span>
+      <span>Đơn vị: <b>USTC · MSRA · MUC</b></span>
+      <span>Định dạng: <b>arXiv preprint v1</b></span>
+      <span>Mã: <b>github.com/ZhendongWang6/DIRE</b></span>
+    </div>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="callout">
+          <b>Vì sao có bản này.</b> Bài báo ngắn (8 trang + phụ lục) nhưng kết quả rất mạnh: 99,9% ACC trung bình trên tám bộ sinh. Kết quả càng mạnh thì càng cần đọc chậm. Bản này giữ nguyên con số, tách rõ <em>quan sát</em> khỏi <em>suy luận</em>, và nói thẳng chỗ nào bài báo chỉ <em>khẳng định</em>.
+        </div>
+
+        <h3>Ba lớp thông tin trên mỗi trang</h3>
+        <p><strong>1. Nội dung bài báo.</strong> Diễn giải theo trình tự trang gốc, có trích dẫn <code>§</code>, <code>Eq.</code>, <code>Table</code>, <code>Figure</code>. Câu tiếng Anh quan trọng được giữ nguyên trong khối trích dẫn để bạn đối chiếu — không qua bản dịch của tôi.</p>
+        <p><strong>2. Luận cứ.</strong> Chuỗi tiền đề <span style="font-family:var(--mono);font-size:.85em">P1 → P2 → …</span> dẫn tới kết luận của tác giả, viết lại dưới dạng kiểm tra được. Kèm nhãn mức độ: <em>hình thức</em> (suy ra được), <em>thực nghiệm</em> (chỉ có số đo), hay <em>khẳng định</em> (không có cả hai).</p>
+        <p><strong>3. Chưa chứng minh &amp; Hạn chế.</strong> Khối vàng là chỗ <em>bài báo không chứng minh</em> điều nó dùng. Khối đỏ là <em>hạn chế</em> của bài báo — thiếu thí nghiệm, thiếu thống kê, hoặc giả định ngầm. Đây là đánh giá của người viết bản đọc, không phải của tác giả, và luôn chỉ ra thí nghiệm nào sẽ lấp được.</p>
+
+        <h3>Điều bản này không làm</h3>
+        <ul>
+          <li>Không chép hình từ arXiv. Năm hình của bài (F1–F5) được <em>vẽ lại bằng SVG</em> theo đúng mô tả trong caption; chúng là sơ đồ, không phải ảnh thật.</li>
+          <li>Không suy đoán số liệu bị thiếu. Chỗ nào bản trích xuất không đọc được (Hình 4), bản này ghi rõ "không đọc được" thay vì nội suy.</li>
+          <li>Không đánh giá chất lượng <em>ý tưởng</em> bằng cảm nhận. Mọi nhận xét đều neo vào một câu, một bảng, hoặc một phép tính lặp lại được.</li>
+        </ul>
+
+        <h3>Cách điều hướng</h3>
+        <p>Phím <kbd style="background:#eef3f5;border-color:#d5e0e5;color:#33525e">←</kbd> / <kbd style="background:#eef3f5;border-color:#d5e0e5;color:#33525e">→</kbd> chuyển trang, <kbd style="background:#eef3f5;border-color:#d5e0e5;color:#33525e">Home</kbd> / <kbd style="background:#eef3f5;border-color:#d5e0e5;color:#33525e">End</kbd> về đầu/cuối. URL giữ số trang (<code>#p12</code>) nên có thể gửi link tới đúng một trang. Thanh trên cùng có ba hộp chọn để tạm ẩn khối Luận cứ / Chưa chứng minh / Hạn chế — hữu ích khi bạn chỉ muốn đọc liền mạch nội dung bài.</p>
+        <p><button class="printbtn" type="button" onclick="window.print()">In / lưu PDF cả 25 trang</button> <span style="font-size:13px;color:#6f858f">(chế độ in xếp mỗi trang thành một tờ)</span></p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-num">
+          <h4><span class="ico">i</span>Bài báo trong một khung</h4>
+          <p><b>Câu hỏi.</b> Làm sao phát hiện ảnh do mô hình khuếch tán sinh ra, kể cả khi chưa từng thấy mô hình đó?</p>
+          <p><b>Câu trả lời.</b> Đừng học dấu vết của bộ sinh. Hãy đo <em>mức độ tái tạo được</em> của ảnh qua một mô hình khuếch tán có sẵn: ảnh sinh ra từ quá trình khuếch tán thì "quay về" dễ hơn ảnh thật.</p>
+          <p><b>Bằng chứng mạnh nhất.</b> 99,9% ACC trung bình trên 8 bộ sinh (Table 2), 97,2% khi chuyển sang miền ImageNet (Table 3).</p>
+          <p><b>Lỗ hổng lớn nhất.</b> Không có chứng minh nào cho cơ chế "ảnh sinh dễ tái tạo hơn". Phụ lục B là lập luận định tính, không có phép đo.</p>
+        </div>
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Bản đồ lập luận của bài</h4>
+          <ol class="steps" style="counter-reset:s">
+            <li>Detector cũ học dấu vết GAN; dấu vết ấy không chuyển sang khuếch tán → cần tín hiệu mới.</li>
+            <li>Ảnh trong <em>p<sub>g</sub></em> được tái tạo tốt bởi mô hình đã học <em>p<sub>g</sub></em>; ảnh thật thì không.</li>
+            <li>Vì vậy <code>|x₀ − R(I(x₀))|</code> là đại lượng phân biệt được.</li>
+            <li>Đưa DIRE vào ResNet-50 → detector; đo trên 10 tập con → 99,9%.</li>
+            <li>Kết luận: DIRE là biểu diễn tổng quát cho bài toán này.</li>
+          </ol>
+          <div class="concl"><b>Điểm yếu then chốt</b>Bước 2 là <em>giả thuyết</em>, không phải định lý. Bước 5 mở rộng "8 bộ sinh năm 2023" thành "tổng quát".</div>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 1 ============================== -->
+<section class="page" id="p1" data-group="Mở đầu" data-short="Abstract — bốn lời hứa" data-part="Abstract">
+  <div class="page-in">
+    <p class="kicker">Abstract<span class="sep">/</span>trang gốc 1</p>
+    <h2 class="title">Bốn lời hứa, chưa có số</h2>
+    <p class="lede">Abstract đặt ra bốn tuyên bố. Nó không đưa một con số nào — điều bất thường với một bài định lượng. Nhiệm vụ của tám trang sau là trả nợ bốn tuyên bố ấy.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <blockquote class="orig">
+          <p>"We find that existing detectors struggle to detect images generated by diffusion models, even if we include generated images from a specific diffusion model in their training data."</p>
+          <p>"We observe that diffusion-generated images can be approximately reconstructed by a diffusion model while real images cannot."</p>
+          <p>"DIRE provides an effective way to detect images generated by most diffusion models, and it is general for detecting generated images from unseen diffusion models and robust to various perturbations."</p>
+          <cite>Abstract, nguyên văn</cite>
+        </blockquote>
+
+        <p>Bốn tuyên bố, tách theo loại bằng chứng mà mỗi tuyên bố cần:</p>
+        <ol>
+          <li><strong>"Detector cũ gặp khó"</strong> — tuyên bố thực nghiệm, cần bảng so sánh. Được trả bằng Table 2: bốn detector công khai đạt 51,1–58,9% ACC trung bình, dưới cả mức 60% mà bài tự đặt làm mốc "kém".</li>
+          <li><strong>"Ảnh sinh tái tạo được, ảnh thật thì không"</strong> — tuyên bố <em>cơ chế</em>. Được trả bằng Figure 1 và Figure 5 (định tính) và gián tiếp bằng Table 2 (định lượng). Không có phép đo trực tiếp khoảng cách tái tạo theo lớp.</li>
+          <li><strong>"General cho mô hình chưa thấy"</strong> — tuyên bố về <em>phạm vi</em>. Được trả bằng Table 2 (huấn luyện trên một bộ sinh, kiểm trên bảy bộ khác) và Table 3 (khác miền dữ liệu).</li>
+          <li><strong>"Robust với nhiều nhiễu loạn"</strong> — tuyên bố về <em>độ bền</em>. Chỉ được trả bằng <em>một</em> hình (Figure 4) với hai loại nhiễu: làm mờ Gauss và nén JPEG.</li>
+        </ol>
+
+        <div class="callout warn">
+          <b>Đọc kỹ chữ "most" và "various".</b> "Most diffusion models" trong bài nghĩa là tám bộ sinh cụ thể (Bảng 1), tất cả đều dựa trên U-Net và đều ra ảnh 256². "Various perturbations" nghĩa là hai phép biến đổi. Hai chữ này không sai, nhưng rộng hơn dữ liệu đỡ lấy chúng.
+        </div>
+
+        <h3>Vì sao abstract không có số lại đáng chú ý</h3>
+        <p>Trong thể loại detection, abstract thường nêu ít nhất một con số để người đọc định vị. Ở đây tác giả chọn nêu <em>tính chất</em> (general, robust) thay vì <em>độ lớn</em>. Lựa chọn này hợp lý khi đóng góp chính là một <em>biểu diễn</em> chứ không phải một kiến trúc — nhưng nó cũng có nghĩa: người đọc chỉ biết mức độ mạnh của kết quả khi đã xuống tới Table 2.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ của abstract</h4>
+          <ol class="steps">
+            <li>Detector hiện có thất bại trên ảnh khuếch tán, kể cả khi được huấn luyện với ảnh của một mô hình khuếch tán cụ thể.</li>
+            <li>Có một đại lượng quan sát được — sai số tái tạo qua mô hình khuếch tán — tách được hai lớp.</li>
+            <li>Vì (1) và (2), đại lượng ấy là cơ sở cho detector tổng quát.</li>
+            <li>Kèm theo: một benchmark mới để đo các detector.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>DIRE là biểu diễn, benchmark là thước đo, hai thứ đi cùng nhau.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Abstract không nói <em>vì sao</em> ảnh sinh dễ tái tạo hơn. Đây không phải thiếu sót của abstract — nhưng cần nhớ: tuyên bố (2) là quan sát, không phải định lý, và nó là gốc của toàn bộ bài.</p>
+          <p>Không có con số nào trong abstract để đối chiếu; mọi so sánh phải chờ Table 2.</p>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Neo số liệu</h4>
+          <p>Detector cũ, ACC trung bình 8 bộ sinh: <b>51,1 / 58,5 / 57,4 / 58,9</b> (CNNDet, GANDet, Patchfor, SBI).</p>
+          <p>DIRE, cùng cấu hình: <b>99,9</b>.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 2 ============================== -->
+<section class="page" id="p2" data-group="Phần 1 · Introduction" data-short="Bối cảnh &amp; khoảng trống" data-part="§1">
+  <div class="page-in">
+    <p class="kicker">§1 Introduction<span class="sep">/</span>nửa đầu<span class="sep">/</span>trang gốc 1</p>
+    <h2 class="title">Vì sao cần một detector mới</h2>
+    <p class="lede">Lập luận mở đầu thuần <em>động cơ</em>: khuếch tán mạnh lên, kéo theo nguy cơ lạm dụng, trong khi detector sẵn có được xây cho một họ bộ sinh khác.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Tác giả mở bằng ba quan sát nối tiếp: (i) DDPM đặt ra một hệ hình mới cho sinh ảnh nhờ chất lượng cao; (ii) người dùng được lợi thì cũng xuất hiện lo ngại về riêng tư — mô hình có thể ghi nhớ ảnh trong tập huấn luyện và phát lại lúc sinh (dẫn [3, 53]) — và về deepfake dựa trên khuếch tán; (iii) vì vậy cần detector cho ảnh khuếch tán.</p>
+
+        <p>Đoạn tiếp theo là chẩn đoán kỹ thuật, đáng đọc chậm:</p>
+        <blockquote class="orig">
+          <p>"Despite the fact that most diffusion models employ CNNs as the network, the generation processes between diffusion models and previous generators (e.g., GAN, VAE) are entirely different, rendering previously generated image detectors ineffective."</p>
+          <cite>§1, nguyên văn</cite>
+        </blockquote>
+
+        <p>Chú ý cấu trúc: tiền đề thứ nhất thừa nhận <em>kiến trúc</em> giống nhau (đều là CNN), tiền đề thứ hai nói <em>quá trình sinh</em> khác nhau. Kết luận là detector cũ mất tác dụng. Đây là một suy luận đúng hướng nhưng chưa đủ mạnh: nếu kiến trúc giống nhau thì vẫn có khả năng dấu vết kiến trúc chuyển được — và chính bài báo sau đó cho thấy điều này đúng một phần (DIRE huấn luyện trên ADM vẫn phát hiện StyleGAN với 97,9% ACC, Table 2).</p>
+
+        <p>Bài cũng tự đặt và bác bỏ phương án "ngây thơ": huấn luyện một CNN phân loại nhị phân trên ảnh thật và ảnh khuếch tán.</p>
+        <blockquote class="orig">
+          <p>"A naïve thought is to train a CNN binary classifier on diffusion-generated and real images. However, we find that such a naïve scheme suffers limited generalization to unseen diffusion-generated images."</p>
+          <cite>§1, nguyên văn</cite>
+        </blockquote>
+        <p>Đây là phát biểu được trả bằng Table 2, nhóm có dấu hoa thị: CNNDet*, Patchfor*, F3Net* — huấn luyện lại trên tập con ADM, rồi kiểm trên bảy bộ sinh khác. Kết quả trung bình 86,5 / 90,9 / 91,6 so với 99,9 của DIRE. Cần lưu ý: mức 86–92% <em>không</em> phải "kém" theo nghĩa tuyệt đối; nó kém hơn DIRE, và kém không đều (xem trang 11).</p>
+
+        <div class="callout">
+          <b>Điểm đáng ghi nhận.</b> Bài không giấu việc detector học trên RGB vẫn làm khá tốt trong cùng miền. Cái bài nhắm vào là <em>khoảng cách giữa cùng miền và khác miền</em>. Đây là cách đặt vấn đề trung thực hơn kiểu "phương pháp cũ thất bại hoàn toàn".
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Chuỗi động cơ</h4>
+          <ol class="steps">
+            <li>Khuếch tán sinh ảnh chất lượng cao và đang được dùng rộng.</li>
+            <li>Năng lực ấy tạo ra nguy cơ: ghi nhớ dữ liệu, deepfake.</li>
+            <li>Detector sẵn có học dấu vết của quá trình GAN/VAE, khác bản chất với quá trình khuếch tán.</li>
+            <li>Vì vậy chúng mất tác dụng khi gặp ảnh khuếch tán.</li>
+            <li>⇒ Cần một tín hiệu mới, không dựa trên dấu vết bộ sinh.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Bước 3–4 là chỗ cần bằng chứng. Bài đưa bằng chứng ở Table 2 (mục 4.2), tức là <em>sau</em> khi đã trình bày phương pháp — trình tự hợp lý, nhưng khiến phần mở đầu mang tính tuyên bố.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chỗ hở</h4>
+          <p>"Generation processes ... are entirely different" là phát biểu định tính. Bài không đưa phép đo nào cho khác biệt ấy (ví dụ: khoảng cách phổ, hay tỉ lệ dấu vết chuyển được giữa hai họ).</p>
+          <p>Hệ quả: động cơ đúng, nhưng không phải bằng chứng. Bằng chứng thật nằm ở mục 4.2.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế (động cơ)</h4>
+          <ul>
+            <li>Không định lượng "entirely different".</li>
+            <li>Không xét khả năng dấu vết kiến trúc CNN <em>có</em> chuyển được — điều mà chính Table 2 (97,9% trên StyleGAN) gợi ý.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 3 ============================== -->
+<section class="page" id="p3" data-group="Phần 1 · Introduction" data-short="Ý tưởng DIRE &amp; ba đóng góp" data-part="§1">
+  <div class="page-in">
+    <p class="kicker">§1 Introduction<span class="sep">/</span>nửa sau<span class="sep">/</span>trang gốc 1–2</p>
+    <h2 class="title">Ý tưởng: ảnh sinh "quay về" được, ảnh thật thì không</h2>
+    <p class="lede">Đây là trang quan trọng nhất của bài. Mọi thứ về sau — định nghĩa, dataset, 99,9% — đều đứng trên một giả thuyết duy nhất phát biểu ở đây.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Tiền đề của tác giả gồm hai vế, phát biểu trong hai câu liền nhau:</p>
+        <blockquote class="orig">
+          <p>"images generated by diffusion models are essentially sampled from the distribution of the diffusion generation space (p<sub>g</sub>(x)), while real images are sampled from another distribution (p<sub>r</sub>(x)) although it may be near to p<sub>g</sub>(x) but not exactly the same."</p>
+          <p>"samples from the diffusion generation space p<sub>g</sub>(x) are more likely to be reconstructed by a pre-trained diffusion model while real images cannot."</p>
+          <cite>§1, nguyên văn</cite>
+        </blockquote>
+
+        <p>Vế thứ nhất là định nghĩa. Vế thứ hai là <strong>giả thuyết</strong> — và là giả thuyết duy nhất của bài. Từ đó tác giả suy ra hệ quả:</p>
+        <blockquote class="orig">
+          <p>"As a sample x<sub>g</sub> from the generated distribution p<sub>g</sub>(x) and its reconstruction x′<sub>g</sub> belong to the same distribution, the DIRE value for x<sub>g</sub> would be relatively low. Conversely, the reconstruction of a real image x<sub>r</sub> is likely to differ significantly from itself, resulting in a high amplitude in DIRE."</p>
+          <cite>§1, nguyên văn</cite>
+        </blockquote>
+
+        <figure class="fig">
+          <svg viewBox="0 0 620 330" role="img" aria-label="Sơ đồ hai phân phối p_r và p_g; ảnh thật x_r được tái tạo thành x'_r rơi vào vùng p_g, còn ảnh sinh x_g tái tạo thành x'_g vẫn trong p_g">
+            <rect x="0" y="0" width="620" height="330" fill="#fcfdfd"/>
+            <ellipse cx="205" cy="168" rx="150" ry="112" fill="#eef3f5" stroke="#9fb4bd" stroke-dasharray="6 5"/>
+            <ellipse cx="408" cy="168" rx="146" ry="108" fill="#edf6f1" stroke="#8fb8a3" stroke-dasharray="6 5"/>
+            <text x="80" y="66" font-family="Georgia,serif" font-style="italic" font-size="17" fill="#3f5c66">p</text>
+            <text x="95" y="72" font-family="Georgia,serif" font-size="11" fill="#3f5c66">r</text>
+            <text x="100" y="66" font-family="Georgia,serif" font-size="13" fill="#3f5c66">(x)</text>
+            <text x="420" y="66" font-family="Georgia,serif" font-style="italic" font-size="17" fill="#3d6b57">p</text>
+            <text x="435" y="72" font-family="Georgia,serif" font-size="11" fill="#3d6b57">g</text>
+            <text x="440" y="66" font-family="Georgia,serif" font-size="13" fill="#3d6b57">(x)</text>
+
+            <circle cx="140" cy="128" r="5.5" fill="#33525e"/>
+            <text x="118" y="112" font-family="Georgia,serif" font-size="14" fill="#223c46">x</text>
+            <text x="131" y="117" font-family="Georgia,serif" font-size="10" fill="#223c46">r</text>
+            <path d="M152,140 C215,190 280,205 330,200" fill="none" stroke="#a94a55" stroke-width="1.6"
+                  stroke-dasharray="5 4" marker-end="url(#ah2)"/>
+            <text x="205" y="185" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#a94a55">I + R</text>
+            <circle cx="342" cy="199" r="5.5" fill="#a94a55"/>
+            <text x="350" y="220" font-family="Georgia,serif" font-size="14" fill="#7d2530">x′</text>
+            <text x="367" y="225" font-family="Georgia,serif" font-size="10" fill="#7d2530">r</text>
+            <text x="300" y="248" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#7d2530">rơi vào p_g ⇒ DIRE lớn</text>
+
+            <circle cx="470" cy="196" r="5.5" fill="#3d6b57"/>
+            <text x="448" y="182" font-family="Georgia,serif" font-size="14" fill="#2c5545">x</text>
+            <text x="461" y="187" font-family="Georgia,serif" font-size="10" fill="#2c5545">g</text>
+            <path d="M482,186 C492,166 498,156 504,146" fill="none" stroke="#3d6b57" stroke-width="1.6" marker-end="url(#ah)"/>
+            <circle cx="508" cy="141" r="5.5" fill="#3d6b57"/>
+            <text x="518" y="138" font-family="Georgia,serif" font-size="14" fill="#2c5545">x′</text>
+            <text x="535" y="143" font-family="Georgia,serif" font-size="10" fill="#2c5545">g</text>
+            <text x="380" y="288" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#2c5545">ở lại trong p_g ⇒ DIRE nhỏ</text>
+
+            <line x1="0" y1="306" x2="620" y2="306" stroke="#e3ebee"/>
+            <text x="16" y="322" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#7b8f99">
+              Sơ đồ vẽ lại theo mô tả Figure 2; không sao chép hình gốc.
+            </text>
+          </svg>
+          <figcaption><span class="fignum">Figure 2 · vẽ lại</span>Ảnh thật <em>x<sub>r</sub></em> đi qua đảo ngược + tái tạo thành <em>x′<sub>r</sub></em>; bài khẳng định <em>x′<sub>r</sub></em> "nằm trong <em>p<sub>g</sub></em>". Ảnh sinh <em>x<sub>g</sub></em> tái tạo thành <em>x′<sub>g</sub></em> vẫn trong <em>p<sub>g</sub></em>. Khoảng cách hình học giữa cặp điểm là DIRE.</figcaption>
+        </figure>
+
+        <h3>Ba đóng góp tác giả tự nêu</h3>
+        <ol>
+          <li>Một <strong>biểu diễn ảnh mới</strong> gọi là DIRE, dựa trên sai số tái tạo qua mô hình khuếch tán đã huấn luyện sẵn.</li>
+          <li>Một <strong>bộ dữ liệu</strong>, DiffusionForensics, gồm ảnh từ tám mô hình khuếch tán trên LSUN-Bedroom và ImageNet.</li>
+          <li><strong>Thực nghiệm</strong> cho thấy DIRE đạt hiện trạng tốt nhất (SOTA) trong phát hiện ảnh khuếch tán.</li>
+        </ol>
+        <p>Với đóng góp 3, cần đọc chính xác: "state-of-the-art" ở đây là so với bốn detector được đánh giá lại trong bài (CNNDet, GANDet, Patchfor, SBI) cùng ba bản huấn luyện lại. Bài không so với các phương pháp phát hiện ảnh khuếch tán chuyên biệt ra đời cùng thời — và có nhắc hai công trình [36, 8] ở §2.2 nhưng không đưa vào bảng.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ trung tâm</h4>
+          <ol class="steps">
+            <li>Mô hình khuếch tán đã học phân phối <em>p<sub>g</sub></em> (phân phối ảnh nó sinh ra).</li>
+            <li>Ảnh <em>x<sub>g</sub></em> là một mẫu của <em>p<sub>g</sub></em>; ảnh thật <em>x<sub>r</sub></em> là mẫu của <em>p<sub>r</sub></em> ≠ <em>p<sub>g</sub></em>.</li>
+            <li>Đảo ngược rồi tái tạo là một ánh xạ co về phía <em>p<sub>g</sub></em>: điểm đã ở trong <em>p<sub>g</sub></em> thì gần như đứng yên, điểm ngoài <em>p<sub>g</sub></em> bị kéo vào.</li>
+            <li>Do đó ‖<em>x</em> − <em>R</em>(<em>I</em>(<em>x</em>))‖ nhỏ với ảnh sinh, lớn với ảnh thật.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>DIRE là một "phép chiếu" lên <em>p<sub>g</sub></em>; khoảng cách tới hình chiếu là tín hiệu.</div>
+          <span class="status" style="background:var(--amber-bg);color:var(--amber)">Bước 3: khẳng định, không chứng minh</span>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p><b>(a)</b> "cùng phân phối ⇒ DIRE nhỏ" không phải định lý. Sai số tái tạo phụ thuộc vào <em>ánh xạ</em> <em>R∘I</em>, không chỉ vào việc điểm nằm trong tập hỗ trợ của phân phối. Một điểm trong <em>p<sub>g</sub></em> vẫn có thể bị dịch xa nếu ánh xạ không bất động trên <em>p<sub>g</sub></em>.</p>
+          <p><b>(b)</b> "x′<sub>r</sub> nằm trong p<sub>g</sub>" là khẳng định hình học không kèm kiểm định. Bài không đo tỉ lệ ảnh thật có hình chiếu rơi vào <em>p<sub>g</sub></em>, cũng không định nghĩa "nằm trong" cho phân phối ảnh nhiều chiều.</p>
+          <p><b>(c)</b> Không có thí nghiệm nào đo <em>trực tiếp</em> sai số tái tạo trung bình của hai lớp — chỉ có độ chính xác của classifier hạ nguồn.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Giả thuyết trung tâm không có phép đo trực tiếp; nó được suy ra từ kết quả cuối.</li>
+            <li>Lập luận "cùng phân phối" giả định ánh xạ <em>R∘I</em> gần bất động trên <em>p<sub>g</sub></em> — chính Phụ lục B thừa nhận điều này chỉ đúng xấp xỉ.</li>
+            <li>Không có thí nghiệm phá: ví dụ lấy ảnh sinh rồi thêm nhiễu nhỏ (vẫn gần <em>p<sub>g</sub></em>) xem DIRE có tăng tương ứng không.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 4 ============================== -->
+<section class="page" id="p4" data-group="Phần 2 · Related Work" data-short="2.1 — các mô hình khuếch tán" data-part="§2.1">
+  <div class="page-in">
+    <p class="kicker">§2.1 Diffusion Models for Image Generation<span class="sep">/</span>trang gốc 2</p>
+    <h2 class="title">Phần liên quan, thứ nhất: dòng chảy khuếch tán</h2>
+    <p class="lede">Mục này không phục vụ lập luận trực tiếp. Nó dựng từ vựng cho §3: DDPM, DDIM, ADM, PNDM, LDM, và vì sao chúng khác nhau đủ để một detector "học một cái" không chuyển được sang cái khác.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Tác giả kể một dòng phát triển gọn, mỗi mốc một câu:</p>
+        <ul>
+          <li><strong>DDPM</strong> [17] đưa ra hệ hình: chuỗi Markov thêm nhiễu dần rồi học đảo ngược; đạt mức cạnh tranh với PGGAN trên LSUN 256².</li>
+          <li><strong>iDDPM</strong> [32]: học cả phương sai của quá trình ngược, cho phép giảm số bước đi một bậc độ lớn.</li>
+          <li><strong>DDIM</strong> [42]: tổng quát hoá DDPM thành họ quá trình không Markov; khi phương sai nhiễu bằng 0 thì quá trình trở nên <em>tất định</em>. Đây là mảnh ghép mà DIRE sống nhờ.</li>
+          <li><strong>ADM</strong> [10]: kiến trúc hiệu quả hơn, đạt SOTA với classifier guidance. Đây cũng là mô hình được chọn làm bộ tái tạo cho toàn bộ thực nghiệm.</li>
+          <li><strong>PNDM</strong> [23]: xem DDPM như giải phương trình vi phân trên đa tạp, dùng phương pháp số giả để tăng tốc.</li>
+          <li><strong>LDM / Stable Diffusion</strong> [37]: khuếch tán trong không gian tiềm ẩn, điều kiện hoá bằng cross-attention. SD v1/v2 nằm trong nhóm này.</li>
+          <li><strong>VQ-Diffusion</strong> [14]: dựa trên VQ-VAE, mô hình hoá không gian rời rạc bằng biến thể DDPM có điều kiện.</li>
+        </ul>
+
+        <p>Điều đáng chú ý về mặt <em>lập luận</em>: danh sách này không trung tính. Nó là tập hợp tám bộ sinh sẽ xuất hiện trong Table 1 và Table 2, tức là bài đang chuẩn bị cho người đọc thấy mức độ đa dạng của "các mô hình khuếch tán" mà DIRE sẽ được kiểm. Nhưng đa dạng ở đây là đa dạng <em>trong cùng một họ</em>: tất cả đều là khuếch tán Gauss trên ảnh hoặc tiềm ẩn, đều dùng U-Net, đều 256².</p>
+
+        <div class="callout">
+          <b>Phân biệt quan trọng cho người tái lập.</b> "Tám bộ sinh" không có nghĩa là tám kiến trúc độc lập. ADM, iDDPM, PNDM, DDPM dùng chung một không gian nhiễu và gần như cùng một mạng U-Net; chúng khác ở <em>bộ lấy mẫu</em>. Vì vậy con số 99,9% trên tám bộ sinh phải được đọc là "rất tốt trong họ U-Net + DDPM", không phải "tổng quát qua mọi kiến trúc sinh ảnh".
+        </div>
+
+        <p>Bài không thảo luận flow matching, mô hình khuếch tán dựa trên transformer, hay khuếch tán trong không gian latent có kiến trúc khác. Ở thời điểm 2023 điều này hoàn toàn hợp lý; khi đọc lại năm 2026, nó là giới hạn phạm vi cần nhớ (xem trang 23).</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Vai trò trong bài</h4>
+          <ol class="steps">
+            <li>Mỗi mô hình khuếch tán có quá trình ngược riêng, nên dấu vết sinh khác nhau.</li>
+            <li>Nhưng tất cả đều có chung một thứ: khả năng tái tạo mẫu của phân phối mà chúng đã học.</li>
+            <li>⇒ Chọn tín hiệu ở điểm chung thay vì điểm riêng là cách để tổng quát hoá.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>Đây chính là lý do DIRE dùng ADM làm bộ tái tạo cho ảnh sinh từ PNDM, iDDPM, SD… — nó không cần khớp bộ sinh.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Bài không chứng minh rằng các mô hình khuếch tán khác nhau chia sẻ đủ cấu trúc để một bộ tái tạo duy nhất hoạt động. Đây là giả định được kiểm <em>thực nghiệm</em> ở Table 2, không phải suy ra từ §2.1.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 5 ============================== -->
+<section class="page" id="p5" data-group="Phần 2 · Related Work" data-short="2.2 — phát hiện ảnh sinh" data-part="§2.2">
+  <div class="page-in">
+    <p class="kicker">§2.2 Generalizable Generated Image Detection<span class="sep">/</span>trang gốc 2</p>
+    <h2 class="title">Phần liên quan, thứ hai: ba thế hệ detector</h2>
+    <p class="lede">Bài xếp công trình trước thành ba nhóm. Cách xếp này chính là chỗ bài tự định vị: nó không cải tiến một nhóm nào, nó đề nghị một <em>loại tín hiệu</em> thứ tư.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <h3>Nhóm 1 — đặc trưng thủ công</h3>
+        <p>Màu [28], độ bão hoà [29], dấu vết trộn ảnh [22], ma trận đồng xuất hiện [30]. Điểm chung: giả định dấu vết nằm ở mức điểm ảnh và ổn định qua các bộ sinh. Giả định này đúng với GAN thời kỳ đầu, vỡ khi bộ sinh thay đổi kiến trúc.</p>
+
+        <h3>Nhóm 2 — phân loại CNN</h3>
+        <p>Marra et al. [26] thử nhiều kiến trúc CNN cổ điển cho ảnh image-to-image; Wang et al. [48] (CNNDetection) chứng minh một classifier huấn luyện trên ProGAN chuyển được sang GAN khác. Bài nhấn mạnh điều kiện của thành công đó:</p>
+        <blockquote class="orig">
+          <p>"their strong generalization capability relies on their large-scale training and 20 different models each trained on a different LSUN object category."</p>
+          <cite>§2.2, nguyên văn</cite>
+        </blockquote>
+        <p>Đây là một nhận xét sắc: "tổng quát hoá" của CNNDetection không chỉ đến từ kiến trúc mà từ <em>dữ liệu huấn luyện cực đa dạng</em>. Nó đặt ra tiêu chuẩn công bằng mà bài sẽ phải tự chịu: nếu DIRE chỉ huấn luyện trên một bộ sinh mà vẫn tổng quát, đó là điểm mạnh thật; nếu nhờ dữ liệu, thì không.</p>
+
+        <h3>Nhóm 3 — miền tần số và dấu vết</h3>
+        <p>Frank et al. [12] chỉ ra artifact tần số do phép upsampling trong GAN; Zhang et al. [51] huấn luyện trên phổ của ảnh do AutoGAN tổng hợp; Marra [27] và Yu [50] dùng "dấu tay" (fingerprint) của quá trình sinh; GANDetection [25] dùng ensemble EfficientNet-B4.</p>
+
+        <p>Rồi bài kết thúc mục bằng câu định vị:</p>
+        <blockquote class="orig">
+          <p>"with the boosting development of diffusion models, a general and robust detector for detecting images generated by diffusion models has not been explored. We note that some recent works also notice the diffusion-generated image detection problem [36, 8]. Different from them, the focus of our work is exploring a generalizable detector for wide-range diffusion models."</p>
+          <cite>§2.2, nguyên văn</cite>
+        </blockquote>
+
+        <div class="callout warn">
+          <b>Đọc câu "has not been explored".</b> Đây là tuyên bố về <em>trạng thái tài liệu</em> tại thời điểm viết. Nó không thể được xác minh chỉ từ bài báo — muốn kiểm phải khảo sát toàn bộ tài liệu cùng thời. Bản thân bài thừa nhận có ít nhất hai công trình gần [36, 8] nhưng không so sánh định lượng với họ. Đây là chỗ hở <em>về mặt so sánh</em>, không phải về mặt phương pháp.
+        </div>
+
+        <p>Ghi nhận công bằng: [36] là Ricker et al., <em>"Towards the Detection of Diffusion Model Deepfakes"</em> — một trong những công trình đầu tiên về đúng bài toán này. Bài cũng nhắc [8] trong cùng câu, nhưng bản đọc không đủ chắc về danh tính mục [8] nên không gán tên (xem trang 18). Việc không đưa cả hai vào bảng so sánh là lựa chọn của tác giả; người đọc nên biết rằng "SOTA" trong bài có nghĩa hẹp hơn "SOTA của bài toán".</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ định vị</h4>
+          <ol class="steps">
+            <li>Ba nhóm detector trước đều dựa trên dấu vết <em>đặc thù của bộ sinh</em> (màu, tần số, fingerprint, artifact upsampling).</li>
+            <li>Dấu vết đặc thù không tồn tại ở một họ bộ sinh khác (khuếch tán).</li>
+            <li>Vì vậy cần một tín hiệu <em>không</em> đặc thù bộ sinh.</li>
+            <li>DIRE là tín hiệu như vậy: nó đo quan hệ giữa ảnh và mô hình tái tạo, không đo dấu vết.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Bước 2 đúng nhưng chưa được định lượng trong §2.2; nó chỉ được chứng minh <em>gián tiếp</em> bằng việc detector cũ đạt ~51–59% ACC ở Table 2.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>"has not been explored" là phát biểu về tài liệu, cần khảo sát để kiểm — không kiểm được từ nội dung bài.</p>
+          <p>Hai công trình gần nhất [36, 8] được nhắc nhưng không so sánh định lượng.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Không so sánh với detector khuếch tán cùng thời ⇒ phạm vi của "SOTA" hẹp hơn tên gọi.</li>
+            <li>Không phân tích vì sao dấu vết GAN không chuyển được — chỉ khẳng định.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 6 ============================== -->
+<section class="page" id="p6" data-group="Phần 3 · Method" data-short="3.1 — DDPM (Eq. 1–4)" data-part="§3.1">
+  <div class="page-in">
+    <p class="kicker">§3.1 Preliminaries<span class="sep">/</span>DDPM<span class="sep">/</span>trang gốc 2–3</p>
+    <h2 class="title">Nền tảng: chuỗi Markov hai chiều</h2>
+    <p class="lede">Bốn phương trình, không có gì mới — nhưng cách bài đặt ký hiệu <em>α<sub>t</sub></em> sẽ ảnh hưởng trực tiếp tới bất kỳ ai tái lập. Đây là trang kỹ thuật, nên đọc cùng bản trong tay.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Quá trình thuận thêm nhiễu Gauss từng bước; chuỗi được định nghĩa bởi:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mi>q</mi><mo>(</mo><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>|</mo>
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>)</mo>
+            <mo>=</mo><mi mathvariant="script">N</mi><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>;</mo>
+            <msqrt><mfrac><msub><mi>α</mi><mi>t</mi></msub><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></mfrac></msqrt>
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>,</mo>
+            <mrow><mo>(</mo><mn>1</mn><mo>−</mo><mfrac><msub><mi>α</mi><mi>t</mi></msub><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></mfrac><mo>)</mo></mrow>
+            <mi mathvariant="bold">I</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (1)</span>
+          <span class="cap"><b>Đọc:</b> bước thêm nhiễu có hệ số co <em>α<sub>t</sub>/α<sub>t−1</sub></em> và phương sai bù lại. Hệ số này chỉ gọn nếu <em>α<sub>t</sub></em> là <em>tích luỹ</em>.</span>
+        </div>
+
+        <p>Nhờ tính Markov, có thể nhảy thẳng từ ảnh sạch tới bước <em>t</em> bất kỳ:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mi>q</mi><mo>(</mo><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>|</mo>
+            <msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>)</mo><mo>=</mo>
+            <mi mathvariant="script">N</mi><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>;</mo>
+            <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+            <msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>,</mo>
+            <mrow><mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub><mo>)</mo></mrow>
+            <mi mathvariant="bold">I</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (2)</span>
+          <span class="cap"><b>Hệ quả dùng về sau:</b> <em>x<sub>t</sub></em> = √<em>α<sub>t</sub></em>·<em>x</em><sub>0</sub> + √(1−<em>α<sub>t</sub></em>)·<em>ε</em>, chính là đầu vào của mạng dự đoán nhiễu.</span>
+        </div>
+
+        <p>Quá trình ngược là một chuỗi Markov có tham số học được:</p>
+
+        <div class="eq">
+          <math display="block">
+            <msub><mi>p</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>|</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>)</mo><mo>=</mo>
+            <mi mathvariant="script">N</mi><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>;</mo>
+            <msub><mi mathvariant="bold">μ</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo><mo>,</mo>
+            <msub><mi mathvariant="bold">Σ</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo><mo>)</mo>
+          </math>
+          <span class="no">Eq. (3)</span>
+          <span class="cap"><b>Đọc:</b> mạng phải dự đoán cả trung bình lẫn phương sai. iDDPM [32] khai thác chính phương sai này để giảm số bước.</span>
+        </div>
+
+        <p>Và mục tiêu huấn luyện rút gọn — dự đoán nhiễu đã thêm, không dự đoán ảnh:</p>
+
+        <div class="eq">
+          <math display="block">
+            <msub><mi>L</mi><mtext>simple</mtext></msub><mo>(</mo><mi>θ</mi><mo>)</mo><mo>=</mo>
+            <msub><mi>E</mi><mrow><mi>t</mi><mo>,</mo><msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>,</mo><mi mathvariant="bold">ε</mi></mrow></msub>
+            <mrow>
+              <mo>[</mo>
+              <msup>
+                <mrow><mo>‖</mo>
+                  <mi mathvariant="bold">ε</mi><mo>−</mo>
+                  <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub>
+                  <mo>(</mo>
+                  <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+                  <msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>+</mo>
+                  <msqrt><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow></msqrt>
+                  <mi mathvariant="bold">ε</mi><mo>,</mo><mi>t</mi><mo>)</mo>
+                <mo>‖</mo></mrow>
+                <mn>2</mn>
+              </msup>
+              <mo>]</mo>
+            </mrow>
+          </math>
+          <span class="no">Eq. (4)</span>
+          <span class="cap"><b>Đọc:</b> mạng <em>ε<sub>θ</sub></em> nhận ảnh nhiễu và bước <em>t</em>, trả về nhiễu đã thêm. Mọi thứ sau này — kể cả DIRE — chỉ dùng <em>ε<sub>θ</sub></em>, không dùng nhãn.</span>
+        </div>
+
+        <div class="callout warn">
+          <b>Một va chạm ký hiệu cần biết trước khi code.</b> Trong DDPM gốc, <em>α<sub>t</sub></em> là hệ số của <em>một bước</em>, còn tích luỹ được ký hiệu <em>ᾱ<sub>t</sub></em>. Ở bài này, <em>α<sub>t</sub></em> đã là <em>tích luỹ</em>: Eq. (2) có dạng √<em>α<sub>t</sub></em>·<em>x</em><sub>0</sub> và Eq. (1) có tỉ số <em>α<sub>t</sub>/α<sub>t−1</sub></em> — chỉ đúng nếu <em>α<sub>t</sub></em> = ∏<sub>s≤t</sub>(1−<em>β<sub>s</sub></em>). Nếu bạn chép công thức mà giữ nguyên tên biến từ code DDPM, DIRE sẽ sai âm thầm chứ không báo lỗi.
+        </div>
+
+        <p>Phần còn lại của §3.1 không có phát biểu mới. Giá trị của nó là thiết lập một điều kiện: vì mục tiêu huấn luyện là dự đoán nhiễu, mạng <em>ε<sub>θ</sub></em> mã hoá <em>hướng</em> của trường vectơ score. Đảo ngược một ảnh là đi ngược trường ấy — và đó là chỗ xuất hiện sai số, sẽ bàn ở Phụ lục B.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Điều được thiết lập</h4>
+          <ol class="steps">
+            <li>Có ánh xạ tất định từ ảnh sạch tới một điểm nhiễu ở bất kỳ bước <em>t</em> (Eq. 2).</li>
+            <li>Có mạng dự đoán nhiễu <em>ε<sub>θ</sub></em> học được từ dữ liệu (Eq. 4).</li>
+            <li>⇒ Có thể định nghĩa một phép "đi ngược" chỉ dựa trên <em>ε<sub>θ</sub></em>, không cần nhãn, không cần huấn luyện thêm.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>Đây là điều kiện để DIRE rẻ: nó tái dùng mô hình có sẵn, không huấn luyện bộ tái tạo.</div>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Ký hiệu</h4>
+          <p><b>α<sub>t</sub></b> — tích luỹ <em>∏(1−β<sub>s</sub>)</em>, không phải hệ số một bước.</p>
+          <p><b>ε<sub>θ</sub></b> — mạng dự đoán nhiễu, tham số θ.</p>
+          <p><b>T</b> — tổng số bước (1000). <b>S</b> — số bước thực thi (mặc định 20).</p>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có gì cần chứng minh ở trang này: đây là ôn tập. Nhưng cần nhớ: Eq. (4) chỉ là <em>mục tiêu huấn luyện rút gọn</em>, không phải cận dưới biến phân đầy đủ; bài không nhắc điều này và không cần nhắc.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 7 ============================== -->
+<section class="page" id="p7" data-group="Phần 3 · Method" data-short="3.1 — DDIM &amp; pipeline (Eq. 5–8)" data-part="§3.1">
+  <div class="page-in">
+    <p class="kicker">§3.1 Preliminaries<span class="sep">/</span>DDIM<span class="sep">/</span>trang gốc 3</p>
+    <h2 class="title">DDIM: bỏ ngẫu nhiên để có phép đảo ngược</h2>
+    <p class="lede">DIRE chỉ tồn tại được vì DDIM tất định. Nếu quá trình ngược còn nhiễu ngẫu nhiên, "tái tạo" sẽ không tái lập được và hiệu số mất nghĩa.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>DDIM tổng quát hoá quá trình ngược thành họ không Markov. Dạng một bước:</p>
+
+        <div class="eq">
+          <math display="block">
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>
+            <mo>=</mo>
+            <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></msqrt>
+            <mrow><mo>(</mo>
+              <mfrac>
+                <mrow><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>−</mo>
+                  <msqrt><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow></msqrt>
+                  <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+                  <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo></mrow>
+                <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+              </mfrac>
+            <mo>)</mo></mrow>
+            <mo>+</mo>
+            <msqrt><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub><mo>−</mo><msubsup><mi>σ</mi><mi>t</mi><mn>2</mn></msubsup></mrow></msqrt>
+            <mo>·</mo>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+            <mo>+</mo>
+            <msub><mi>σ</mi><mi>t</mi></msub>
+            <msub><mi mathvariant="bold">ε</mi><mi>t</mi></msub>
+          </math>
+          <span class="no">Eq. (5)</span>
+          <span class="cap"><b>Đọc:</b> số hạng đầu là "đoán ảnh sạch rồi cộng lại nhiễu"; số hạng hai và ba là phần ngẫu nhiên. Bài dùng <em>σ<sub>t</sub></em> = 0.</span>
+        </div>
+
+        <p>Khi <em>σ<sub>t</sub></em> = 0, quá trình trở nên tất định và có thể viết lại thành dạng Euler:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub>
+              <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></msqrt>
+            </mfrac>
+            <mo>=</mo>
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub>
+              <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+            </mfrac>
+            <mo>+</mo>
+            <mrow><mo>(</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></mrow><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></mfrac></msqrt>
+              <mo>−</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow><msub><mi>α</mi><mi>t</mi></msub></mfrac></msqrt>
+            <mo>)</mo></mrow>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (6)</span>
+          <span class="cap"><b>Đọc:</b> chỉ là Eq. (5) chia hai vế cho √<em>α</em> và sắp lại. <em>Δ</em> trong bài là bước rời rạc hoá, không phải sai số.</span>
+        </div>
+
+        <p>Với <em>σ</em> = √(1−<em>α</em>)/√<em>α</em> và <em>x̄</em> = <em>x</em>/√<em>α</em>, dạng liên tục là một ODE:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mi>d</mi><mover><mi mathvariant="bold">x</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>)</mo>
+            <mo>=</mo>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub>
+            <mrow><mo>(</mo>
+              <mfrac><mrow><mover><mi mathvariant="bold">x</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>)</mo></mrow>
+              <msqrt><mrow><msup><mi>σ</mi><mn>2</mn></msup><mo>+</mo><mn>1</mn></mrow></msqrt></mfrac>
+              <mo>,</mo><mi>t</mi>
+            <mo>)</mo></mrow>
+            <mi>d</mi><mi>σ</mi><mo>(</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (7)</span>
+          <span class="cap"><b>Đọc:</b> quỹ đạo trong không gian (<em>x̄</em>, <em>σ</em>) là nghiệm của một ODE; mọi xấp xỉ số đều để lại sai số.</span>
+        </div>
+
+        <p>Và phép đảo ngược — chỉ là Eq. (6) đảo chiều:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub>
+              <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></msqrt>
+            </mfrac>
+            <mo>=</mo>
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub>
+              <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+            </mfrac>
+            <mo>+</mo>
+            <mrow><mo>(</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></mrow><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></mfrac></msqrt>
+              <mo>−</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow><msub><mi>α</mi><mi>t</mi></msub></mfrac></msqrt>
+            <mo>)</mo></mrow>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (8)</span>
+          <span class="cap"><b>Đọc:</b> cùng một <em>ε<sub>θ</sub></em>, nhưng cộng dồn theo hướng <em>t</em> tăng. Đây là "DDIM inversion".</span>
+        </div>
+
+        <figure class="fig">
+          <svg viewBox="0 0 660 250" role="img" aria-label="Sơ đồ tính DIRE: ảnh x0 vào, đảo ngược DDIM S bước tới xT trong nhiễu Gauss, tái tạo S bước về x'0, lấy trị tuyệt đối hiệu">
+            <rect width="660" height="250" fill="#fcfdfd"/>
+            <rect x="14" y="86" width="72" height="54" rx="6" fill="#eef3f5" stroke="#9fb4bd"/>
+            <text x="50" y="118" text-anchor="middle" font-family="Georgia,serif" font-size="15" fill="#223c46">x₀</text>
+            <text x="50" y="158" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">ảnh vào</text>
+
+            <path d="M88,113 L128,113" stroke="#33525e" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="134" y="56" width="112" height="114" rx="8" fill="#f2f8f9" stroke="#a9c6ce"/>
+            <text x="190" y="86" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10.5" font-weight="600" fill="#0f4c5c">DDIM inversion</text>
+            <text x="190" y="104" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#33525e">Eq. (8)</text>
+            <text x="190" y="122" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#5c6f7a">S bước, t tăng</text>
+            <text x="190" y="142" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#5c6f7a">tất định (σ = 0)</text>
+
+            <path d="M248,113 L286,113" stroke="#33525e" stroke-width="1.5" marker-end="url(#ah)"/>
+            <circle cx="316" cy="113" r="26" fill="#e8eef2" stroke="#7f9aa6"/>
+            <text x="316" y="110" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-size="12" fill="#33525e">x</text>
+            <text x="323" y="114" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#33525e">T</text>
+            <text x="316" y="126" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="8.5" fill="#5c6f7a">N(0,I)</text>
+
+            <path d="M344,113 L384,113" stroke="#33525e" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="390" y="56" width="118" height="114" rx="8" fill="#f2f8f9" stroke="#a9c6ce"/>
+            <text x="449" y="86" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10.5" font-weight="600" fill="#0f4c5c">DDIM recon.</text>
+            <text x="449" y="104" text-anchor="middle" font-family="Georgia,serif" font-size="12" fill="#33525e">Eq. (5)</text>
+            <text x="449" y="122" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#5c6f7a">S bước, t giảm</text>
+            <text x="449" y="142" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#5c6f7a">cùng ε_θ, cùng mốc</text>
+
+            <path d="M510,113 L548,113" stroke="#33525e" stroke-width="1.5" marker-end="url(#ah)"/>
+            <rect x="552" y="86" width="66" height="54" rx="6" fill="#edf6f1" stroke="#8fb8a3"/>
+            <text x="585" y="112" text-anchor="middle" font-family="Georgia,serif" font-size="13" fill="#2c5545">x′₀</text>
+            <text x="585" y="126" text-anchor="middle" font-family="Georgia,serif" font-size="9" fill="#2c5545">tái tạo</text>
+
+            <path d="M50,148 L50,196 L585,196 L585,148" fill="none" stroke="#a94a55" stroke-width="1.3" stroke-dasharray="5 4"/>
+            <rect x="228" y="176" width="186" height="38" rx="6" fill="#fbeeef" stroke="#e3b6bb"/>
+            <text x="321" y="192" text-anchor="middle" font-family="Georgia,serif" font-size="12.5" fill="#7d2530">DIRE = | x₀ − x′₀ |</text>
+            <text x="321" y="206" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="9" fill="#9a4a54">trị tuyệt đối theo từng điểm ảnh</text>
+
+            <line x1="0" y1="228" x2="660" y2="228" stroke="#e3ebee"/>
+            <text x="14" y="242" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Sơ đồ vẽ lại theo Figure 3. Đảo ngược và tái tạo phải dùng cùng mô hình, cùng lịch, cùng tập mốc τ.</text>
+          </svg>
+          <figcaption><span class="fignum">Figure 3 · vẽ lại</span>Đường đi của một ảnh qua DIRE. Chú ý: <em>x′</em><sub>0</sub> không phải "ảnh sinh lại", nó là ảnh vào sau khi đi qua ánh xạ <em>R∘I</em> — nếu ánh xạ là bất động thì <em>x′</em><sub>0</sub> = <em>x</em><sub>0</sub> và DIRE = 0.</figcaption>
+        </figure>
+
+        <p>Cuối §3.1, bài nêu cách tăng tốc: DDIM cho phép chọn một tập con <em>S</em> mốc <em>τ</em><sub>1</sub> &lt; … &lt; <em>τ<sub>S</sub></em> thay vì đi đủ 1000 bước. Với DIRE, <em>S</em> xuất hiện <strong>hai lần</strong>: một lần cho đảo ngược, một lần cho tái tạo. Vì vậy chi phí của một ảnh là <strong>2S</strong> lần gọi mạng, không phải <em>S</em>. Bài sẽ dùng <em>S</em> = 20 (mục 4.1), tức 40 NFE mỗi ảnh.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Vì sao DDIM là bắt buộc</h4>
+          <ol class="steps">
+            <li>Muốn đo "khoảng cách giữa ảnh và ảnh tái tạo", phép tái tạo phải xác định.</li>
+            <li>Quá trình ngược DDPM có nhiễu ngẫu nhiên ⇒ cùng ảnh vào cho nhiều ảnh ra ⇒ DIRE là biến ngẫu nhiên, không tái lập.</li>
+            <li>DDIM với <em>σ<sub>t</sub></em> = 0 cho ánh xạ tất định, một điểm nhiễu ↔ một ảnh.</li>
+            <li>⇒ Chọn DDIM, <em>σ</em> = 0, cùng tập mốc cho hai chiều.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>Đây là điều kiện <em>kỹ thuật</em> của định nghĩa, không phải lựa chọn thẩm mỹ. Vi phạm nó thì DIRE không còn là một hàm của ảnh.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p><b>Đảo ngược không phải nghịch đảo.</b> Eq. (8) dùng chính <em>ε<sub>θ</sub></em>(<em>x<sub>t</sub></em>, <em>t</em>) của điểm hiện tại để bước tới, trong khi Eq. (5) cũng dùng <em>ε<sub>θ</sub></em>(<em>x<sub>t</sub></em>, <em>t</em>). Đây là xấp xỉ bậc một: <em>R</em>(<em>I</em>(<em>x</em>)) ≠ <em>x</em> ngay cả khi <em>x</em> là mẫu đúng của <em>p<sub>g</sub></em>.</p>
+          <p>Chính vì thế DIRE của ảnh sinh <em>không</em> bằng 0. Điều này được thừa nhận ở Phụ lục B, nhưng không được định lượng.</p>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Chi phí</h4>
+          <p>Một ảnh: <b>2S</b> lần gọi <em>ε<sub>θ</sub></em>. Với <em>S</em> = 20 → <b>40 NFE</b>.</p>
+          <p>So sánh: một detector RGB thông thường là <b>1</b> lượt forward.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 8 ============================== -->
+<section class="page" id="p8" data-group="Phần 3 · Method" data-short="3.2 — định nghĩa DIRE (Eq. 9–10)" data-part="§3.2">
+  <div class="page-in">
+    <p class="kicker">§3.2 DIRE<span class="sep">/</span>trang gốc 4</p>
+    <h2 class="title">Định nghĩa: một ảnh, không phải một con số</h2>
+    <p class="lede">Sai lầm phổ biến nhất khi đọc lướt bài này là tưởng DIRE là một scalar. Nó là một <em>ảnh ba kênh</em> cùng kích thước đầu vào. Detector là một CNN đọc ảnh đó.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Sau khi đảo ngược và tái tạo, DIRE được định nghĩa:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mtext>DIRE</mtext><mo>(</mo><msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>)</mo>
+            <mo>=</mo>
+            <mrow><mo>‖</mo>
+              <msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>−</mo>
+              <mi>R</mi><mo>(</mo><mi>I</mi><mo>(</mo><msub><mi mathvariant="bold">x</mi><mn>0</mn></msub><mo>)</mo><mo>)</mo>
+            <mo>‖</mo></mrow>
+          </math>
+          <span class="no">Eq. (9)</span>
+          <span class="cap"><b>Trong đó:</b> <em>I</em>(·) là chuỗi đảo ngược theo Eq. (8); <em>R</em>(·) là chuỗi tái tạo theo Eq. (5); và bài ghi rõ "<em>‖·‖</em> denotes computing the absolute value" — tức <b>trị tuyệt đối theo từng phần tử</b>, không phải chuẩn L2.</span>
+        </div>
+
+        <div class="callout warn">
+          <b>Ký hiệu <em>‖·‖</em> ở đây là cái bẫy.</b> Trong hầu hết tài liệu học sâu, <em>‖v‖</em> là chuẩn. Ở bài này nó là trị tuyệt đối từng điểm ảnh, giữ nguyên 3 kênh và kích thước 256×256. Nếu bạn cài đặt bằng <code>torch.norm</code> hay <code>np.linalg.norm</code>, bạn sẽ có một scalar — và toàn bộ kiến trúc phía sau (ResNet-50 trên ảnh DIRE) không còn nghĩa. Phép đúng là <code>torch.abs(x0 - x0_hat)</code>.
+        </div>
+
+        <p>Với ảnh thật và ảnh sinh, ta thu được hai tập ảnh DIRE rồi huấn luyện một bộ phân loại nhị phân bằng cross-entropy:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mi>L</mi><mo>(</mo><mi mathvariant="bold">y</mi><mo>,</mo><msup><mi mathvariant="bold">y</mi><mo>′</mo></msup><mo>)</mo>
+            <mo>=</mo><mo>−</mo>
+            <munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><mi>N</mi></munderover>
+            <mrow><mo>(</mo>
+              <msub><mi>y</mi><mi>i</mi></msub><mi>log</mi><msubsup><mi>y</mi><mi>i</mi><mo>′</mo></msubsup>
+              <mo>+</mo>
+              <mo>(</mo><mn>1</mn><mo>−</mo><msub><mi>y</mi><mi>i</mi></msub><mo>)</mo>
+              <mi>log</mi><mo>(</mo><mn>1</mn><mo>−</mo><msubsup><mi>y</mi><mi>i</mi><mo>′</mo></msubsup><mo>)</mo>
+            <mo>)</mo></mrow>
+          </math>
+          <span class="no">Eq. (10)</span>
+          <span class="cap"><b>Đọc:</b> công thức BCE chuẩn, <em>N</em> là batch size. Không có thành phần chính quy hoá, không có trọng số lớp, không có học tăng cường — classifier hoàn toàn tầm thường. Đó là điểm mạnh của bài: mọi năng lực nằm ở <em>biểu diễn</em>.</span>
+        </div>
+
+        <p>Quy trình lúc suy luận, theo đúng câu của bài: ảnh → tính DIRE → đưa DIRE vào classifier → nhãn thật/sinh. Không có bước nào dùng ngưỡng thủ công; ngưỡng 0,5 trên xác suất sigmoid (mục 4.1).</p>
+
+        <figure class="fig">
+          <svg viewBox="0 0 660 268" role="img" aria-label="Sơ đồ minh hoạ Figure 1: hàng nguồn, hàng tái tạo, hàng DIRE cho ảnh thật và bốn bộ sinh">
+            <defs>
+              <linearGradient id="room" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#cfdde3"/><stop offset="1" stop-color="#93aab4"/>
+              </linearGradient>
+              <pattern id="noiseA" width="7" height="7" patternUnits="userSpaceOnUse">
+                <rect width="7" height="7" fill="#f3f6f7"/>
+                <circle cx="1.6" cy="2.2" r="1.05" fill="#9fb2ba" opacity=".75"/>
+                <circle cx="4.8" cy="5.1" r=".9" fill="#7f97a2" opacity=".65"/>
+                <circle cx="5.6" cy="1.4" r=".7" fill="#b7c6cc" opacity=".8"/>
+              </pattern>
+              <pattern id="noiseB" width="5" height="5" patternUnits="userSpaceOnUse">
+                <rect width="5" height="5" fill="#f6f8f9"/>
+                <circle cx="1.2" cy="1.1" r=".75" fill="#b9c8ce" opacity=".7"/>
+                <circle cx="3.4" cy="3.2" r=".6" fill="#a3b6be" opacity=".6"/>
+              </pattern>
+            </defs>
+            <rect width="660" height="268" fill="#fcfdfd"/>
+
+            <text x="8" y="52" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Source</text>
+            <text x="8" y="116" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Recon.</text>
+            <text x="8" y="180" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">DIRE</text>
+
+            <g font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#3f5c66" text-anchor="middle">
+              <text x="132" y="30">Real</text>
+              <text x="242" y="30">DDPM</text>
+              <text x="352" y="30">iDDPM</text>
+              <text x="462" y="30">ADM</text>
+              <text x="572" y="30">PNDM</text>
+            </g>
+
+            <!-- row 1: source -->
+            <g>
+              <rect x="78" y="38" width="108" height="46" rx="3" fill="url(#room)"/>
+              <rect x="86" y="62" width="40" height="16" fill="#7c96a2" opacity=".55"/>
+              <rect x="140" y="50" width="20" height="28" fill="#6e8894" opacity=".45"/>
+              <rect x="188" y="38" width="108" height="46" rx="3" fill="url(#room)"/>
+              <rect x="196" y="62" width="40" height="16" fill="#7c96a2" opacity=".55"/>
+              <rect x="250" y="50" width="20" height="28" fill="#6e8894" opacity=".45"/>
+              <rect x="298" y="38" width="108" height="46" rx="3" fill="url(#room)"/>
+              <rect x="306" y="62" width="40" height="16" fill="#7c96a2" opacity=".55"/>
+              <rect x="360" y="50" width="20" height="28" fill="#6e8894" opacity=".45"/>
+              <rect x="408" y="38" width="108" height="46" rx="3" fill="url(#room)"/>
+              <rect x="416" y="62" width="40" height="16" fill="#7c96a2" opacity=".55"/>
+              <rect x="470" y="50" width="20" height="28" fill="#6e8894" opacity=".45"/>
+              <rect x="518" y="38" width="108" height="46" rx="3" fill="url(#room)"/>
+              <rect x="526" y="62" width="40" height="16" fill="#7c96a2" opacity=".55"/>
+              <rect x="580" y="50" width="20" height="28" fill="#6e8894" opacity=".45"/>
+            </g>
+            <!-- row 2: recon (slightly flatter) -->
+            <g opacity=".82">
+              <rect x="78" y="100" width="108" height="46" rx="3" fill="#dbe6ea"/>
+              <rect x="86" y="124" width="40" height="16" fill="#a9bcc4" opacity=".5"/>
+              <rect x="140" y="112" width="20" height="28" fill="#9db2bb" opacity=".4"/>
+              <rect x="188" y="100" width="108" height="46" rx="3" fill="#d5e3e7"/>
+              <rect x="196" y="124" width="40" height="16" fill="#a3b8c0" opacity=".5"/>
+              <rect x="250" y="112" width="20" height="28" fill="#97adb6" opacity=".4"/>
+              <rect x="298" y="100" width="108" height="46" rx="3" fill="#d5e3e7"/>
+              <rect x="306" y="124" width="40" height="16" fill="#a3b8c0" opacity=".5"/>
+              <rect x="360" y="112" width="20" height="28" fill="#97adb6" opacity=".4"/>
+              <rect x="408" y="100" width="108" height="46" rx="3" fill="#d5e3e7"/>
+              <rect x="416" y="124" width="40" height="16" fill="#a3b8c0" opacity=".5"/>
+              <rect x="470" y="112" width="20" height="28" fill="#97adb6" opacity=".4"/>
+              <rect x="518" y="100" width="108" height="46" rx="3" fill="#d5e3e7"/>
+              <rect x="526" y="124" width="40" height="16" fill="#a3b8c0" opacity=".5"/>
+              <rect x="580" y="112" width="20" height="28" fill="#97adb6" opacity=".4"/>
+            </g>
+            <!-- row 3: DIRE -->
+            <g>
+              <rect x="78" y="162" width="108" height="46" rx="3" fill="url(#noiseA)"/>
+              <rect x="88" y="170" width="38" height="18" rx="2" fill="none" stroke="#6b8590" stroke-width=".9" opacity=".55"/>
+              <rect x="140" y="176" width="20" height="26" rx="2" fill="none" stroke="#6b8590" stroke-width=".9" opacity=".45"/>
+              <rect x="188" y="162" width="108" height="46" rx="3" fill="url(#noiseB)" opacity=".85"/>
+              <rect x="298" y="162" width="108" height="46" rx="3" fill="url(#noiseB)" opacity=".85"/>
+              <rect x="408" y="162" width="108" height="46" rx="3" fill="url(#noiseB)" opacity=".85"/>
+              <rect x="518" y="162" width="108" height="46" rx="3" fill="url(#noiseB)" opacity=".85"/>
+            </g>
+            <text x="242" y="196" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="8.5" fill="#6b8590" opacity=".9">nhiễu rối</text>
+            <text x="132" y="200" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="8.5" fill="#5d7883">có cấu trúc</text>
+
+            <line x1="0" y1="226" x2="660" y2="226" stroke="#e3ebee"/>
+            <text x="14" y="240" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Sơ đồ vẽ lại theo Figure 1. Ảnh DIRE của ảnh thật (trái) có cấu trúc bám hình khối; ảnh DIRE của ảnh sinh rối hơn.</text>
+            <text x="14" y="254" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Đây là hình minh hoạ, không phải ảnh thật trong bài.</text>
+          </svg>
+          <figcaption><span class="fignum">Figure 1 · vẽ lại</span>Hàng 1: ảnh nguồn (mô phỏng). Hàng 2: ảnh tái tạo — mất chi tiết. Hàng 3: DIRE. Bài mô tả DIRE của ảnh thật "có giá trị lớn hơn" của ảnh sinh; cường độ được mã hoá bằng độ đậm, không phải thang đo thật.</figcaption>
+        </figure>
+
+        <h3>Ba chi tiết định nghĩa dễ bị bỏ qua</h3>
+        <ul>
+          <li><strong>DIRE không được chuẩn hoá.</strong> Bài không nói có chuẩn hoá biên độ, không nói có cắt khoảng giá trị. Ảnh DIRE giữ thang [−1, 1] sau abs thành [0, 2] nếu đầu vào ở [−1, 1].</li>
+          <li><strong>Không có ngưỡng trên DIRE.</strong> Việc quyết định nằm ở classifier, không ở một ngưỡng đặt trước trên sai số. Đây là lý do DIRE tránh được bài toán chọn ngưỡng — nhưng cũng khiến kết quả phụ thuộc vào classifier.</li>
+          <li><strong>Cùng mô hình, cùng lịch.</strong> Nếu <em>I</em> và <em>R</em> khác mô hình hoặc khác tập mốc, hiệu số đo một đại lượng khác — không còn là DIRE.</li>
+        </ul>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ của định nghĩa</h4>
+          <ol class="steps">
+            <li>Nếu ảnh <em>x</em> nằm trong miền "quen" của mô hình, ánh xạ <em>R∘I</em> gần bất động tại <em>x</em>.</li>
+            <li>Nếu không, ánh xạ kéo <em>x</em> về phía miền quen.</li>
+            <li>Hiệu <em>x</em> − <em>R</em>(<em>I</em>(<em>x</em>)) là độ dời do phép kéo ấy.</li>
+            <li>Lấy trị tuyệt đối để bỏ dấu, giữ độ lớn; đưa vào CNN để học <em>hình dạng</em> của độ dời, không chỉ trung bình.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>DIRE là "ảnh lỗi hình chiếu". Detector học phân bố của ảnh lỗi ấy.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Bước 1 là giả định, không phải tính chất đã chứng minh của ánh xạ DDIM. Với <em>S</em> hữu hạn, <em>R∘I</em> không bất động ngay cả trên mẫu của <em>p<sub>g</sub></em> (Phụ lục B thừa nhận).</p>
+          <p>Vì vậy định nghĩa là <em>được đề xuất</em>, không phải <em>được suy ra</em>. Bài không có bổ đề nào nối Eq. (9) với giả thuyết ở §1.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Ký hiệu <em>‖·‖</em> cho trị tuyệt đối là lựa chọn dễ gây hiểu nhầm; bài không dùng ký hiệu <em>|·|</em> dù định nghĩa là vậy.</li>
+            <li>Không nói rõ DIRE được chuẩn hoá thế nào trước khi vào ResNet (dùng chuẩn ImageNet hay không).</li>
+            <li>Không có phân tích độ nhạy của DIRE theo <em>S</em> ở mức từng ảnh — chỉ có độ chính xác cuối (Table 4).</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 9 ============================== -->
+<section class="page" id="p9" data-group="Phần 3 · Method" data-short="3.3 — DiffusionForensics (Table 1)" data-part="§3.3">
+  <div class="page-in">
+    <p class="kicker">§3.3 DiffusionForensics<span class="sep">/</span>Table 1<span class="sep">/</span>trang gốc 5</p>
+    <h2 class="title">Bộ dữ liệu: mười tập con, một câu prompt</h2>
+    <p class="lede">Đóng góp thứ hai của bài. Điểm cần nhớ: mỗi mẫu là một <em>bộ ba</em> (ảnh nguồn, ảnh tái tạo, ảnh DIRE), và dữ liệu thật được <em>dùng chung</em> giữa các tập con.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Mười tập con, chia theo nguồn ảnh thật (LSUN-Bedroom hoặc ImageNet) và theo cách điều kiện hoá của bộ sinh (vô điều kiện, có điều kiện, text→image).</p>
+
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 1 — Thành phần DiffusionForensics (chép nguyên)</caption>
+            <thead>
+              <tr><th>Nguồn ảnh</th><th>Điều kiện hoá</th><th>Bộ sinh</th><th class="c"># ảnh (thật / sinh)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Vô điều kiện</td><td>ADM [10]</td><td class="c n">42k / 42k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Vô điều kiện</td><td>DDPM [17]</td><td class="c n">42k / 42k <span style="color:#a94a55">*</span></td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Vô điều kiện</td><td>iDDPM [32]</td><td class="c n">42k / 42k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Vô điều kiện</td><td>PNDM [23]</td><td class="c n">42k / 42k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Text→Image</td><td>LDM [37]</td><td class="c n">1k / 1k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Text→Image</td><td>SD-v1 [37]</td><td class="c n">1k / 1k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Text→Image</td><td>SD-v2 [37]</td><td class="c n">1k / 1k</td></tr>
+              <tr><td class="name">LSUN-Bedroom [49]</td><td>Text→Image</td><td>VQ-Diffusion [14]</td><td class="c n">1k / 1k</td></tr>
+              <tr class="mid"><td class="name">ImageNet [9]</td><td>Có điều kiện</td><td>ADM [10]</td><td class="c n">50k / 50k</td></tr>
+              <tr class="mid"><td class="name">ImageNet [9]</td><td>Text→Image</td><td>SD-v1 [37]</td><td class="c n">10k / 10k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">* Con số "42k / 42k" ở hàng DDPM <b>không khớp</b> với phần chữ của §3.3 và Phụ lục A — xem khối vàng bên phải.</p>
+
+        <p>Cách chia: với LSUN, các tập 42k được chia 40k / 1k / 1k (train / val / test). Với ImageNet-ADM, 50k chia 40k / 5k / 5k. Các tập text→image và DDPM chỉ dùng để kiểm (test-only).</p>
+
+        <blockquote class="orig">
+          <p>"The split of real images for training/validation/testing is the same as the corresponding generated images. Besides, all the data in our dataset are triplet, i.e., source image, reconstructed image, and corresponding DIRE image."</p>
+          <cite>§3.3, nguyên văn</cite>
+        </blockquote>
+
+        <h3>Vì sao "triplet" lại quan trọng</h3>
+        <p>Vì nó biến bài toán thành hai tầng tách biệt. Tầng một là <em>sinh DIRE</em>: cố định, không học, dùng ADM có sẵn. Tầng hai là <em>học classifier</em>: rẻ, chỉ là ResNet-50 trên ảnh DIRE. Khi tác giả công bố triplet, họ cho phép người khác <strong>thay classifier</strong> mà không phải chạy lại diffusion — và cũng cho phép kiểm tra xem năng lực nằm ở đâu. Đây là lựa chọn công bố dữ liệu rất tốt cho tái lập.</p>
+
+        <div class="callout warn">
+          <b>Một mâu thuẫn nội tại cần ghi nhận.</b> Table 1 ghi DDPM là 42k / 42k, nhưng §3.3 viết: <em>"The 1k images generated by DDPM [17] are used for testing."</em> và Phụ lục A nói rõ: tải <em>"the provided 1k images generated by the model pre-trained on LSUN-Bedroom"</em> từ repo chính thức. Vậy DDPM chỉ có 1k ảnh sinh, không thể có 42k. Cách đọc hợp lý: ô trong bảng là lỗi biên tập, và DDPM là tập <em>test-only</em>. Điều này khớp với Table 2: không có hàng nào huấn luyện trên DDPM.
+        </div>
+
+        <p>Hệ quả thực dụng: nếu bạn tái lập Table 2, bạn cần dữ liệu thật cho <em>từng</em> tập con. Với ba tập 42k (ADM, iDDPM, PNDM), cùng một tập ảnh thật LSUN được chia lại cùng tỉ lệ — nghĩa là các tập train của ba tập con này <em>trùng nhau</em> ở phần ảnh thật. Bài không nói rõ đây có phải cùng một tập 1k test thật hay không; nếu có, các phép so sánh giữa ba hàng trong Table 2 dùng chung mẫu thật, điều này làm giảm phương sai giữa các hàng nhưng không gây rò rỉ nhãn.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Thiết kế benchmark</h4>
+          <ol class="steps">
+            <li>Muốn đo "tổng quát hoá", phải huấn luyện trên một bộ sinh và kiểm trên bộ khác.</li>
+            <li>Muốn tách "khác bộ sinh" khỏi "khác miền ảnh thật", cần hai trục: cùng miền (LSUN) và khác miền (ImageNet).</li>
+            <li>Muốn tách "khác kiến trúc" khỏi "khác bộ lấy mẫu", cần nhiều bộ sinh dùng chung U-Net (ADM, iDDPM, PNDM) và một mô hình khác họ (StyleGAN).</li>
+            <li>⇒ Mười tập con + StyleGAN phụ.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>Thiết kế benchmark khớp với các trục mà Table 2–3 khai thác. Đây là phần chắc nhất của bài về mặt phương pháp luận.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Bài không nói ảnh thật LSUN dùng cho train/val/test có được chia <em>theo nhà</em> hay theo ảnh rời, cũng không nói ảnh thật test có trùng ảnh thật train không. Với LSUN, ảnh gốc có thể trùng phòng giữa các split — một nguồn rò rỉ tiềm tàng mà bài không bàn.</p>
+          <p>Bài cũng không báo cáo kiểm định chất lượng ảnh sinh (ví dụ FID) cho từng tập con.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Table 1 và phần chữ mâu thuẫn về DDPM (42k vs 1k).</li>
+            <li>Không nêu cách chia ảnh thật ở mức phòng/đối tượng ⇒ rủi ro rò rỉ giữa split.</li>
+            <li>Tập test mỗi bộ sinh chỉ 1k ảnh ⇒ sai số lấy mẫu ±2 điểm ở mức ACC 90% (xem trang 10).</li>
+            <li>Ảnh SD 512² bị hạ xuống 256², làm mất thông tin tần số cao — chính là loại thông tin mà nhóm detector tần số dựa vào.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 10 ============================== -->
+<section class="page" id="p10" data-group="Phần 4 · Experiment" data-short="4.1 — thiết lập thực nghiệm" data-part="§4.1">
+  <div class="page-in">
+    <p class="kicker">§4.1 Experimental Setup<span class="sep">/</span>trang gốc 5–6</p>
+    <h2 class="title">Thiết lập: năm lựa chọn, không lựa chọn nào được biện luận</h2>
+    <p class="lede">Mục này dài chưa tới một cột nhưng chứa toàn bộ tham số quyết định kết quả. Đọc kỹ vì đây là chỗ dễ tái lập sai nhất.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Thiết lập thực nghiệm — chép từ §4.1</caption>
+            <thead><tr><th>Thành phần</th><th>Lựa chọn</th><th class="c">Ghi chú</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Mô hình tái tạo</td><td>ADM [10], huấn luyện trên LSUN-Bedroom</td><td class="c">cố định cho <em>mọi</em> thí nghiệm</td></tr>
+              <tr><td class="name">Bộ lấy mẫu</td><td>DDIM [42], đảo ngược + tái tạo</td><td class="c"><em>S</em> = 20 mặc định</td></tr>
+              <tr><td class="name">Classifier</td><td>ResNet-50 [15]</td><td class="c">kế thừa CNNDetection</td></tr>
+              <tr><td class="name">Kích thước</td><td>256 × 256</td><td class="c">ADM cố định 256</td></tr>
+              <tr><td class="name">Tiền xử lý</td><td>train: random crop 224 + flip ngang p = 0,5<br>test: center crop 224</td><td class="c">chuẩn ImageNet</td></tr>
+              <tr><td class="name">Chỉ số</td><td>ACC và AP (%)</td><td class="c">ngưỡng ACC = 0,5</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <blockquote class="orig">
+          <p>"For Stable Diffusion [37] v1 and v2, the generated images are resized into 256 × 256 with bicubic interpolation."</p>
+          <cite>§4.1, nguyên văn</cite>
+        </blockquote>
+
+        <p>Chi tiết resize này có hệ quả ít được bàn: ảnh SD sinh ở 512², bị nội suy bicubic xuống 256². Phép nội suy ấy xoá phần lớn năng lượng tần số cao — đúng loại tín hiệu mà các detector dựa trên phổ (F3Net, Frank et al.) khai thác. Nghĩa là một phần khoảng cách giữa DIRE và các baseline phổ có thể đến từ tiền xử lý, không chỉ từ biểu diễn. Bài không thảo luận điểm này.</p>
+
+        <h3>Bốn baseline và ba bản huấn luyện lại</h3>
+        <p>Bốn detector được đánh giá bằng trọng số công khai: CNNDetection [48], GANDetection [25], Patchforensics [4], SBI [40]. Ba bản có dấu sao — CNNDet*, Patchfor*, F3Net* — được nhóm tác giả <em>huấn luyện lại</em> trên tập con ADM của chính DiffusionForensics, dùng code chính thức. Đây là đối chứng quan trọng nhất của bài: nó kiểm soát cả dữ liệu huấn luyện lẫn kiến trúc (ResNet-50), chỉ để khác <em>đầu vào</em>.</p>
+
+        <div class="callout">
+          <b>Vì sao đối chứng có dấu sao mới là đối chứng thật.</b> Bốn detector không sao được đánh giá bằng trọng số tải về, huấn luyện trên ProGAN hoặc FaceForensics++ ở độ phân giải khác. Chênh lệch của chúng so với DIRE trộn ba nguyên nhân: khác dữ liệu, khác tiền xử lý, khác biểu diễn. Chỉ nhóm có dấu sao mới cô lập được nguyên nhân thứ ba. Khi đọc Table 2, hãy so DIRE với <em>nhóm sao</em>, không phải nhóm không sao.
+        </div>
+
+        <h3>Bao nhiêu ảnh trong một ô?</h3>
+        <p>Mỗi ô của Table 2 là ACC/AP trên tập test của bộ sinh tương ứng: 1 000 ảnh sinh + 1 000 ảnh thật (LSUN test). Với <em>n</em> ≈ 2 000 và giả định các ảnh độc lập, khoảng tin cậy 95% xấp xỉ:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mover><mi>p</mi><mo>^</mo></mover><mo>±</mo><mn>1,96</mn>
+            <msqrt><mfrac><mrow><mover><mi>p</mi><mo>^</mo></mover><mo>(</mo><mn>1</mn><mo>−</mo><mover><mi>p</mi><mo>^</mo></mover><mo>)</mo></mrow><mi>n</mi></mfrac></msqrt>
+          </math>
+          <span class="no">tính bởi bản đọc</span>
+          <span class="cap"><b>Không có trong bài.</b> Công thức Wald chuẩn; bài báo cáo ACC/AP mà không kèm bất kỳ khoảng tin cậy hay độ lệch chuẩn nào.</span>
+        </div>
+
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Bán kính khoảng tin cậy 95% suy ra từ n = 2 000 (tính bởi bản đọc)</caption>
+            <thead><tr><th class="c">ACC quan sát</th><th class="c">± (điểm %)</th><th>Hệ quả khi đọc bài</th></tr></thead>
+            <tbody>
+              <tr><td class="c n">99,9</td><td class="c n">0,14</td><td class="name">Mọi ô 100/100 và 99,7 khác nhau <em>không</em> phân biệt được về mặt thống kê.</td></tr>
+              <tr><td class="c n">97,2</td><td class="c n">0,72</td><td class="name">97,2 so với 99,9 là khác biệt có ý nghĩa, nhưng nhỏ.</td></tr>
+              <tr><td class="c n">90,2</td><td class="c n">1,30</td><td class="name">90,2 so với 87,0 (Table 6) nằm sát ngưỡng không phân biệt được.</td></tr>
+              <tr><td class="c n">76,9</td><td class="c n">1,85</td><td class="name">Kết quả yếu nhất của bài; khoảng tin cậy ±1,9 điểm.</td></tr>
+              <tr><td class="c n">58,9</td><td class="c n">2,16</td><td class="name">Bốn detector cũ 51–59% chồng lấn nhau; không nên xếp hạng chúng.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">Giả định độc lập bị vi phạm trong thực tế (ảnh sinh cùng một mô hình, cùng prompt/class có tương quan), nên bán kính thật <em>lớn hơn</em> các giá trị này. Đây là <b>cận dưới</b> của bất định, không phải ước lượng đầy đủ.</p>
+
+        <h3>Những gì §4.1 không nói</h3>
+        <ul>
+          <li><strong>Số seed / số lần chạy.</strong> Không có. Mỗi cấu hình một lần.</li>
+          <li><strong>Chi phí.</strong> Không có GPU-giờ, không có thời gian huấn luyện, không có thời gian suy luận.</li>
+          <li><strong>Chuẩn hoá ảnh DIRE.</strong> Không nói dùng mean/std nào trước khi vào ResNet.</li>
+          <li><strong>Cách chọn ngưỡng 0,5.</strong> Đây là ngưỡng mặc định của sigmoid, không phải ngưỡng hiệu chỉnh theo FPR — phù hợp với benchmark cân bằng, không phù hợp với ứng dụng thật.</li>
+        </ul>
+
+        <div class="callout warn">
+          <b>Điểm cần nhớ khi trích dẫn.</b> "99,9% ACC" là trung bình của tám ô, mỗi ô 2 000 ảnh, một lần chạy, không có thanh sai số. Nó là con số đúng như bài ghi, nhưng không phải một ước lượng có khoảng tin cậy. Khi so với phương pháp khác, hãy so trong cùng điều kiện <em>n</em> và cùng tiền xử lý.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Vì sao thiết lập này hợp lý</h4>
+          <ol class="steps">
+            <li>Cố định mô hình tái tạo (ADM-LSUN) ⇒ mọi khác biệt về sau quy cho bộ sinh, không quy cho bộ tái tạo.</li>
+            <li>Cố định classifier (ResNet-50) ⇒ khác biệt quy cho đầu vào (DIRE vs RGB).</li>
+            <li>Huấn luyện lại baseline trên cùng dữ liệu ⇒ loại bỏ lợi thế dữ liệu.</li>
+            <li>⇒ So sánh DIRE với nhóm dấu sao là so sánh <em>biểu diễn</em>.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Thiết kế đối chứng tốt hơn mức trung bình của thể loại. Điểm yếu nằm ở thống kê, không ở đối chứng.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có thí nghiệm tách <em>tiền xử lý</em> khỏi <em>biểu diễn</em>: baseline được huấn luyện trên 256² crop 224 giống DIRE, nhưng đầu vào DIRE đã đi qua một mạng khuếch tán — tức là đã được "làm sạch" nhiễu và nén thông tin. Bao nhiêu phần trăm lợi thế đến từ việc <em>đi qua mạng</em> chứ không từ <em>sai số</em>, bài không trả lời.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Không có khoảng tin cậy, không có nhiều seed.</li>
+            <li>Không báo cáo chi phí (2S NFE/ảnh) — trong khi đây là chi phí lớn nhất của phương pháp.</li>
+            <li>Không nói chuẩn hoá ảnh DIRE ⇒ khó tái lập chính xác.</li>
+            <li>Ngưỡng 0,5 không hiệu chỉnh theo FPR.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 11 ============================== -->
+<section class="page" id="p11" data-group="Phần 4 · Experiment" data-short="4.2 — so sánh (Table 2)" data-part="§4.2">
+  <div class="page-in">
+    <p class="kicker">§4.2 Comparison to Existing Detectors<span class="sep">/</span>Table 2<span class="sep">/</span>trang gốc 6–7</p>
+    <h2 class="title">Kết quả chính: 99,9% trung bình</h2>
+    <p class="lede">Bảng quan trọng nhất của bài. Cần đọc theo ba khối: detector cũ, detector huấn luyện lại, và bốn biến thể DIRE. Mỗi khối trả lời một câu hỏi khác nhau.</p>
+
+    <div class="page-body wide">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 2 — So sánh toàn diện (ACC / AP, %). Bảng rộng: kéo ngang để xem hết tám bộ sinh.</caption>
+            <thead>
+              <tr>
+                <th>Phương pháp</th><th>Tập train</th><th>Bộ sinh</th><th>Bộ tái tạo</th>
+                <th class="g">ADM</th><th class="g">DDPM</th><th class="g">iDDPM</th><th class="g">PNDM</th>
+                <th class="g">SD-v1</th><th class="g">SD-v2</th><th class="g">LDM</th><th class="g">VQDiff</th><th class="g">TB</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td class="name">CNNDet [48]</td><td>LSUN</td><td>ProGAN</td><td>–</td>
+                <td class="n">50,1/63,4</td><td class="n">56,7/74,6</td><td class="n">50,1/77,6</td><td class="n">50,3/82,9</td>
+                <td class="n">50,2/70,9</td><td class="n">50,8/80,4</td><td class="n">50,1/60,2</td><td class="n">50,1/70,6</td><td class="n">51,1/72,6</td></tr>
+              <tr><td class="name">GANDet [25]</td><td>LSUN</td><td>ProGAN</td><td>–</td>
+                <td class="n">54,2/43,6</td><td class="n">52,2/47,3</td><td class="n">45,7/57,3</td><td class="n">42,1/77,6</td>
+                <td class="n">68,1/78,5</td><td class="n">61,5/52,7</td><td class="n">79,2/57,1</td><td class="n">64,8/52,3</td><td class="n">58,5/58,3</td></tr>
+              <tr><td class="name">Patchfor [4]</td><td>FF++</td><td>Nhiều</td><td>–</td>
+                <td class="n">50,4/74,8</td><td class="n">56,8/67,4</td><td class="n">50,3/69,5</td><td class="n">55,1/78,5</td>
+                <td class="n">49,9/84,7</td><td class="n">50,0/52,8</td><td class="n">54,0/92,0</td><td class="n">92,8/99,7</td><td class="n">57,4/77,4</td></tr>
+              <tr><td class="name">SBI [40]</td><td>FF++</td><td>Nhiều</td><td>–</td>
+                <td class="n">53,6/57,7</td><td class="n">55,8/47,4</td><td class="n">54,0/58,2</td><td class="n">46,7/44,8</td>
+                <td class="n">65,6/75,9</td><td class="n">55,0/59,8</td><td class="n">81,0/88,3</td><td class="n">59,6/66,6</td><td class="n">58,9/62,3</td></tr>
+              <tr class="mid"><td class="name">CNNDet* [48]</td><td>LSUN-B.</td><td>ADM</td><td>–</td>
+                <td class="n">100/100</td><td class="n">87,3/99,6</td><td class="n">100/100</td><td class="n">77,8/99,1</td>
+                <td class="n">77,4/85,8</td><td class="n">83,4/98,2</td><td class="n">96,0/99,9</td><td class="n">70,3/96,1</td><td class="n">86,5/97,3</td></tr>
+              <tr class="mid"><td class="name">Patchfor* [4]</td><td>LSUN-B.</td><td>ADM</td><td>–</td>
+                <td class="n">100/100</td><td class="n">72,9/100</td><td class="n">100/100</td><td class="n">96,6/100</td>
+                <td class="n">63,2/71,3</td><td class="n">97,2/100</td><td class="n">97,3/100</td><td class="n">100/100</td><td class="n">90,9/96,4</td></tr>
+              <tr class="mid"><td class="name">F3Net* [34]</td><td>LSUN-B.</td><td>ADM</td><td>–</td>
+                <td class="n">94,3/99,6</td><td class="n">93,7/99,6</td><td class="n">94,8/99,9</td><td class="n">94,1/99,2</td>
+                <td class="n">86,1/95,3</td><td class="n">83,6/91,7</td><td class="n">92,5/97,8</td><td class="n">93,4/98,7</td><td class="n">91,6/97,7</td></tr>
+              <tr class="hi"><td class="name">DIRE (ADM)</td><td>LSUN-B.</td><td>ADM</td><td>ADM</td>
+                <td class="n best">100/100</td><td class="n best">100/100</td><td class="n best">100/100</td><td class="n">99,7/100</td>
+                <td class="n">99,7/100</td><td class="n best">100/100</td><td class="n best">100/100</td><td class="n best">100/100</td><td class="n best">99,9/100</td></tr>
+              <tr><td class="name">DIRE (PNDM)</td><td>LSUN-B.</td><td>PNDM</td><td>ADM</td>
+                <td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td>
+                <td class="n">89,4/99,9</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">98,7/100</td></tr>
+              <tr><td class="name">DIRE (iDDPM)</td><td>LSUN-B.</td><td>iDDPM</td><td>ADM</td>
+                <td class="n">99,6/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">89,7/99,8</td>
+                <td class="n">99,7/100</td><td class="n">100/100</td><td class="n">99,9/100</td><td class="n">99,9/100</td><td class="n">98,6/100</td></tr>
+              <tr><td class="name">DIRE (StyleGAN)</td><td>LSUN-B.</td><td>StyleGAN</td><td>ADM</td>
+                <td class="n">98,8/100</td><td class="n">99,8/100</td><td class="n">99,9/100</td><td class="n">89,6/100</td>
+                <td class="n">95,2/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">97,9/100</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">* = nhóm tác giả huấn luyện lại trên tập con ADM của DiffusionForensics bằng code chính thức. Ảnh sinh của SD-v1, SD-v2, LDM, VQ-Diffusion đều dùng prompt <em>"A photo of bedroom"</em>.</p>
+
+        <h3>Ba khối, ba câu trả lời</h3>
+        <p><strong>Khối 1 (bốn detector không sao): 51,1–58,9% ACC trung bình.</strong> Gần mức đoán ngẫu nhiên. Đây là bằng chứng cho tuyên bố "detector cũ thất bại". Nhưng như đã nói ở trang 10, khối này trộn nhiều nguyên nhân và không nên dùng làm so sánh chính.</p>
+
+        <p><strong>Khối 2 (ba bản huấn luyện lại): 86,5 / 90,9 / 91,6%.</strong> Đây là đối chứng thật. Cùng dữ liệu ADM, cùng kiến trúc ResNet-50 (với CNNDet*), chỉ khác đầu vào. Khoảng cách 86,5 → 99,9 (13,4 điểm) là phần mà bài quy cho DIRE.</p>
+
+        <p><strong>Khối 3 (bốn biến thể DIRE): 97,9–99,9%.</strong> Điều đáng chú ý không phải con số trung bình, mà là <em>độ phẳng</em>: mọi ô đều ≥ 89,4%. Không có bộ sinh nào bị "sụp". Với một biểu diễn chỉ là hiệu ảnh, độ phẳng này là bất ngờ và là kết quả mạnh nhất của bài.</p>
+
+        <h3>Ba quan sát ít được nhắc</h3>
+        <ul>
+          <li><strong>DIRE huấn luyện trên StyleGAN vẫn đạt 97,9%.</strong> Nghĩa là tín hiệu không đặc thù cho khuếch tán; bài thừa nhận điều này ở §4.3 với giọng thận trọng ("might be attributed to...").</li>
+          <li><strong>Ba ô thấp nhất của DIRE là 89,4 / 89,6 / 89,7</strong>, và chúng không nằm cùng một chỗ: 89,4 ở hàng DIRE(PNDM) cột SD-v1; 89,6 ở hàng DIRE(StyleGAN) cột PNDM; 89,7 ở hàng DIRE(iDDPM) cột PNDM. Nghĩa là điểm yếu rải ở hai trục khác nhau (bộ lấy mẫu và mô hình huấn luyện), không quy về một nguyên nhân. Bài không phân tích ba ô này.</li>
+          <li><strong>AP gần như bão hoà 100</strong> ở mọi ô của DIRE. Khi AP = 100, ACC là chỉ số phân biệt duy nhất còn thông tin — nhưng ACC lại phụ thuộc ngưỡng 0,5.</li>
+        </ul>
+
+        <div class="callout warn">
+          <b>So sánh chưa cân chi phí.</b> Mỗi ảnh DIRE cần 40 lượt gọi ADM (S = 20, hai chiều). CNNDet* cần 1 lượt ResNet-50. Bài không đưa bảng chi phí, và cũng không có baseline "RGB + 40 lượt chạy thêm một mạng ngẫu nhiên" để tách phần lợi thế đến từ <em>năng lực tính toán thêm</em>. Đây là hạn chế nghiêm trọng nhất về mặt so sánh, vì 40 NFE có thể mua được rất nhiều thứ khác.
+        </div>
+      </div>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 12 ============================== -->
+<section class="page" id="p12" data-group="Phần 4 · Experiment" data-short="4.3 — tổng quát hoá (Table 3)" data-part="§4.3">
+  <div class="page-in">
+    <p class="kicker">§4.3 Generalization Capability<span class="sep">/</span>Table 3<span class="sep">/</span>trang gốc 7</p>
+    <h2 class="title">Tổng quát hoá: ba phép thử, một phép thử yếu</h2>
+    <p class="lede">Bài kiểm tổng quát hoá theo ba hướng: khác bộ sinh, khác miền dữ liệu, khác họ mô hình (GAN). Kết quả mạnh ở hai hướng đầu, và yếu đi rõ rệt ở hướng thứ hai khi bộ sinh huấn luyện là StyleGAN.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 3 — Đánh giá chéo bộ dữ liệu (ACC / AP, %)</caption>
+            <thead>
+              <tr><th>Tập train</th><th>Bộ sinh train</th><th class="g">ADM (ImageNet)</th><th class="g">SD-v1 (ImageNet)</th><th class="g">StyleGAN (LSUN-B.)</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>LSUN-B.</td><td>ADM</td><td class="n">90,2/97,9</td><td class="n">97,2/99,8</td><td class="n">99,9/100</td></tr>
+              <tr><td>LSUN-B.</td><td>iDDPM</td><td class="n">90,2/97,9</td><td class="n">93,7/99,3</td><td class="n">99,9/100</td></tr>
+              <tr><td>LSUN-B.</td><td>StyleGAN</td><td class="n worst">76,9/94,4</td><td class="n">89,7/99,0</td><td class="n">100/100</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">Mỗi bộ sinh kiểm được huấn luyện trên chính miền của nó. Prompt của SD-v1(IN) là <em>"A photo of {class}"</em> với 1 000 lớp ImageNet.</p>
+
+        <h3>Phép thử 1 — khác bộ sinh, cùng miền</h3>
+        <p>Huấn luyện trên ADM, kiểm trên DDPM, iDDPM, PNDM, SD-v1, SD-v2, LDM, VQ-Diffusion. Đây là Table 2, và là kết quả mạnh nhất: 99,9% trung bình. Vì cả bảy bộ sinh kiểm đều là khuếch tán trên LSUN-Bedroom, phép thử này đo <em>khả năng chuyển giữa các bộ lấy mẫu</em>, không đo chuyển miền.</p>
+
+        <h3>Phép thử 2 — khác miền dữ liệu</h3>
+        <p>Huấn luyện trên LSUN, kiểm trên ImageNet. Đây là nơi con số tụt: 90,2% ACC cho ADM(IN), tức giảm 9,8 điểm so với cùng bộ sinh ở miền LSUN (100%). Bài gọi đây là "satisfactory", và ở mức tuyệt đối thì đúng — nhưng cần đọc chính xác: <strong>đây là giới hạn dưới của năng lực thật</strong>. Trong ứng dụng, ảnh thật hiếm khi cùng miền với tập huấn luyện của mô hình tái tạo.</p>
+
+        <p>Đáng chú ý nhất là hàng StyleGAN: 76,9% ACC khi huấn luyện trên ảnh StyleGAN và kiểm trên ADM(IN). Đây là con số yếu nhất trong toàn bài, và nó xuất hiện đúng ở điều kiện khó nhất — <em>cả miền dữ liệu lẫn họ mô hình đều đổi</em>. Bài vẫn gọi là "satisfactory" nhờ AP 94,4%, nhưng ACC 76,9% nghĩa là gần một phần tư ảnh bị phân loại sai ở ngưỡng 0,5.</p>
+
+        <h3>Phép thử 3 — khác họ mô hình (GAN)</h3>
+        <blockquote class="orig">
+          <p>"Although the classifier never encounters any GAN-generated image during training, it achieves surprising performance when detecting GAN-generated images, i.e., 99% in ACC and 100% in AP."</p>
+          <cite>§4.3, nguyên văn</cite>
+        </blockquote>
+        <p>Nhưng chú ý: cột StyleGAN trong Table 3 có ba hàng 99,9 / 99,9 / 100. Con số "99% ACC" trong câu trên là cách nói gộp của ba hàng ấy. Và hàng thứ ba — huấn luyện trên StyleGAN, kiểm trên StyleGAN — là <em>cùng miền, cùng bộ sinh</em>, nên 100% ở đó không phải bằng chứng tổng quát hoá. Chỉ hai hàng đầu (huấn luyện trên ADM/iDDPM, kiểm trên StyleGAN) mới là tổng quát hoá thật, và chúng đạt 99,9%.</p>
+
+        <div class="callout">
+          <b>Một điểm dữ liệu lạ cần kiểm lại.</b> Hai hàng ADM và iDDPM cho <em>cùng</em> kết quả 90,2/97,9 trên ADM(IN). Với hai bộ sinh huấn luyện khác nhau, việc trùng khớp tới ba chữ số ở cả ACC và AP là bất thường. Có thể là trùng hợp (902/1000 ảnh đúng ở cả hai), có thể là lỗi sao chép trong bảng. Bản đọc này không đủ dữ liệu để phân xử — cần đối chiếu bản PDF gốc hoặc mã tác giả. Ghi ra để người tái lập kiểm.
+        </div>
+
+        <p>Cuối cùng, một giới hạn phạm vi: cả ba phép thử đều dùng <strong>cùng một mô hình tái tạo</strong> (ADM-LSUN). Vì vậy chúng đo tính tổng quát của <em>classifier</em>, không đo tính tổng quát của <em>DIRE</em> như một phép biến đổi. Câu hỏi "nếu thay ADM bằng iDDPM làm bộ tái tạo thì sao?" không được trả lời ở bất kỳ bảng nào.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ tổng quát hoá</h4>
+          <ol class="steps">
+            <li>Nếu DIRE học dấu vết của bộ sinh, nó sẽ sụp khi gặp bộ sinh lạ.</li>
+            <li>Nó không sụp: 89,4–100% trên bảy bộ sinh chưa thấy.</li>
+            <li>Nó cũng không sụp khi đổi miền (90,2% trên ImageNet-ADM).</li>
+            <li>⇒ Tín hiệu mà DIRE mang không phải dấu vết bộ sinh, mà là một tính chất chung của ảnh sinh.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Kết luận đúng hướng. Nhưng bước 3 yếu hơn bước 2 nhiều: 90,2% và đặc biệt 76,9% cho thấy "tính chất chung" ấy phụ thuộc mạnh vào miền.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Bài không tách <em>dịch miền</em> khỏi <em>dịch bộ sinh</em>: khi kiểm trên ImageNet, cả ảnh thật lẫn ảnh sinh đều đổi miền, nên không biết phần nào của 9,7 điểm mất đi là do ảnh thật khó hơn hay do bộ sinh khác.</p>
+          <p>Không có thí nghiệm đổi bộ tái tạo ⇒ không biết DIRE là tính chất của phép biến đổi hay của ADM.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>76,9% ACC (StyleGAN → ADM ImageNet) là kết quả yếu, được mô tả bằng AP để nghe tốt hơn.</li>
+            <li>Hai hàng ADM và iDDPM trùng số liệu tuyệt đối — cần kiểm chứng.</li>
+            <li>Chỉ một bộ tái tạo cho mọi thí nghiệm.</li>
+            <li>"Cross-dataset" thực chất là cùng kiến trúc ADM, khác tập huấn luyện.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 13 ============================== -->
+<section class="page" id="p13" data-group="Phần 4 · Experiment" data-short="4.4 — độ bền (Figure 4)" data-part="§4.4">
+  <div class="page-in">
+    <p class="kicker">§4.4 Robustness to Unseen Perturbations<span class="sep">/</span>Figure 4<span class="sep">/</span>trang gốc 7–8</p>
+    <h2 class="title">Độ bền: một hình, hai phép biến đổi, không con số</h2>
+    <p class="lede">Đây là phần bằng chứng mỏng nhất của bài so với tuyên bố "robust to various perturbations" trong abstract. Cần đọc nó như một quan sát định tính, không phải một nghiên cứu độ bền.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Thiết lập: thêm nhiễu loạn vào ảnh kiểm rồi đo lại. Hai họ nhiễu loạn, theo cách làm của CNNDetection [48]:</p>
+        <ul>
+          <li><strong>Làm mờ Gauss</strong> — <em>σ</em> = 1, 2, 3.</li>
+          <li><strong>Nén JPEG</strong> — quality = 65 và 30.</li>
+        </ul>
+
+        <blockquote class="orig">
+          <p>"We observe that at each level of blur and JPEG compression, our DIRE gets a perfect performance without performance drop. It is worth noting that our reproduction of CNNDetection* [48] and Patchforensics* [4] trained on the ADM subset of DiffusionForensics also get satisfactory performance while they experience a dramatic performance drop facing JPEG compression, which further reveals training on RGB images may be not robust."</p>
+          <cite>§4.4, nguyên văn</cite>
+        </blockquote>
+
+        <p>Ba thông tin rút ra được, không hơn:</p>
+        <ol>
+          <li>DIRE không giảm AP ở các mức nhiễu loạn đã thử, theo mô tả của tác giả.</li>
+          <li>Hai baseline RGB huấn luyện lại (CNNDet*, Patchfor*) giảm mạnh khi nén JPEG.</li>
+          <li>Tác giả suy ra "training on RGB images may be not robust" — một suy luận hợp lý nhưng chỉ dựa trên hai baseline, một phép biến đổi.</li>
+        </ol>
+
+        <div class="callout warn">
+          <b>Vì sao bản đọc này không dựng lại Hình 4 bằng số.</b> Bản trích xuất văn bản từ arXiv làm hỏng cấu trúc bảng của Hình 4: các cột bị đổi tên thành "Series 1…6", nhiều ô mất nhãn, một số ô trống. Không thể tái tạo con số trung thực từ dữ liệu ấy. Vì vậy ở đây chỉ ghi những gì đọc được từ phần chữ; muốn trích dẫn số cụ thể của Hình 4, phải mở bản PDF. Đây là ví dụ của nguyên tắc: <em>không nội suy số liệu không đọc được</em>.
+        </div>
+
+        <h3>Phân tích: vì sao DIRE có thể bền</h3>
+        <p>Có một cơ chế hợp lý, và bài không nêu ra: nếu DIRE được <strong>tính lại trên ảnh đã bị nhiễu loạn</strong>, thì phép đảo ngược–tái tạo đi qua mô hình khuếch tán, mà mô hình này vốn được huấn luyện để khử nhiễu. Nói cách khác, quá trình <em>I</em> + <em>R</em> có thể hoạt động như một bộ lọc: nó "kéo" ảnh nhiễu về lại miền ảnh sạch, làm phần lớn méo do JPEG hoặc blur biến mất trước khi classifier nhìn thấy.</p>
+        <p>Nếu đúng vậy, độ bền của DIRE phần lớn là độ bền của <em>bộ khử nhiễu</em>, không phải của <em>biểu diễn</em>. Bài không phân biệt hai khả năng này. Một thí nghiệm phân biệt rất đơn giản: tính DIRE trên ảnh sạch, rồi <em>áp nhiễu loạn lên chính ảnh DIRE</em> (không tính lại) và đo. Nếu classifier vẫn bền, đó là độ bền biểu diễn; nếu sụp, đó là độ bền của bước khử nhiễu. Bài không làm thí nghiệm ấy.</p>
+
+        <h3>Những gì "various perturbations" không bao gồm</h3>
+        <ul>
+          <li>Nén lặp (double JPEG) — tình huống phổ biến khi ảnh qua nhiều ứng dụng.</li>
+          <li>Resize lần hai, crop lệch, xoay nhẹ — thao tác chuẩn của mạng xã hội.</li>
+          <li>Nhiễu cảm biến, chụp lại màn hình, in–chụp lại.</li>
+          <li>Biến đổi màu, gamma, HDR.</li>
+          <li>Nén video (H.264) — đường phổ biến nhất để ảnh đến người xem.</li>
+          <li>Tấn công đối kháng có chủ đích (xem trang 23).</li>
+        </ul>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ độ bền</h4>
+          <ol class="steps">
+            <li>Ảnh thật và ảnh sinh khác nhau ở <em>sai số tái tạo</em>; sai số này là một đại lượng thô, không phải dấu vết tần số mảnh.</li>
+            <li>Nhiễu loạn mức thấp (blur, JPEG) chủ yếu phá dấu vết tần số mảnh.</li>
+            <li>Vì vậy tín hiệu thô như DIRE sống sót qua nhiễu loạn, còn detector RGB dựa trên dấu vết mảnh thì không.</li>
+            <li>⇒ DIRE bền hơn.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Lập luận hợp lý và có cơ chế. Nhưng bước 3 chưa được kiểm trực tiếp; nó chỉ được suy ra từ việc baseline giảm.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không rõ DIRE có được <em>tính lại</em> sau khi thêm nhiễu loạn hay không. Đây không phải chi tiết nhỏ: nó quyết định độ bền thuộc về biểu diễn hay thuộc về bộ khử nhiễu.</p>
+          <p>Không có bảng số, không có khoảng tin cậy, không có phân tích theo mức nhiễu.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Hai phép biến đổi, ba+hai mức — quá ít so với "various perturbations".</li>
+            <li>Caption chỉ nói AP (%) được báo cáo cho phần so sánh độ bền của các bản huấn luyện lại; không rõ mọi đường cong có kèm ACC hay không.</li>
+            <li>Thiếu hoàn toàn nhiễu loạn hình học và nén lặp.</li>
+            <li>Không xét tấn công chủ đích.</li>
+            <li>Suy luận "RGB không bền" dựa trên hai baseline, chưa đủ để khái quát.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 14 ============================== -->
+<section class="page" id="p14" data-group="Phần 4 · Experiment" data-short="4.5a — số bước S (Table 4)" data-part="§4.5">
+  <div class="page-in">
+    <p class="kicker">§4.5 More Analysis<span class="sep">/</span>Table 4<span class="sep">/</span>trang gốc 8</p>
+    <h2 class="title">Số bước: càng nhiều càng tốt, nhưng chọn 20</h2>
+    <p class="lede">Một ablation sạch, kết luận thực dụng. Cũng là chỗ duy nhất bài nói tới chi phí — bằng một câu, không bằng số.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 4 — Ảnh hưởng của số bước đảo ngược <em>S</em> (ACC / AP, %). Mọi mô hình huấn luyện trên tập con ADM.</caption>
+            <thead>
+              <tr><th class="c">S</th><th class="g">ADM</th><th class="g">DDPM</th><th class="g">iDDPM</th><th class="g">PNDM</th><th class="g">SD-v1</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="c n">5</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">97,5/100</td><td class="n worst">87,5/99,8</td></tr>
+              <tr><td class="c n">10</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">99,4/100</td><td class="n">98,2/100</td></tr>
+              <tr><td class="c n">20</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">99,7/100</td><td class="n">99,7/100</td></tr>
+              <tr class="hi"><td class="c n">50</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">100/100</td><td class="n">99,9/100</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <blockquote class="orig">
+          <p>"We observe that more steps in DDIM benefit the detection performance of DIRE. Considering the computational cost, we choose 20 steps by default."</p>
+          <cite>§4.5, nguyên văn</cite>
+        </blockquote>
+
+        <h3>Đọc bảng này đúng cách</h3>
+        <ul>
+          <li><strong>Xu hướng đơn điệu, nhưng chỉ ở một cột.</strong> Toàn bộ chênh lệch 5 → 50 nằm ở SD-v1 (87,5 → 99,9) và PNDM (97,5 → 100). Ba cột còn lại bão hoà ở 100 ngay từ <em>S</em> = 5. Nghĩa là "more steps benefit" đúng với <em>bộ sinh khó</em>, không đúng chung.</li>
+          <li><strong>Bước nhảy lớn nhất là 5 → 10</strong> (SD-v1: +10,7 điểm). Từ 20 → 50 chỉ +0,2 điểm, nằm trong khoảng tin cậy (±0,14 ở mức 99,9; ±0,72 ở 97). Vì vậy câu "more steps benefit" không được Table 4 chống lưng ở đoạn cuối — nó chỉ đúng ở đoạn đầu.</li>
+          <li><strong>Chọn 20 là hợp lý, nhưng lý do không được lượng hoá.</strong> 20 bước = 40 NFE; 50 bước = 100 NFE, gấp 2,5 lần chi phí cho 0,2 điểm. Kết luận đúng, nhưng bài không đưa phép tính ấy.</li>
+        </ul>
+
+        <div class="callout warn">
+          <b>Một giả định ngầm.</b> Khi đổi <em>S</em>, phân phối của ảnh DIRE thay đổi — nên classifier phải được huấn luyện lại cho từng <em>S</em>. Caption nói "all the models in this experiment are trained on the ADM subset", nhưng không nói rõ DIRE dùng để <em>huấn luyện</em> có được tính lại theo từng <em>S</em> hay dùng chung một bộ. Nếu dùng chung, phép so sánh không còn là "chỉ đổi S". Đây là chi tiết tái lập quan trọng bị bỏ trống.
+        </div>
+
+        <h3>Liên hệ với Phụ lục B</h3>
+        <p>Nếu cơ chế của DIRE là sai số rời rạc hoá Euler — như Phụ lục B lập luận — thì tăng <em>S</em> phải làm <em>giảm</em> sai số cho cả hai lớp, và khoảng cách giữa hai lớp có thể thu hẹp. Table 4 cho thấy điều ngược lại: tăng <em>S</em> làm phân biệt <em>tốt hơn</em>. Đây là một bằng chứng <em>chống lại</em> cách giải thích ở Phụ lục B, hoặc ít nhất cho thấy sai số Euler không phải cơ chế duy nhất. Bài không nhận ra mâu thuẫn này — và đó là một trong những quan sát đáng giá nhất của bản đọc.</p>
+
+        <div class="callout">
+          <b>Đọc kèm.</b> Một cách kiểm trực tiếp: đo trung bình và phương sai của DIRE trên hai lớp theo <em>S</em> = 5, 10, 20, 50, 100. Nếu trung bình hai lớp hội tụ về nhau khi <em>S</em> tăng, cơ chế là sai số số; nếu khoảng cách giữ nguyên hoặc tăng, cơ chế nằm ở chỗ khác (ví dụ phép cắt giá trị, hoặc việc mô hình "quên" chi tiết ảnh thật). Không ai làm thí nghiệm này trong bài.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ chọn S = 20</h4>
+          <ol class="steps">
+            <li>Chất lượng tái tạo tăng theo số bước (giả thuyết hợp lý từ DDIM).</li>
+            <li>Table 4 xác nhận: ACC tăng từ <em>S</em> = 5 tới 50 trên các cột khó.</li>
+            <li>Chi phí tăng tuyến tính theo <em>S</em> (2S NFE).</li>
+            <li>Điểm bão hoà thực tế nằm quanh <em>S</em> = 20.</li>
+            <li>⇒ Chọn 20.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Bước 4 đúng với dữ liệu, nhưng bài không trình bày phép đánh đổi. Kết luận thực dụng hợp lý, không phải kết luận tối ưu được chứng minh.</div>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Chi phí theo S</h4>
+          <p><b>S = 5</b> → 10 NFE/ảnh</p>
+          <p><b>S = 10</b> → 20 NFE/ảnh</p>
+          <p><b>S = 20</b> → 40 NFE/ảnh <span style="color:var(--green)">← mặc định</span></p>
+          <p><b>S = 50</b> → 100 NFE/ảnh</p>
+          <p style="margin-top:9px;color:#6f858f">Bài không báo cáo bất kỳ con số thời gian nào.</p>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không rõ classifier có được huấn luyện lại trên DIRE của từng <em>S</em> hay không (xem khối vàng trong nội dung).</p>
+          <p>Không có phép đo trực tiếp sai số tái tạo theo <em>S</em> ⇒ không kiểm được lập luận Phụ lục B.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 15 ============================== -->
+<section class="page" id="p15" data-group="Phần 4 · Experiment" data-short="4.5b — đầu vào (Table 5)" data-part="§4.5">
+  <div class="page-in">
+    <p class="kicker">§4.5 More Analysis<span class="sep">/</span>Table 5<span class="sep">/</span>trang gốc 8</p>
+    <h2 class="title">Đầu vào nào tốt nhất: DIRE, và chỉ DIRE</h2>
+    <p class="lede">Kết quả phụ quan trọng nhất của bài, và cũng là kết quả bị bỏ qua nhiều nhất: ghép RGB với DIRE <em>làm giảm</em> hiệu năng. Hiện tượng này không được giải thích.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 5 — Ảnh hưởng của dạng đầu vào (ACC / AP, %). Huấn luyện trên tập con ADM.</caption>
+            <thead>
+              <tr><th>Đầu vào</th><th class="g">ADM</th><th class="g">DDPM</th><th class="g">iDDPM</th><th class="g">PNDM</th><th class="g">SD-v1</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="name">REC (ảnh tái tạo)</td><td class="n">100/100</td><td class="n">57,1/57,7</td><td class="n worst">49,7/92,6</td><td class="n">87,1/98,7</td><td class="n worst">46,9/57,0</td></tr>
+              <tr><td class="name">RGB (ảnh gốc)</td><td class="n">100/100</td><td class="n">87,3/99,6</td><td class="n">100/100</td><td class="n">77,8/99,1</td><td class="n">77,4/85,8</td></tr>
+              <tr><td class="name">RGB &amp; DIRE</td><td class="n">100/100</td><td class="n">99,8/100</td><td class="n">99,9/100</td><td class="n">99,2/100</td><td class="n worst">62,4/92,4</td></tr>
+              <tr class="hi"><td class="name">DIRE</td><td class="n">100/100</td><td class="n best">100/100</td><td class="n best">100/100</td><td class="n best">99,7/100</td><td class="n best">99,7/100</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Ba kết quả, hai kết quả rõ</h3>
+        <p><strong>REC kém hơn RGB.</strong> Rõ ràng và có lý: ảnh tái tạo đã mất chi tiết, nên thông tin về nguồn gốc cũng mất theo. Nhưng nhìn kỹ cột iDDPM: ACC 49,7% trong khi AP 92,6%. Hai con số này gần như mâu thuẫn — ACC 50% là mức đoán ngẫu nhiên, còn AP 92,6% nghĩa là thứ hạng gần như hoàn hảo. Cách duy nhất để cả hai cùng đúng: điểm số của classifier bị <em>lệch</em> khỏi ngưỡng 0,5 nhưng vẫn giữ đúng thứ tự. Đây là bằng chứng trực tiếp rằng ngưỡng 0,5 không được hiệu chỉnh — và là lý do nên đọc AP khi hai chỉ số xung đột.</p>
+
+        <p><strong>RGB kém hơn DIRE.</strong> Đây là so sánh cốt lõi, và nó được kiểm soát tốt: cùng dữ liệu, cùng kiến trúc, cùng crop. Chênh lệch trung bình 86,5 → 99,9 (13,4 điểm).</p>
+
+        <p><strong>RGB &amp; DIRE kém hơn DIRE.</strong> Đây là kết quả lạ. Thêm thông tin mà hiệu năng giảm — đặc biệt ở SD-v1, từ 99,7 xuống 62,4 ACC. Bài chỉ ghi nhận:</p>
+        <blockquote class="orig">
+          <p>"we find that combining RGB with DIRE together hurts the generalization compared to pure DIRE. Therefore, we use DIRE as the default input for detection by default."</p>
+          <cite>§4.5, nguyên văn</cite>
+        </blockquote>
+        <p>Không có giả thuyết nào được nêu. Nhưng hiện tượng này rất gợi: nếu mạng có cả RGB và DIRE, nó có thể học <em>đường tắt</em> từ RGB — những đặc trưng dễ học trong cùng miền (nhiễu cảm biến, cấu trúc tần số của ADM) nhưng không chuyển được sang bộ sinh khác. Khi chỉ có DIRE, mạng buộc phải dùng tín hiệu chuyển được. Nói cách khác, việc "thiếu thông tin" lại chính là điều làm nó tổng quát.</p>
+
+        <div class="callout">
+          <b>Đối chiếu chéo đáng tin.</b> Hàng RGB của Table 5 trùng khớp tuyệt đối với hàng CNNDet* của Table 2 (100/100, 87,3/99,6, 100/100, 77,8/99,1, 77,4/85,8). Đây là một dấu hiệu tốt về tính nhất quán nội bộ: cùng một thí nghiệm, báo ở hai bảng. Nó cũng xác nhận rằng "RGB" trong Table 5 chính là baseline học trên ảnh gốc.
+        </div>
+
+        <p>Về mặt thực dụng, kết luận của bài là đúng: dùng DIRE thuần. Nhưng câu hỏi khoa học còn mở: <em>vì sao</em> ghép lại có hại? Một thí nghiệm trả lời được: huấn luyện ba mạng với ba tỉ lệ pha trộn, hoặc dùng kiến trúc hai nhánh có cổng học được, rồi đo trọng số mà mạng gán cho nhánh RGB. Bài không làm.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ chọn DIRE</h4>
+          <ol class="steps">
+            <li>Ảnh tái tạo (REC) đã mất thông tin ⇒ kém.</li>
+            <li>Ảnh gốc (RGB) mang thông tin nhưng cả thông tin <em>không chuyển được</em> giữa bộ sinh.</li>
+            <li>DIRE chỉ giữ phần thông tin liên quan tới khả năng tái tạo ⇒ chuyển được.</li>
+            <li>Ghép RGB vào làm mạng quay lại dùng đường tắt ⇒ hại.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>DIRE không chỉ là "thêm đặc trưng"; nó là <em>giảm</em> đặc trưng có chọn lọc. Bước 4 là giả thuyết của bản đọc, không có trong bài.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có giải thích cho việc RGB&amp;DIRE kém hơn DIRE. Bài chỉ ghi nhận hiện tượng rồi chọn cấu hình tốt nhất — một lựa chọn thực dụng nhưng không phải một phát hiện được lý giải.</p>
+          <p>Không có ablation về cách ghép (nối kênh, hai nhánh, trung bình điểm).</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Hiện tượng "thêm thông tin thì tệ đi" không được phân tích — đây lẽ ra là một đóng góp riêng.</li>
+            <li>ACC 49,7 với AP 92,6 cho thấy ngưỡng 0,5 chưa được hiệu chỉnh, nhưng bài không bàn.</li>
+            <li>Chỉ một cách ghép được thử.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 16 ============================== -->
+<section class="page" id="p16" data-group="Phần 4 · Experiment" data-short="4.5c — abs &amp; phân tích định tính" data-part="§4.5">
+  <div class="page-in">
+    <p class="kicker">§4.5 More Analysis<span class="sep">/</span>Table 6 · Figure 5<span class="sep">/</span>trang gốc 8</p>
+    <h2 class="title">Trị tuyệt đối: chi tiết nhỏ, hậu quả lớn</h2>
+    <p class="lede">Một phép toán một dòng, chênh 12,7 điểm ACC trên SD-v1. Đây là chỗ định nghĩa DIRE chứng minh được giá trị — và cũng là chỗ giải thích duy nhất của bài dừng ở mức định tính.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Table 6 — Ảnh hưởng của phép lấy trị tuyệt đối (ACC / AP, %)</caption>
+            <thead>
+              <tr><th>Cấu hình</th><th class="g">ADM</th><th class="g">DDPM</th><th class="g">iDDPM</th><th class="g">PNDM</th><th class="g">SD-v1</th></tr>
+            </thead>
+            <tbody>
+              <tr><td class="name">Không abs</td><td class="n">100/100</td><td class="n">99,4/100</td><td class="n">100/100</td><td class="n">98,2/100</td><td class="n worst">87,0/93,0</td></tr>
+              <tr class="hi"><td class="name">Có abs</td><td class="n">100/100</td><td class="n best">100/100</td><td class="n">100/100</td><td class="n best">99,7/100</td><td class="n best">99,7/100</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <blockquote class="orig">
+          <p>"we find that the absolute operation is critical for achieving a strong diffusion-generated image detector, particularly on SD-v1 [37] where it improves ACC/AP from 87.0%/93.0% → 99.7%/100%."</p>
+          <cite>§4.5, nguyên văn</cite>
+        </blockquote>
+
+        <p>Vì sao abs lại quan trọng đến vậy? Bài không đưa cơ chế, nhưng có thể dựng lại một cách hợp lý:</p>
+        <ul>
+          <li>Residual <em>r</em> = <em>x</em><sub>0</sub> − <em>x′</em><sub>0</sub> có <strong>dấu</strong>. Chỗ tái tạo sáng hơn ảnh gốc thì dương, tối hơn thì âm.</li>
+          <li>Dấu phụ thuộc chiều lệch, mà chiều lệch không ổn định giữa các ảnh. Hai vùng cùng "khó tái tạo" có thể lệch ngược dấu và triệt tiêu nhau khi các tầng tích chập tổng hợp.</li>
+          <li><em>|r|</em> chỉ giữ độ lớn — đại lượng có tính hệ thống: ảnh thật khó tái tạo nên lớn, ảnh sinh dễ tái tạo nên nhỏ.</li>
+        </ul>
+        <p>Đây là suy luận của bản đọc, không phải của bài. Nó khớp với kết quả: abs giúp nhiều nhất ở SD-v1, bộ sinh có miền xa nhất so với ADM-LSUN, tức nơi residual lớn và dấu hỗn loạn nhất.</p>
+
+        <figure class="fig">
+          <svg viewBox="0 0 660 300" role="img" aria-label="Sơ đồ minh hoạ Figure 5: mẫu nhiễu và phổ tần số của DIRE ảnh thật so với ảnh sinh">
+            <defs>
+              <pattern id="nReal" width="9" height="9" patternUnits="userSpaceOnUse">
+                <rect width="9" height="9" fill="#f4f7f8"/>
+                <path d="M0,7 Q2.2,3 4.5,7 T9,7" fill="none" stroke="#7c96a2" stroke-width=".8" opacity=".55"/>
+                <path d="M0,2 Q3,5 6,2 T9,2" fill="none" stroke="#9db2bb" stroke-width=".7" opacity=".4"/>
+              </pattern>
+              <pattern id="nGen" width="7" height="7" patternUnits="userSpaceOnUse">
+                <rect width="7" height="7" fill="#f6f8f9"/>
+                <circle cx="1.4" cy="1.8" r=".85" fill="#a9bcc4" opacity=".75"/>
+                <circle cx="4.9" cy="4.4" r=".7" fill="#93aab4" opacity=".6"/>
+                <circle cx="5.8" cy="1.2" r=".55" fill="#bccbd1" opacity=".8"/>
+              </pattern>
+              <radialGradient id="fftReal" cx="50%" cy="50%" r="50%">
+                <stop offset="0" stop-color="#ffffff"/><stop offset=".55" stop-color="#dfe8ec"/>
+                <stop offset="1" stop-color="#5c7783"/>
+              </radialGradient>
+            </defs>
+            <rect width="660" height="300" fill="#fcfdfd"/>
+            <text x="18" y="26" font-family="ui-sans-serif,sans-serif" font-size="10" letter-spacing="1" fill="#7b8f99">MẪU NHIỄU</text>
+            <text x="356" y="26" font-family="ui-sans-serif,sans-serif" font-size="10" letter-spacing="1" fill="#7b8f99">PHỔ FFT</text>
+
+            <text x="18" y="48" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#3f5c66">Ảnh thật</text>
+            <rect x="18" y="56" width="140" height="84" rx="3" fill="url(#nReal)"/>
+            <rect x="30" y="72" width="46" height="26" rx="2" fill="none" stroke="#5d7883" stroke-width="1" opacity=".6"/>
+            <rect x="92" y="86" width="30" height="40" rx="2" fill="none" stroke="#5d7883" stroke-width="1" opacity=".45"/>
+            <rect x="356" y="56" width="94" height="94" rx="3" fill="url(#fftReal)"/>
+            <circle cx="403" cy="103" r="38" fill="none" stroke="#fff" stroke-width="2.5" opacity=".55"/>
+
+            <text x="18" y="176" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#3f5c66">Ảnh sinh</text>
+            <rect x="18" y="184" width="140" height="84" rx="3" fill="url(#nGen)"/>
+            <rect x="356" y="184" width="94" height="94" rx="3" fill="#eef3f5" stroke="#cbd7dc"/>
+            <circle cx="403" cy="231" r="26" fill="#b9c9d0" opacity=".55"/>
+            <circle cx="403" cy="231" r="12" fill="#dfe8ec"/>
+
+            <text x="176" y="100" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">có cấu trúc,</text>
+            <text x="176" y="114" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">bám hình khối</text>
+            <text x="176" y="228" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">rối, không</text>
+            <text x="176" y="242" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">tương ứng vật thể</text>
+
+            <text x="466" y="100" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">dải tần phong phú</text>
+            <text x="466" y="114" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">(vùng trắng rộng)</text>
+            <text x="466" y="228" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#5c6f7a">dải tần nghèo</text>
+
+            <line x1="0" y1="282" x2="660" y2="282" stroke="#e3ebee"/>
+            <text x="14" y="296" font-family="ui-sans-serif,sans-serif" font-size="9.5" fill="#7b8f99">Sơ đồ vẽ lại theo mô tả Figure 5. Đây là hình minh hoạ khái niệm, không phải phổ thật của bài.</text>
+          </svg>
+          <figcaption><span class="fignum">Figure 5 · vẽ lại</span>Hai công cụ định tính: mẫu nhiễu (noise pattern) và phổ FFT của DIRE. Bài mô tả DIRE ảnh thật "regular ... corresponds to the shape of objects" và phổ "more abundant". Figure 5 không kèm bất kỳ thống kê nào.</figcaption>
+        </figure>
+
+        <h3>Giới hạn của phân tích định tính</h3>
+        <p>Figure 5 là năm cột ảnh (Real, ADM, DDPM, iDDPM, PNDM) — không có SD-v1, không có LDM, không có VQ-Diffusion, tức là không có bộ sinh nào trong nhóm text→image, cũng là nhóm khó nhất. Không có thang đo, không có trung bình trên nhiều ảnh, không có kiểm định. Đây là minh hoạ, không phải bằng chứng.</p>
+        <p>Nó vẫn có giá trị: xác nhận rằng DIRE của ảnh thật không phải nhiễu trắng — nó mang cấu trúc hình học của cảnh. Nếu DIRE của ảnh thật chỉ là nhiễu ngẫu nhiên, cơ chế "khó tái tạo" sẽ khó giải thích hơn nhiều.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ của abs</h4>
+          <ol class="steps">
+            <li>Residual có dấu; dấu không ổn định giữa các ảnh cùng lớp.</li>
+            <li>Mạng tích chập trên residual có dấu phải học cả quy luật dấu — tín hiệu nhiễu, không chuyển được.</li>
+            <li>Trị tuyệt đối bỏ dấu, chỉ giữ độ lớn — đại lượng hệ thống theo lớp.</li>
+            <li>⇒ abs làm biểu diễn dễ tổng quát hoá hơn.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Bước 2–3 là suy luận của bản đọc; bài chỉ có bước 4 dưới dạng thực nghiệm. Kết quả Table 6 khớp với suy luận nhưng không chứng minh nó.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có phép đo phân bố residual trước và sau abs; không có thí nghiệm tách "abs giúp vì bỏ dấu" khỏi "abs giúp vì biến phân phối thành nửa chuẩn".</p>
+          <p>Figure 5 không có thống kê, không có bộ sinh text→image.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Phân tích định tính dừng ở 5 ví dụ, không có thang đo.</li>
+            <li>Không giải thích cơ chế của abs, dù gọi nó là "critical".</li>
+            <li>Không có ảnh thất bại (failure case) nào trong toàn bài.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 17 ============================== -->
+<section class="page" id="p17" data-group="Phần 5 &amp; Tham khảo" data-short="5 — kết luận &amp; bảng tuyên bố" data-part="§5">
+  <div class="page-in">
+    <p class="kicker">§5 Conclusion<span class="sep">/</span>trang gốc 8</p>
+    <h2 class="title">Kết luận: không có bằng chứng mới, chỉ có tổng kết</h2>
+    <p class="lede">Phần kết luận không thêm thí nghiệm nào. Giá trị của nó là chốt lại phạm vi. Việc hữu ích nhất ở đây là lập bảng đối chiếu giữa <em>điều được tuyên bố</em> và <em>loại bằng chứng đỡ lấy nó</em>.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <blockquote class="orig">
+          <p>"We find that previous generated-image detectors show limited performance when detecting images generated by diffusion models. To address the issue, we present an image representation called DIRE based on reconstruction errors of images inverted and reconstructed by DDIM. Furthermore, we create a new dataset, DiffusionForensics, which includes images generated by unconditional, conditional, and text-to-image diffusion models... We hope that our work can serve as a solid baseline for diffusion-generated image detection."</p>
+          <cite>§5, nguyên văn (lược)</cite>
+        </blockquote>
+
+        <p>Ba câu, ba tuyên bố, không câu nào mới so với phần thân. Nhưng cách bài kết thúc — "serve as a solid baseline" — là lựa chọn khiêm tốn và đúng: đóng góp thật của bài là <em>một biểu diễn + một benchmark</em>, không phải một kiến trúc mới. Một baseline tốt là thứ giữ được giá trị lâu hơn một con số SOTA.</p>
+
+        <h3>Bảng đối chiếu: tuyên bố ↔ bằng chứng</h3>
+        <p>Thang đánh giá dùng ở đây chỉ có ba mức, cố ý thô:</p>
+        <div class="kv">
+          <span><b>A</b> — có suy luận hình thức + thực nghiệm khớp</span>
+          <span><b>B</b> — chỉ có thực nghiệm</span>
+          <span><b>C</b> — chỉ có khẳng định / lập luận định tính</span>
+        </div>
+
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Đối chiếu tuyên bố và bằng chứng (đánh giá của bản đọc)</caption>
+            <thead><tr><th>Tuyên bố</th><th class="c">Nơi</th><th>Bằng chứng</th><th class="c">Mức</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Detector cũ kém trên ảnh khuếch tán (51–59% ACC)</td><td class="c">Table 2</td><td class="name">Bốn detector, trọng số công khai</td><td class="c n">B</td></tr>
+              <tr><td class="name">DIRE tốt hơn hẳn detector học trên RGB</td><td class="c">Table 2, 5</td><td class="name">Ba baseline huấn luyện lại, cùng dữ liệu, cùng ResNet-50</td><td class="c n">B</td></tr>
+              <tr><td class="name">Chuyển được sang bộ sinh chưa thấy</td><td class="c">Table 2</td><td class="name">7 bộ sinh, 4 biến thể huấn luyện, mỗi ô 2 000 ảnh</td><td class="c n">B</td></tr>
+              <tr><td class="name">Chuyển được sang miền dữ liệu khác</td><td class="c">Table 3</td><td class="name">LSUN → ImageNet; 90,2% (ADM) và 76,9% (StyleGAN)</td><td class="c n">B</td></tr>
+              <tr><td class="name">Bền với nhiễu loạn</td><td class="c">Figure 4</td><td class="name">Blur σ=1–3, JPEG q=65/30; chỉ AP, không bảng số</td><td class="c n">B−</td></tr>
+              <tr><td class="name">Trị tuyệt đối là cần thiết</td><td class="c">Table 6</td><td class="name">Ablation sạch, chênh 12,7 điểm ở SD-v1</td><td class="c n">B</td></tr>
+              <tr><td class="name">S = 20 là điểm cân bằng</td><td class="c">Table 4</td><td class="name">Bốn mức S; không có bảng chi phí</td><td class="c n">B−</td></tr>
+              <tr><td class="name">Ảnh sinh tái tạo tốt hơn ảnh thật</td><td class="c">§1, Fig. 1, Fig. 5</td><td class="name">Minh hoạ định tính + suy ra từ kết quả cuối</td><td class="c n">C</td></tr>
+              <tr><td class="name">Cơ chế là sai số Euler của DDIM</td><td class="c">Phụ lục B</td><td class="name">Lập luận giải tích, không có phép đo</td><td class="c n">C</td></tr>
+              <tr><td class="name">DIRE là biểu diễn "general" cho ảnh sinh</td><td class="c">Abstract, §5</td><td class="name">Suy rộng từ 8 bộ sinh U-Net, 1 miền ảnh thật (LSUN) + ImageNet</td><td class="c n">C</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <b>Đọc bảng này thế nào.</b> Không có tuyên bố nào ở mức A, vì bài không có định lý nào nối giả thuyết với kết quả. Điều đó không làm bài yếu — phần lớn công trình thực nghiệm đều như vậy. Nhưng nó có nghĩa: nếu bạn cần <em>giải thích</em> vì sao DIRE hoạt động, bạn phải tự làm thí nghiệm. Bài chỉ cung cấp <em>hiện tượng</em> và <em>con số</em>.
+        </div>
+
+        <h3>Điều kết luận nói đúng, và điều nó lảng tránh</h3>
+        <p><strong>Đúng:</strong> "effective for this task", "solid baseline" — hai cụm này được Table 2–6 đỡ. Bài không hứa gì quá tay ở phần kết.</p>
+        <p><strong>Lảng tránh:</strong> kết luận không nhắc tới chi phí 2S NFE, không nhắc tới kết quả yếu nhất (76,9%), không nhắc tới việc toàn bộ thí nghiệm dùng một bộ tái tạo duy nhất. Một kết luận trung thực hơn sẽ nêu ba điều này như phạm vi áp dụng.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ kết luận</h4>
+          <ol class="steps">
+            <li>Detector cũ thất bại (Table 2, khối 1).</li>
+            <li>Detector học trên DIRE thành công và chuyển được (Table 2–3).</li>
+            <li>Thành công ấy không phụ thuộc vào bộ sinh huấn luyện (bốn biến thể).</li>
+            <li>⇒ DIRE là một baseline đáng dùng cho bài toán.</li>
+          </ol>
+          <div class="concl"><b>Đánh giá</b>Kết luận hợp lý trong phạm vi tám bộ sinh. Vấn đề duy nhất là phạm vi ấy không được nói ra.</div>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có tuyên bố nào ở mức A: thiếu một mô hình lý thuyết kiểm được cho cơ chế.</p>
+          <p>Không có thí nghiệm trên kiến trúc khác U-Net (transformer, flow matching), nên "general" là suy rộng.</p>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Ba con số nên nhớ</h4>
+          <p><b>99,9</b> — ACC trung bình 8 bộ sinh (Table 2).</p>
+          <p><b>90,2</b> — ACC khi đổi miền LSUN → ImageNet (Table 3).</p>
+          <p><b>76,9</b> — ACC thấp nhất trong bài (StyleGAN → ADM ImageNet).</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 18 ============================== -->
+<section class="page" id="p18" data-group="Phần 5 &amp; Tham khảo" data-short="Tài liệu tham khảo (53 mục)" data-part="References">
+  <div class="page-in">
+    <p class="kicker">References<span class="sep">/</span>trang gốc 9–11</p>
+    <h2 class="title">Tham khảo: 53 mục, năm cụm</h2>
+    <p class="lede">Bản đọc này không dịch và không chép lại từng mục — làm vậy không thêm thông tin gì so với bài gốc. Thay vào đó, đây là bản đồ các cụm và vai trò của chúng trong lập luận.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Cấu trúc thư mục tham khảo (số hiệu theo bài gốc)</caption>
+            <thead><tr><th>Cụm</th><th class="c">Số hiệu</th><th>Vai trò trong bài</th></tr></thead>
+            <tbody>
+              <tr><td class="name">Nền tảng khuếch tán</td><td class="c n">41, 17, 32, 42, 23, 10</td><td class="name">Định nghĩa DDPM, iDDPM, DDIM, PNDM, ADM — tức toàn bộ §3.1 và cả tám bộ sinh LSUN.</td></tr>
+              <tr><td class="name">Khuếch tán tiềm ẩn &amp; text→image</td><td class="c n">37, 14, 45, 35, 39, 31, 46</td><td class="name">LDM, SD v1/v2, VQ-Diffusion, VQ-VAE, unCLIP, Imagen, GLIDE, diffusers — nhóm sinh khó nhất của bài.</td></tr>
+              <tr><td class="name">Phát hiện ảnh sinh (CNN)</td><td class="c n">48, 26, 4, 25, 40</td><td class="name">CNNDetection, Marra, Patchforensics, GANDetection, SBI — bốn baseline và các bản huấn luyện lại.</td></tr>
+              <tr><td class="name">Phổ &amp; dấu vết</td><td class="c n">12, 34, 27, 50, 51, 30, 28, 29</td><td class="name">F3Net, Frank, fingerprint GAN, AutoGAN, đặc trưng màu/bão hoà/đồng xuất hiện — nhóm bị bài cho là không chuyển được.</td></tr>
+              <tr><td class="name">Dữ liệu &amp; xương sống</td><td class="c n">49, 9, 15, 44, 43</td><td class="name">LSUN, ImageNet, ResNet-50, EfficientNet-B4, Inception — nguồn ảnh thật và kiến trúc.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Hai mục đáng chú ý vì chúng đánh dấu <em>biên giới</em> của bài:</p>
+        <ul>
+          <li><strong>[36] Ricker et al., "Towards the detection of diffusion model deepfakes" (2022)</strong> — công trình cùng hướng, được nhắc ở §2.2 nhưng không đưa vào bảng so sánh. Nếu bạn cần đánh giá DIRE so với "trạng thái nghệ thuật của bài toán" chứ không phải "so với bốn baseline của bài", đây là mục phải đọc.</li>
+          <li><strong>[8]</strong> — mục còn lại trong câu "some recent works also notice the diffusion-generated image detection problem [36, 8]". Bản đọc này không đủ chắc về việc [8] là công trình nào, nên không gán tên. Đây là ví dụ của nguyên tắc không suy đoán: số hiệu thì chép được, danh tính thì phải kiểm trong bài gốc.</li>
+        </ul>
+
+        <div class="callout warn">
+          <b>Về cách trích dẫn bài này.</b> Nếu bạn trích "DIRE đạt 99,9%", hãy trích kèm điều kiện: <em>trung bình trên tám bộ sinh, ảnh 256², mô hình tái tạo ADM-LSUN, S = 20, ngưỡng 0,5, một lần chạy</em>. Con số không có ngưỡng và điều kiện là con số không tái lập được.
+        </div>
+
+        <p>Thư mục tham khảo của bài không có gì bất thường về mặt học thuật: 53 mục, cân bằng giữa nền tảng khuếch tán (khoảng 15 mục) và phát hiện ảnh sinh (khoảng 25 mục), phần còn lại là dữ liệu và kiến trúc. Điều đáng nói là <strong>không có mục nào về tấn công đối kháng</strong> trong miền phát hiện ảnh sinh — một khoảng trống sẽ trở nên quan trọng hơn sau này.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Số liệu thư mục</h4>
+          <p>Tổng: <b>53</b> mục.</p>
+          <p>Nền tảng khuếch tán: <b>~15</b>.</p>
+          <p>Phát hiện ảnh sinh: <b>~25</b>.</p>
+          <p>Dữ liệu / kiến trúc / công cụ: <b>~13</b>.</p>
+          <p style="color:#6f858f">Phân loại do bản đọc thực hiện; một số mục thuộc hai cụm.</p>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Bản đọc không dịch toàn bộ 53 mục và không xác minh danh tính của [8]. Muốn trích dẫn chính xác, dùng bản PDF gốc.</p>
+          <p>Việc phân cụm là của bản đọc, không phải của tác giả.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Quan sát</h4>
+          <ul>
+            <li>Thiếu tài liệu về tấn công đối kháng trong miền này.</li>
+            <li>Không có công trình nào về chi phí tính toán của detector — khoảng trống mà bài cũng không lấp.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 19 ============================== -->
+<section class="page" id="p19" data-group="Phụ lục" data-short="Phụ lục A — chi tiết dữ liệu" data-part="Phụ lục A">
+  <div class="page-in">
+    <p class="kicker">Appendix A<span class="sep">/</span>More Details of DiffusionForensics<span class="sep">/</span>trang gốc 12</p>
+    <h2 class="title">Phụ lục A: từng bộ sinh được tạo ra thế nào</h2>
+    <p class="lede">Phụ lục này quan trọng hơn vẻ ngoài của nó. Nó là bản hướng dẫn tái lập duy nhất, và chứa một chi tiết bị bỏ quên: có một cấu hình DIRE tốt hơn được phát hành nhưng không dùng để báo cáo kết quả.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Phụ lục A — cấu hình sinh ảnh cho từng tập con</caption>
+            <thead><tr><th>Tập con</th><th>Nguồn / checkpoint</th><th>Bộ lấy mẫu khi sinh</th><th class="c">Số ảnh</th></tr></thead>
+            <tbody>
+              <tr><td class="name">LSUN-ADM</td><td>guided-diffusion (ADM 256² vô điều kiện)</td><td>DDIM, 50 bước</td><td class="c n">42k</td></tr>
+              <tr><td class="name">LSUN-DDPM</td><td>hojonathanho/diffusion (ảnh có sẵn)</td><td>mẫu gốc của tác giả DDPM</td><td class="c n">1k</td></tr>
+              <tr><td class="name">LSUN-iDDPM</td><td>improved-diffusion, lr = 2e-5</td><td>DDIM, 50 bước</td><td class="c n">42k</td></tr>
+              <tr><td class="name">LSUN-PNDM</td><td>luping-liu/PNDM</td><td>PNDM, 50 bước</td><td class="c n">42k</td></tr>
+              <tr><td class="name">LSUN-LDM</td><td>diffusers: <code>CompVis/ldm-text2im-large-256</code></td><td>text→image, prompt cố định</td><td class="c n">1k</td></tr>
+              <tr><td class="name">LSUN-SD-v1</td><td>diffusers: <code>runwayml/stable-diffusion-v1-5</code></td><td>text→image, prompt cố định</td><td class="c n">1k</td></tr>
+              <tr><td class="name">LSUN-SD-v2</td><td>diffusers: <code>stabilityai/stable-diffusion-2</code></td><td>text→image, prompt cố định</td><td class="c n">1k</td></tr>
+              <tr><td class="name">LSUN-VQ-Diffusion</td><td>microsoft/VQ-Diffusion, model ITHQ</td><td>text→image, prompt cố định</td><td class="c n">1k</td></tr>
+              <tr class="mid"><td class="name">ImageNet-ADM</td><td>ADM có điều kiện + classifier</td><td>DDIM, 50 bước</td><td class="c n">50k</td></tr>
+              <tr class="mid"><td class="name">ImageNet-SD-v1</td><td>SD v1.5</td><td>text→image, prompt theo lớp</td><td class="c n">10k</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="tnote">Prompt LSUN: <em>"A photo of bedroom"</em>. Prompt ImageNet: <em>"A photo of {class}"</em>. Ảnh thật lấy từ LSUN-Bedroom và ImageNet tương ứng.</p>
+
+        <div class="callout warn">
+          <b>Hai con số "50" và "20" khác nhau, đừng lẫn.</b> Ảnh <em>sinh ra</em> dùng 50 bước (ADM, iDDPM, PNDM) để có chất lượng tốt hơn. DIRE <em>tính trên</em> ảnh dùng 20 bước (mục 4.1). Đây là hai quá trình độc lập: 50 bước là của tác giả bộ sinh, 20 bước là của bộ tái tạo ADM. Nếu bạn tái lập và dùng 50 bước cho DIRE, bạn sẽ có kết quả khác Table 2 — và Table 4 cho biết khác theo hướng nào (tốt hơn một chút ở SD-v1, không đổi ở các cột khác).
+        </div>
+
+        <h3>Chi tiết bị bỏ quên: một bộ DIRE thứ hai cho ImageNet</h3>
+        <p>Phụ lục A viết:</p>
+        <blockquote class="orig">
+          <p>"As for the ImageNet subset, we also provide the DIREs computed by using the unconditional ADM [10] model pre-trained on ImageNet as the reconstruction model with DDIM scheduler applied for 20 steps in total."</p>
+          <cite>Phụ lục A, nguyên văn</cite>
+        </blockquote>
+        <p>Nghĩa là bộ dữ liệu phát hành có <em>hai</em> phiên bản DIRE cho ảnh ImageNet: một tính bằng ADM-LSUN (dùng trong bài), một tính bằng ADM-ImageNet. Bản thứ hai hợp miền hơn rõ rệt — ảnh ImageNet được tái tạo bởi mô hình đã học ImageNet. Nhưng bài <strong>không báo cáo kết quả nào</strong> với bản thứ hai.</p>
+        <p>Đây là một cơ hội bị bỏ: nếu 90,2% ACC trên ImageNet-ADM chủ yếu do lệch miền của bộ tái tạo, thì dùng ADM-ImageNet có thể nâng con số ấy lên đáng kể. Không ai kiểm. Với người tái lập, đây là thí nghiệm rẻ nhất và có khả năng cho kết quả rõ nhất.</p>
+
+        <h3>Những gì Phụ lục A vẫn không nói</h3>
+        <ul>
+          <li><strong>Seed.</strong> Không có seed cho bất kỳ quá trình sinh nào.</li>
+          <li><strong>Prompt âm / guidance scale.</strong> Với SD và LDM, các tham số này ảnh hưởng mạnh tới ảnh sinh nhưng không được nêu.</li>
+          <li><strong>Cách lấy mẫu ảnh thật.</strong> Không nói chọn ngẫu nhiên hay theo lớp, không nói xử lý ảnh thật thế nào (resize, crop) trước khi tính DIRE.</li>
+          <li><strong>Thời gian chạy.</strong> Không có ước lượng nào cho việc sinh 336k ảnh và tính DIRE cho chúng.</li>
+        </ul>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Tổng khối lượng</h4>
+          <p>Ảnh sinh: 42k×3 + 1k×4 + 50k + 10k = <b>190k</b> ảnh sinh.</p>
+          <p>Ảnh thật tương ứng: <b>190k</b> (theo Table 1).</p>
+          <p>Tổng ảnh cần tính DIRE: <b>380k</b> (190k thật + 190k sinh). Mỗi ảnh <b>40 NFE</b> ⇒ khoảng <b>15,2 triệu</b> lượt gọi ADM. Con số này không có trong bài.</p>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không rõ vì sao bản DIRE dùng ADM-ImageNet được phát hành nhưng không được đánh giá. Có thể chỉ để tiện cho người dùng; có thể vì kết quả không tốt hơn. Bài không nói — và bản đọc không suy đoán.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Thiếu seed và tham số sinh (guidance, prompt âm).</li>
+            <li>Không nói cách chọn ảnh thật, không nói chuẩn hoá trước khi tính DIRE.</li>
+            <li>Không có chi phí sinh dữ liệu — trong khi đây là chi phí lớn nhất của cả dự án.</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 20 ============================== -->
+<section class="page" id="p20" data-group="Phụ lục" data-short="Phụ lục B — vì sao DIRE ≠ 0" data-part="Phụ lục B">
+  <div class="page-in">
+    <p class="kicker">Appendix B<span class="sep">/</span>More Explanation of DIRE<span class="sep">/</span>trang gốc 12</p>
+    <h2 class="title">Phụ lục B: lời giải thích duy nhất, và nó không được đo</h2>
+    <p class="lede">Đây là chỗ bài trả lời câu hỏi khó nhất: nếu ảnh sinh nằm đúng trong phân phối mà mô hình đã học, tại sao DIRE của nó không bằng 0? Câu trả lời là sai số rời rạc hoá. Nó hợp lý, nhưng chưa từng được kiểm.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <p>Bài bắt đầu bằng phép tái tạo DDIM tất định (tức Eq. (5) với <em>σ<sub>t</sub></em> = 0):</p>
+
+        <div class="eq">
+          <math display="block">
+            <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub>
+            <mo>=</mo>
+            <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></msqrt>
+            <mrow><mo>(</mo>
+              <mfrac>
+                <mrow><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>−</mo>
+                  <msqrt><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow></msqrt>
+                  <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+                  <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo></mrow>
+                <msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt>
+              </mfrac>
+            <mo>)</mo></mrow>
+            <mo>+</mo>
+            <msqrt><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mn>1</mn></mrow></msub></mrow></msqrt>
+            <mo>·</mo>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo>
+            <msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (11)</span>
+          <span class="cap"><b>Đọc:</b> đúng là Eq. (5) khi <em>σ<sub>t</sub></em> = 0. Hệ số của số hạng thứ hai là √(1−<em>α</em><sub>t−1</sub>), không còn −<em>σ<sub>t</sub></em><sup>2</sup>.</span>
+        </div>
+
+        <p>Với <em>T</em> đủ lớn, bước rời rạc này là một bước Euler. Viết lại theo <em>x̄</em> = <em>x</em>/√<em>α</em>:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub>
+              <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></msqrt>
+            </mfrac>
+            <mo>=</mo>
+            <mfrac><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt></mfrac>
+            <mo>+</mo>
+            <mrow><mo>(</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></mrow><msub><mi>α</mi><mrow><mi>t</mi><mo>−</mo><mi>Δ</mi><mi>t</mi></mrow></msub></mfrac></msqrt>
+              <mo>−</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow><msub><mi>α</mi><mi>t</mi></msub></mfrac></msqrt>
+            <mo>)</mo></mrow>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (12)</span>
+          <span class="cap"><b>Đọc:</b> cùng nội dung với Eq. (6). Bài nhắc lại để dẫn tới dạng ODE.</span>
+        </div>
+
+        <p>Với <em>σ</em> = √(1−<em>α</em>)/√<em>α</em> và <em>x̄</em> = <em>x</em>/√<em>α</em>, quá trình là nghiệm của ODE:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mi>d</mi><mover><mi mathvariant="bold">x</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>)</mo>
+            <mo>=</mo>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub>
+            <mrow><mo>(</mo>
+              <mfrac><mrow><mover><mi mathvariant="bold">x</mi><mo>¯</mo></mover><mo>(</mo><mi>t</mi><mo>)</mo></mrow>
+              <msqrt><mrow><msup><mi>σ</mi><mn>2</mn></msup><mo>+</mo><mn>1</mn></mrow></msqrt></mfrac><mo>,</mo><mi>t</mi>
+            <mo>)</mo></mrow>
+            <mi>d</mi><mi>σ</mi><mo>(</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (13)</span>
+          <span class="cap"><b>Đọc:</b> trùng Eq. (7). Đảo chiều ODE này cho phép đi từ ảnh tới nhiễu.</span>
+        </div>
+
+        <p>Và phép đảo ngược chính là Eq. (12) đảo chiều:</p>
+
+        <div class="eq">
+          <math display="block">
+            <mfrac>
+              <msub><mi mathvariant="bold">x</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub>
+              <msqrt><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></msqrt>
+            </mfrac>
+            <mo>=</mo>
+            <mfrac><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><msqrt><msub><mi>α</mi><mi>t</mi></msub></msqrt></mfrac>
+            <mo>+</mo>
+            <mrow><mo>(</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></mrow><msub><mi>α</mi><mrow><mi>t</mi><mo>+</mo><mn>1</mn></mrow></msub></mfrac></msqrt>
+              <mo>−</mo>
+              <msqrt><mfrac><mrow><mn>1</mn><mo>−</mo><msub><mi>α</mi><mi>t</mi></msub></mrow><msub><mi>α</mi><mi>t</mi></msub></mfrac></msqrt>
+            <mo>)</mo></mrow>
+            <msub><mi mathvariant="bold">ε</mi><mi>θ</mi></msub><mo>(</mo><msub><mi mathvariant="bold">x</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>)</mo>
+          </math>
+          <span class="no">Eq. (14)</span>
+          <span class="cap"><b>Đọc:</b> trùng Eq. (8). Bài một lần nữa nhấn: đảo ngược là <em>đảo chiều</em> của cùng một công thức, không phải nghiệm chính xác của ODE ngược.</span>
+        </div>
+
+        <h3>Lập luận của Phụ lục B</h3>
+        <p>Phát biểu rút gọn: khi <em>T</em> hữu hạn (1000) và <em>S</em> = 20, việc thay tích phân bằng tổng Euler gây sai số. Sai số này <strong>lớn hơn với ảnh thật</strong> vì ảnh thật "phức tạp hơn". Vì vậy DIRE của ảnh sinh nhỏ, của ảnh thật lớn.</p>
+        <blockquote class="orig">
+          <p>"It is worth noting that during the approximation of Eqn. (11) by Eqn. (12), there is a deviation since T is usually not infinitely large (e.g., T = 1000). The deviation is more prominent for real images than diffusion-generated images due to the more complex characteristics of real images. The deviation caused by the approximation actually leads to our key idea of DIRE."</p>
+          <cite>Phụ lục B, nguyên văn</cite>
+        </blockquote>
+
+        <div class="callout warn">
+          <b>Ba chỗ hở, theo thứ tự nghiêm trọng.</b>
+        </div>
+        <ol>
+          <li><strong>Không có phép đo.</strong> Câu "deviation is more prominent for real images" là trung tâm của lời giải thích và không có số nào đỡ. Muốn kiểm: chạy <em>I</em>+<em>R</em> với <em>S</em> = 5, 10, 20, 50, 100, 1000 trên cùng một tập, đo ‖<em>x</em> − <em>R</em>(<em>I</em>(<em>x</em>))‖ trung bình cho hai lớp. Nếu hai đường hội tụ, cơ chế là sai số số.</li>
+          <li><strong>Xung đột với Table 4.</strong> Nếu sai số giảm khi <em>S</em> tăng, khoảng cách giữa hai lớp cũng nên giảm, và độ chính xác nên <em>giảm</em>. Table 4 cho thấy ngược lại (tăng <em>S</em> làm tốt hơn). Có thể sai số giảm không đều giữa hai lớp, nhưng bài không bàn.</li>
+          <li><strong>Bỏ qua phép cắt.</strong> Các cài đặt DDIM/ADM thường cắt ảnh dự đoán vào [−1, 1] sau mỗi bước (ví dụ guided_diffusion có tuỳ chọn <code>clip_denoised</code>). Phép cắt phi tuyến này cũng tạo sai số, và cũng có thể khác nhau giữa hai lớp. Bài không nhắc tới nó — dù nó là ứng viên cơ chế mạnh ít nhất ngang sai số Euler.</li>
+        </ol>
+
+        <p>Điều đáng ghi nhận: đây là <em>chỗ duy nhất</em> trong bài cố gắng giải thích cơ chế. Việc nó chưa được kiểm không phải lỗi hiếm gặp trong thể loại này — nhưng nó có nghĩa: toàn bộ phần "vì sao" của DIRE vẫn đang mở, và người đọc nên coi Phụ lục B là <em>giả thuyết</em>, không phải <em>giải thích</em>.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Luận cứ của Phụ lục B</h4>
+          <ol class="steps">
+            <li>DDIM tất định là một bước Euler của ODE trong Eq. (13).</li>
+            <li>Với <em>S</em> hữu hạn, Euler gây sai số tỉ lệ với độ cong quỹ đạo và bước <em>Δt</em>.</li>
+            <li>Quỹ đạo của ảnh thật "cong" hơn quỹ đạo của ảnh sinh (vì ảnh thật phức tạp hơn).</li>
+            <li>⇒ <em>R</em>(<em>I</em>(<em>x</em>)) lệch khỏi <em>x</em> nhiều hơn với ảnh thật.</li>
+          </ol>
+          <div class="concl"><b>Kết luận</b>DIRE đo "độ cong quỹ đạo" — một đại lượng hình học, không phải dấu vết bộ sinh. Nếu đúng, đây là lời giải thích đẹp và có thể kiểm.</div>
+          <span class="status" style="background:var(--amber-bg);color:var(--amber)">Chưa có phép đo nào cho bước 3</span>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có phép đo độ cong quỹ đạo, không có phép đo DIRE trung bình theo lớp, không có thí nghiệm tách sai số Euler khỏi phép cắt [−1, 1].</p>
+          <p>Không có phép đo nào cho thấy <em>R</em>(<em>I</em>(<em>x</em>)) tiến về <em>x</em> khi <em>S</em> → ∞ trên ảnh sinh.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Lời giải thích duy nhất của bài nằm ở mức giả thuyết.</li>
+            <li>Không xét phép cắt giá trị — ứng viên cơ chế bị bỏ qua.</li>
+            <li>Có xung đột (chưa giải quyết) với xu hướng của Table 4.</li>
+            <li>Không dự đoán được điều gì kiểm được ngoài "S tăng thì DIRE giảm".</li>
+          </ul>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 21 ============================== -->
+<section class="page" id="p21" data-group="Phụ lục" data-short="Phụ lục C — hình định tính" data-part="Phụ lục C">
+  <div class="page-in">
+    <p class="kicker">Appendix C<span class="sep">/</span>More Visualization About DIRE<span class="sep">/</span>trang gốc 12–13</p>
+    <h2 class="title">Phụ lục C: năm hình, không một con số</h2>
+    <p class="lede">Năm hình (6–10) trình bày thêm ví dụ trực quan cho từng nhóm bộ sinh. Chúng có ích để hình dung, nhưng không thêm bằng chứng — và cũng không có một ảnh thất bại nào.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Phụ lục C — nội dung năm hình</caption>
+            <thead><tr><th class="c">Hình</th><th>Bộ sinh được minh hoạ</th><th>Điều hình muốn cho thấy</th></tr></thead>
+            <tbody>
+              <tr><td class="c n">6</td><td class="name">DDPM, iDDPM (LSUN-Bedroom)</td><td class="name">DIRE của ảnh thật lớn hơn, có cấu trúc</td></tr>
+              <tr><td class="c n">7</td><td class="name">ADM, PNDM (LSUN-Bedroom)</td><td class="name">như trên, cho nhóm vô điều kiện mạnh nhất</td></tr>
+              <tr><td class="c n">8</td><td class="name">SD-v1, SD-v2 (prompt "A photo of bedroom")</td><td class="name">DIRE vẫn tách được ở nhóm text→image</td></tr>
+              <tr><td class="c n">9</td><td class="name">LDM, VQ-Diffusion</td><td class="name">DIRE trên mô hình tiềm ẩn / rời rạc</td></tr>
+              <tr><td class="c n">10</td><td class="name">ADM, SD-v1 (ImageNet, prompt theo lớp)</td><td class="name">DIRE trên miền khác</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Mỗi hình có cấu trúc giống Figure 1: một hàng ảnh nguồn, một hàng ảnh tái tạo, một hàng DIRE. Bài mô tả chung: <em>"The DIREs of real images tend to have larger values compared to diffusion-generated images."</em></p>
+
+        <h3>Vì sao phần này quan trọng dù không có số</h3>
+        <p>Nó là chỗ duy nhất người đọc có thể tự kiểm bằng mắt một tuyên bố định lượng. Nếu bạn mở Phụ lục C và thấy DIRE của một ảnh SD-v2 trông <em>đậm</em> hơn DIRE của một ảnh thật, bạn vừa tìm được một phản ví dụ cho giả thuyết trung tâm — và điều đó đáng biết hơn mọi con số trung bình. Đây là lý do bản đọc khuyến nghị: <strong>đừng chỉ đọc bảng, hãy mở phụ lục hình và tự tìm phản ví dụ</strong>.</p>
+
+        <div class="callout warn">
+          <b>Không có ảnh thất bại.</b> Trong toàn bộ bài — kể cả phụ lục — không có một hình nào cho thấy một trường hợp DIRE phân loại sai. Với một phương pháp đạt 99,9%, điều này có thể hiểu được; nhưng với các ô 76,9% và 62,4%, việc không có ví dụ thất bại khiến người đọc không biết <em>kiểu</em> sai là gì. Đây là thiếu sót về mặt trình bày khoa học, không chỉ về số liệu.
+        </div>
+
+        <h3>Ba câu hỏi nên đặt khi xem Phụ lục C</h3>
+        <ol>
+          <li><strong>Ảnh thật trong hình có phải ảnh khó không?</strong> Nếu tác giả chọn ảnh thật "điển hình", hình sẽ đẹp hơn thực tế. Không có thông tin về cách chọn.</li>
+          <li><strong>DIRE được hiển thị với thang nào?</strong> Nếu mỗi hàng được chuẩn hoá riêng, so sánh trực quan giữa các cột là vô nghĩa. Bài không nói.</li>
+          <li><strong>Có bao nhiêu ảnh mỗi bộ sinh?</strong> Không nói. "Một số ví dụ" là mức thông tin duy nhất.</li>
+        </ol>
+
+        <p>Với người làm tái lập, giá trị thực dụng của Phụ lục C là ở chỗ khác: nó cho một <em>tiêu chuẩn thị giác</em> để kiểm pipeline. Nếu DIRE bạn tự tính trông như nhiễu trắng đều đều cho cả hai lớp, nhiều khả năng bạn đã sai ở phép đảo ngược hoặc ở thứ tự mốc thời gian — chứ không phải bài báo sai.</p>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Chưa chứng minh</h4>
+          <p>Không có thống kê, không có thang đo, không nói cách chọn ví dụ. Toàn bộ phụ lục là minh hoạ.</p>
+          <p>Không có trường hợp thất bại nào.</p>
+        </div>
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Hạn chế</h4>
+          <ul>
+            <li>Không nói thang hiển thị của DIRE ⇒ không so sánh được giữa các cột.</li>
+            <li>Không nói số lượng ví dụ mỗi bộ sinh.</li>
+            <li>Không có failure case, không có phân tích lỗi.</li>
+            <li>Không có hình cho VQ-Diffusion / LDM trên ImageNet.</li>
+          </ul>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Đối chiếu nhanh</h4>
+          <p><b>5</b> hình phụ lục, <b>0</b> con số, <b>0</b> phản ví dụ.</p>
+          <p style="color:#6f858f">Một tiêu chuẩn thị giác, không phải một bằng chứng.</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 22 ============================== -->
+<section class="page" id="p22" data-group="Tổng hợp &amp; liên hệ" data-short="Bốn giả thuyết cơ chế" data-part="Tổng hợp">
+  <div class="page-in">
+    <p class="kicker">Tổng hợp của bản đọc<span class="sep">/</span>không thuộc bài báo</p>
+    <h2 class="title">Vì sao DIRE hoạt động? Bốn giả thuyết cạnh tranh</h2>
+    <p class="lede">Bài đưa một lời giải thích (Phụ lục B). Nhưng kết quả thực nghiệm cho phép ít nhất bốn cơ chế, và bài không có thí nghiệm nào phân biệt chúng. Đây là phần bản đọc đóng góp thêm, tách hẳn khỏi nội dung bài.</p>
+
+    <div class="page-body wide">
+      <div class="prose">
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Bốn giả thuyết cơ chế — dự đoán và cách kiểm</caption>
+            <thead>
+              <tr><th>Cơ chế</th><th>Nội dung</th><th>Dự đoán kiểm được</th><th>Bài có kiểm?</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="name"><b>H1.</b> Sai số Euler</td>
+                <td class="name">Với <em>S</em> hữu hạn, tích phân ODE bị rời rạc hoá; quỹ đạo ảnh thật "cong" hơn nên sai số lớn hơn (Phụ lục B).</td>
+                <td class="name">DIRE trung bình của hai lớp <em>hội tụ</em> khi <em>S</em> → 1000. Tăng <em>S</em> làm khoảng cách hai lớp hẹp lại.</td>
+                <td class="name" style="color:#8a5a06">Không. Table 4 cho xu hướng ngược lại.</td>
+              </tr>
+              <tr>
+                <td class="name"><b>H2.</b> Phép cắt [−1,1]</td>
+                <td class="name">Sau mỗi bước, ảnh dự đoán bị cắt vào khoảng hợp lệ. Ảnh thật có giá trị cực trị nhiều hơn nên bị cắt nhiều hơn.</td>
+                <td class="name">Tắt <code>clip_denoised</code> làm khoảng cách hai lớp giảm (hoặc biến mất).</td>
+                <td class="name" style="color:#8a5a06">Không. Bài không nhắc phép cắt.</td>
+              </tr>
+              <tr>
+                <td class="name"><b>H3.</b> Chiếu lên đa tạp học được</td>
+                <td class="name"><em>R∘I</em> kéo mọi điểm về phía tập hỗ trợ của <em>p<sub>g</sub></em>; độ dời tỉ lệ với khoảng cách tới đa tạp ấy.</td>
+                <td class="name">DIRE trung bình tỉ lệ với một thước đo "độ lạ" của ảnh, ngay cả khi <em>S</em> rất lớn.</td>
+                <td class="name" style="color:#8a5a06">Không. Đây là giả thuyết của §1 nhưng không đo.</td>
+              </tr>
+              <tr>
+                <td class="name"><b>H4.</b> Mất chi tiết tần số cao</td>
+                <td class="name">Mô hình tái tạo chỉ giữ phần tần số thấp; ảnh thật có nhiều chi tiết tần số cao hơn nên residual lớn hơn.</td>
+                <td class="name">Lọc thông cao ảnh đầu vào làm khoảng cách hai lớp giảm mạnh; DIRE tập trung năng lượng ở dải cao.</td>
+                <td class="name" style="color:#8a5a06">Một phần: Figure 5 cho thấy phổ DIRE ảnh thật phong phú hơn, nhưng không định lượng.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p>Bốn cơ chế này không loại trừ nhau. Có thể cả bốn cùng đóng góp, với tỉ lệ khác nhau. Nhưng chúng có dự đoán khác nhau, nên chỉ cần hai thí nghiệm là tách được phần lớn:</p>
+        <ol>
+          <li><strong>Quét <em>S</em> và đo trực tiếp DIRE trung bình theo lớp</strong> (không qua classifier). Nếu hai đường hội tụ khi <em>S</em> tăng ⇒ H1 đúng phần lớn. Nếu khoảng cách giữ nguyên ⇒ H3/H4.</li>
+          <li><strong>Tắt phép cắt</strong> ở cùng <em>S</em>. Nếu khoảng cách đổi mạnh ⇒ H2 có đóng góp.</li>
+        </ol>
+        <p>Cả hai đều rẻ — chỉ cần chạy lại <em>I</em>+<em>R</em>, không cần huấn luyện lại classifier. Đây là lý do bản đọc xếp việc "hiểu cơ chế" vào nhóm khả thi ngay, không phải nhóm nghiên cứu dài hạn.</p>
+
+        <div class="callout">
+          <b>Vì sao điều này quan trọng với người dùng thực tế.</b> Nếu cơ chế là H1, DIRE sẽ <em>yếu đi</em> khi ai đó dùng bộ lấy mẫu tốt hơn (nhiều bước hơn, solver bậc cao) — tức là theo thời gian, ảnh sinh càng khó phát hiện. Nếu cơ chế là H3, DIRE bền hơn vì nó đo khoảng cách phân phối, không đo sai số số. Hai kịch bản dẫn tới hai chiến lược triển khai khác nhau. Bài không phân biệt, nên người triển khai phải tự chọn một giả định.
+        </div>
+
+        <h3>Điều bản đọc này khẳng định và không khẳng định</h3>
+        <p><strong>Khẳng định:</strong> bài không có thí nghiệm nào tách bốn cơ chế; kết quả Table 4 không khớp với lời giải thích H1 theo hướng đơn giản nhất; phép cắt không được nhắc tới dù nó là ứng viên hiển nhiên.</p>
+        <p><strong>Không khẳng định:</strong> bản đọc này <em>không</em> nói H1 sai. Có thể sai số Euler giảm không đều giữa hai lớp, và đó là điều bài không đo. Muốn kết luận phải làm thí nghiệm 1 ở trên.</p>
+      </div>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 23 ============================== -->
+<section class="page" id="p23" data-group="Tổng hợp &amp; liên hệ" data-short="Mục Hạn chế — tổng hợp" data-part="Hạn chế">
+  <div class="page-in">
+    <p class="kicker">Mục Hạn chế<span class="sep">/</span>tổng hợp toàn bài<span class="sep">/</span>đánh giá của bản đọc</p>
+    <h2 class="title">Mười hai hạn chế, xếp theo mức nghiêm trọng</h2>
+    <p class="lede">Đây là mục "Hạn chế" mà yêu cầu đặt ra: thiếu sót của tác giả, ghi rõ, không bịa, mỗi mục kèm cách lấp. Thứ tự theo mức ảnh hưởng tới việc <em>dùng</em> kết quả, không theo mức dễ sửa.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <h3>Nhóm A — ảnh hưởng tới kết luận</h3>
+        <ol>
+          <li><strong>Cơ chế chưa được chứng minh.</strong> Phụ lục B là lập luận định tính về sai số Euler; không có phép đo độ cong quỹ đạo, không tách phép cắt [−1,1], không đo DIRE trung bình theo lớp. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> quét <em>S</em>, đo trực tiếp, tắt clip (trang 22).</li>
+          <li><strong>Không có thống kê.</strong> Không khoảng tin cậy, không nhiều seed, mỗi cấu hình chạy một lần. Ở <em>n</em> = 2 000, bán kính 95% là ±1,3 điểm tại ACC 90% và ±1,9 điểm tại 76,9% (trang 10). Nhiều so sánh trong bài nằm trong khoảng này. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> 5 seed, báo cáo trung bình ± độ lệch, hoặc khoảng tin cậy bootstrap theo cụm.</li>
+          <li><strong>So sánh chưa cân chi phí.</strong> DIRE tốn 40 NFE/ảnh; baseline tốn 1. Bài không có bảng chi phí và không có baseline "được cấp thêm 40 NFE". <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> thêm cột NFE và một baseline tiêu thụ cùng ngân sách tính toán.</li>
+          <li><strong>Phạm vi hẹp hơn tên gọi.</strong> Tám bộ sinh đều là khuếch tán U-Net ở 256², phần lớn dùng chung không gian nhiễu; "general" trong abstract là suy rộng. <span style="color:#8a5a06">Mức: trung bình.</span> <em>Cách lấp:</em> thử trên flow matching / transformer diffusion; nêu rõ phạm vi trong abstract.</li>
+        </ol>
+
+        <h3>Nhóm B — ảnh hưởng tới tái lập</h3>
+        <ol start="5">
+          <li><strong>Một bộ tái tạo duy nhất.</strong> Toàn bộ thí nghiệm dùng ADM-LSUN; không có thí nghiệm đổi bộ tái tạo, nên không biết DIRE là tính chất của <em>phép biến đổi</em> hay của <em>ADM</em>. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> lặp lại Table 2 với iDDPM hoặc một mô hình nhỏ làm <em>I</em>/<em>R</em>.</li>
+          <li><strong>Không nói chuẩn hoá ảnh DIRE.</strong> Không rõ mean/std trước khi vào ResNet. <span style="color:#8a5a06">Mức: trung bình.</span> <em>Cách lấp:</em> nêu rõ trong §4.1 hoặc phát hành code (mã có công khai, nhưng bài không dẫn chi tiết).</li>
+          <li><strong>Không rõ classifier có được huấn luyện lại theo từng <em>S</em>.</strong> Nếu dùng chung một bộ DIRE, Table 4 không còn là ablation sạch. <span style="color:#8a5a06">Mức: trung bình.</span> <em>Cách lấp:</em> một câu trong caption.</li>
+          <li><strong>Table 1 mâu thuẫn với phần chữ về DDPM</strong> (42k/42k so với 1k test-only). <span style="color:#5c6f7a">Mức: thấp, nhưng gây nhầm.</span> <em>Cách lấp:</em> sửa ô bảng.</li>
+          <li><strong>Thiếu seed và tham số sinh</strong> (guidance scale, prompt âm cho SD/LDM). <span style="color:#8a5a06">Mức: trung bình.</span> <em>Cách lấp:</em> phát hành file cấu hình kèm dataset.</li>
+        </ol>
+
+        <h3>Nhóm C — phạm vi ứng dụng</h3>
+        <ol start="10">
+          <li><strong>Độ bền được kiểm quá mỏng.</strong> Chỉ blur và JPEG; thiếu nén lặp, resize, crop, xoay, nén video, chụp lại màn hình. Không rõ DIRE có được tính lại sau nhiễu loạn — chi tiết quyết định độ bền thuộc về biểu diễn hay bộ khử nhiễu. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> mở rộng ma trận nhiễu loạn; thêm nhánh "áp nhiễu lên DIRE, không tính lại".</li>
+          <li><strong>Không xét kẻ tấn công chủ động.</strong> Nếu biết DIRE, có thể tối ưu ảnh để DIRE nhỏ (hoặc lớn) — bài toán đối kháng. Bài không thử. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> PGD trên residual; đo ACC dưới tấn công.</li>
+          <li><strong>Ngưỡng 0,5 không hiệu chỉnh theo FPR.</strong> Phù hợp benchmark cân bằng, không phù hợp ứng dụng thật nơi báo oan đắt. Bằng chứng nội tại: ô REC/iDDPM có ACC 49,7% nhưng AP 92,6%. <span style="color:#7d2530">Mức: cao.</span> <em>Cách lấp:</em> báo cáo đường ROC/DET, chọn ngưỡng theo FPR mục tiêu.</li>
+        </ol>
+
+        <div class="callout warn">
+          <b>Những gì <em>không</em> phải hạn chế.</b> Bài không cần xin lỗi vì (a) không có kiến trúc mới — đóng góp là biểu diễn; (b) không đạt 100% ở mọi ô — 76,9% ở điều kiện khó nhất là kết quả trung thực; (c) không so với mọi phương pháp cùng thời — giới hạn của một bài 8 trang. Ba điều này là lựa chọn phạm vi, không phải thiếu sót.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-lim">
+          <h4><span class="ico">!</span>Ba hạn chế nặng nhất</h4>
+          <ol style="margin:0;padding-left:18px">
+            <li style="margin-bottom:8px"><b>Cơ chế chưa kiểm</b> — toàn bộ phần "vì sao" vẫn mở.</li>
+            <li style="margin-bottom:8px"><b>Không có thống kê</b> — nhiều so sánh nằm trong khoảng tin cậy.</li>
+            <li><b>Không cân chi phí</b> — 40 NFE so với 1 chưa được tính vào so sánh.</li>
+          </ol>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Cách đọc trung thực</h4>
+          <p>Nếu trích bài, nên viết: <em>"DIRE đạt 99,9% ACC trung bình trên tám bộ sinh khuếch tán ở 256², dùng ADM-LSUN làm bộ tái tạo với S=20, không có khoảng tin cậy, chi phí 40 NFE/ảnh."</em></p>
+          <p>Đó là một câu dài, nhưng là câu đúng.</p>
+        </div>
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Đếm</h4>
+          <p><b>4</b> hạn chế mức cao thuộc nhóm kết luận.</p>
+          <p><b>6</b> hạn chế về tái lập / trình bày.</p>
+          <p><b>3</b> hạn chế về phạm vi ứng dụng (một số mục xếp chồng nhóm).</p>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+<!-- ============================== TRANG 24 ============================== -->
+<section class="page" id="p24" data-group="Tổng hợp &amp; liên hệ" data-short="Đối chiếu repo này" data-part="Liên hệ">
+  <div class="page-in">
+    <p class="kicker">Liên hệ<span class="sep">/</span>repo <code>dire-modal</code><span class="sep">/</span>không thuộc bài báo</p>
+    <h2 class="title">Từ bài báo tới mã trong repo này</h2>
+    <p class="lede">Trang cuối nối nội dung bài với công việc đang làm trong repo: chỗ nào đã khớp, chỗ nào còn nợ, và ba câu hỏi mở mà bài để lại.</p>
+
+    <div class="page-body">
+      <div class="prose">
+        <h3>Những điểm đã khớp</h3>
+        <div class="tablewrap">
+          <table class="data">
+            <caption>Đối chiếu bài báo ↔ repo (chỉ các mục đã có)</caption>
+            <thead><tr><th>Trong bài</th><th>Trong repo</th></tr></thead>
+            <tbody>
+              <tr><td class="name">DIRE = |x₀ − R(I(x₀))|, trị tuyệt đối từng điểm ảnh</td><td class="name">Bản đồ DIRE lưu dạng <code>.npy</code> theo <code>maps/&lt;split&gt;/&lt;generator&gt;/*.npy</code>, giữ 3 kênh và kích thước ảnh</td></tr>
+              <tr><td class="name">ADM-LSUN làm bộ tái tạo, DDIM, S = 20</td><td class="name">Cấu hình mặc định của pipeline; <em>S</em> là tham số, không hard-code</td></tr>
+              <tr><td class="name">Huấn luyện trên một bộ sinh, kiểm trên bộ khác</td><td class="name"><code>::train --generator &lt;tên&gt;</code>; <code>train.json</code> ghi <code>generators_used</code>, <code>generator_filter</code></td></tr>
+              <tr><td class="name">Classifier ResNet-50, crop 224, ngưỡng 0,5</td><td class="name">Cấu hình huấn luyện tương ứng; ngưỡng đọc từ checkpoint</td></tr>
+              <tr><td class="name">Mỗi mẫu là bộ ba (nguồn, tái tạo, DIRE)</td><td class="name">Kiểm dữ liệu đối chiếu manifest và sha của từng dòng</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Ba việc còn nợ, xếp theo giá trị</h3>
+        <ol>
+          <li><strong><code>::author_eval</code> (mức R0).</strong> Chấm lại bằng checkpoint của tác giả. Đây là cách duy nhất trả lời câu hỏi "99,9% có tái lập được không" mà không cần huấn luyện lại. Lưu ý liêm chính: dùng lại <code>dire/</code> + checkpoint tác giả là <em>chấm lại</em>, không phải <em>tái lập</em>; artefact phải tự khai mức.</li>
+          <li><strong><code>::estimate</code>.</strong> Ước lượng chi phí trước khi chạy. Con số 40 NFE/ảnh × 380k ảnh ở trang 19 là lý do: chi phí là hạn chế lớn nhất của bài và cũng là rủi ro lớn nhất của repo.</li>
+          <li><strong>Đánh giá nhiều bộ sinh.</strong> Table 2 có tám cột; chạy một cột (<code>adm</code>) chỉ tái lập được một phần nhỏ của kết luận. Nhưng làm cả tám là ~6,2 GPU-giờ theo ước lượng trước đó — nên đi từng bước và ghi rõ phần nào đã làm.</li>
+        </ol>
+
+        <h3>Ba câu hỏi mở mà bài để lại</h3>
+        <ol>
+          <li><strong>Cơ chế.</strong> Có tách được sai số Euler khỏi phép cắt [−1,1] không? (trang 22)</li>
+          <li><strong>Bất biến theo bộ tái tạo.</strong> DIRE còn hoạt động nếu thay ADM bằng mô hình khác? Nếu có, có thể dùng mô hình nhỏ hơn và rẻ hơn nhiều lần.</li>
+          <li><strong>Ngưỡng cho ứng dụng thật.</strong> Nếu chi phí báo oan cao, ngưỡng 0,5 là sai. Cần đường ROC và chọn theo FPR mục tiêu — điều bài không làm, và cũng là điều repo này sẽ cần nếu muốn demo detector.</li>
+        </ol>
+
+        <div class="callout">
+          <b>Một lưu ý về mức tái lập.</b> Bài báo không phát hành đủ thông tin để tái lập <em>chính xác</em> (thiếu seed, thiếu chuẩn hoá, thiếu tham số sinh). Vì vậy mọi con số trong repo nên được ghi kèm mức: "tái lập một phần", "chấm lại bằng checkpoint tác giả", hay "tái lập đầy đủ từ đầu". Trộn ba mức này trong cùng một bảng là cách nhanh nhất để tự lừa mình.
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="blk k-num">
+          <h4><span class="ico">#</span>Đối chiếu nhanh</h4>
+          <p><b>S = 20</b> → 40 NFE/ảnh. Đây là con số cần đưa vào mọi ước lượng chi phí.</p>
+          <p><b>256²</b> → crop 224. Sai kích thước ở attention là lỗi hay gặp nhất khi đổi mô hình tái tạo.</p>
+          <p><b>|·|</b> → <code>torch.abs</code>, không phải chuẩn L2.</p>
+        </div>
+        <div class="blk k-gap">
+          <h4><span class="ico">?</span>Câu hỏi chưa trả lời được từ bài</h4>
+          <p>Bài không nói chuẩn hoá DIRE trước khi vào ResNet. Nếu kết quả trong repo lệch vài điểm so với Table 2, đây là nghi phạm đầu tiên — cùng với thứ tự mốc thời gian ở phép đảo ngược.</p>
+        </div>
+        <div class="blk k-arg">
+          <h4><span class="ico">∴</span>Nguyên tắc giữ</h4>
+          <p>Không dùng trọng số tự huấn luyện để tuyên bố kết quả của bài. Không chọn ngưỡng trên tập test. Không báo 0 khi giá trị là <code>null</code>.</p>
+          <div class="concl"><b>Vì</b>ba điều đó biến một phép đo thành một tuyên bố — và tuyên bố thì cần bằng chứng, đúng như bài báo này đã làm với DIRE.</div>
+        </div>
+      </aside>
+    </div>
+    <div class="pager"></div>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function(){
+  "use strict";
+  function dec(x){ var d = document.createElement('div'); d.innerHTML = x; return d.textContent; }
+  var pages = Array.prototype.slice.call(document.querySelectorAll('.page'));
+  var toc = document.getElementById('tocList');
+  var barTitle = document.getElementById('barTitle');
+  var barPart = document.getElementById('barPart');
+  var counter = document.getElementById('counter');
+  var prog = document.getElementById('prog');
+  var prevBtn = document.getElementById('prev');
+  var nextBtn = document.getElementById('next');
+  var jump = document.getElementById('jump');
+  var cur = 0;
+
+  // build TOC + jump list
+  var lastGroup = null;
+  pages.forEach(function(p, i){
+    p.dataset.index = i;
+    var g = p.dataset.group || '';
+    if (g !== lastGroup) {
+      var h = document.createElement('p');
+      h.className = 'toc-group';
+      h.textContent = g;
+      toc.appendChild(h);
+      lastGroup = g;
+    }
+    var a = document.createElement('a');
+    a.className = 'toc-item';
+    a.href = '#' + p.id;
+    a.dataset.i = i;
+    var n = document.createElement('span');
+    n.className = 'tn';
+    n.textContent = i + 1;
+    var t = document.createElement('span');
+    t.innerHTML = p.dataset.short || p.id;
+    a.appendChild(n); a.appendChild(t);
+    toc.appendChild(a);
+
+    var o = document.createElement('option');
+    o.value = i;
+    o.textContent = (i + 1) + ' · ' + dec(p.dataset.short || p.id);
+    jump.appendChild(o);
+
+    // page nav at bottom
+    var pager = p.querySelector('.pager');
+    if (pager) {
+      var pb = document.createElement('button');
+      pb.className = 'prev';
+      pb.innerHTML = '<span class="dir">← Trang trước</span><span class="lbl"></span>';
+      var nb = document.createElement('button');
+      nb.className = 'next';
+      nb.innerHTML = '<span class="dir">Trang sau →</span><span class="lbl"></span>';
+      pb.disabled = (i === 0);
+      nb.disabled = (i === pages.length - 1);
+      if (i > 0) {
+        pb.querySelector('.lbl').textContent = i + ' · ' + dec(pages[i-1].dataset.short);
+        pb.addEventListener('click', function(){ go(i-1); });
+      } else {
+        pb.querySelector('.lbl').textContent = '—';
+      }
+      if (i < pages.length - 1) {
+        nb.querySelector('.lbl').textContent = (i+2) + ' · ' + dec(pages[i+1].dataset.short);
+        nb.addEventListener('click', function(){ go(i+1); });
+      } else {
+        nb.querySelector('.lbl').textContent = '—';
+      }
+      pager.appendChild(pb);
+      pager.appendChild(nb);
+    }
+  });
+
+  var tocItems = Array.prototype.slice.call(toc.querySelectorAll('a.toc-item'));
+
+  function go(i, push){
+    if (i < 0 || i >= pages.length) return;
+    pages[cur].classList.remove('on');
+    cur = i;
+    var p = pages[cur];
+    p.classList.add('on');
+    barTitle.textContent = p.dataset.short.replace(/&amp;/g,'&');
+    barPart.textContent = '· ' + (p.dataset.part || '');
+    counter.textContent = (cur + 1) + ' / ' + pages.length;
+    prog.style.width = ((cur + 1) / pages.length * 100) + '%';
+    prevBtn.disabled = (cur === 0);
+    nextBtn.disabled = (cur === pages.length - 1);
+    jump.value = String(cur);
+    tocItems.forEach(function(a){ a.classList.toggle('on', Number(a.dataset.i) === cur); });
+    if (push !== false) {
+      try { history.replaceState(null, '', '#' + p.id); } catch (err) { /* iframe sandbox: bỏ qua */ }
+    }
+    // keep the active TOC row visible
+    var act = toc.querySelector('a.toc-item.on');
+    if (act && act.scrollIntoView) {
+      act.scrollIntoView({block:'nearest'});
+    }
+    window.scrollTo(0,0);
+  }
+
+  prevBtn.addEventListener('click', function(){ go(cur-1); });
+  nextBtn.addEventListener('click', function(){ go(cur+1); });
+  jump.addEventListener('change', function(){ go(Number(jump.value)); });
+
+  toc.addEventListener('click', function(e){
+    var a = e.target.closest('a.toc-item');
+    if (!a) return;
+    e.preventDefault();
+    go(Number(a.dataset.i));
+  });
+
+  document.addEventListener('keydown', function(e){
+    var tag = (e.target && e.target.tagName) || '';
+    if (/INPUT|SELECT|TEXTAREA/.test(tag)) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'ArrowRight' || e.key === 'j' || e.key === 'PageDown') { e.preventDefault(); go(cur+1); }
+    else if (e.key === 'ArrowLeft' || e.key === 'k' || e.key === 'PageUp') { e.preventDefault(); go(cur-1); }
+    else if (e.key === 'Home') { e.preventDefault(); go(0); }
+    else if (e.key === 'End') { e.preventDefault(); go(pages.length-1); }
+  });
+
+  // filters
+  function bind(id, cls){
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('change', function(){
+      document.body.classList.toggle(cls, !el.checked);
+    });
+  }
+  bind('fArg','f-arg'); bind('fGap','f-gap'); bind('fLim','f-lim');
+
+  // mobile: tap brand to toggle TOC
+  var side = document.getElementById('side');
+  var brand = side.querySelector('.brand');
+  brand.addEventListener('click', function(){
+    if (window.innerWidth <= 980) side.classList.toggle('open');
+  });
+
+  // initial page from hash
+  var h = (location.hash || '').replace('#','');
+  var start = 0;
+  pages.forEach(function(p, i){ if (p.id === h) start = i; });
+  pages[0].classList.add('on');
+  if (start > 0) { pages[0].classList.remove('on'); cur = start; }
+  go(cur, false);
+})();
+</script>
+</body>
+</html>
