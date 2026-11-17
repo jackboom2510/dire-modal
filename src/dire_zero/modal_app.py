@@ -38,6 +38,7 @@ import os
 import sys
 import time
 from pathlib import Path
+from typing import Sequence
 
 import modal
 
@@ -445,11 +446,17 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
             "Chạy `python -m dire_zero ingest` rồi đẩy lên, hoặc `::gen` để tự sinh ảnh giả."
         )
 
-    n_pairs = sum(len(list_images(f"{DATA}/{s}/real")) for s in want if os.path.isdir(f"{DATA}/{s}/real"))
-    n_fake = sum(len(list_images(f"{DATA}/{s}/{g}")) for s in want for g in gens if os.path.isdir(f"{DATA}/{s}/{g}"))
+    n_real, n_fake = _plan_images(DATA, want, gens, n)
+    if n_real + n_fake == 0:
+        raise FileNotFoundError(
+            f"không có ảnh nào để chạy: splits={list(want)} generators={gens}. "
+            "Kiểm `::checkdata` trước."
+        )
     sec = load_sec_per_step(f"{OUT}/bench.json")
-    est = Estimate(n_images=n_pairs + n_fake, nfe_per_image=2 * steps, sec_per_step=sec)
+    est = Estimate(n_images=n_real + n_fake, nfe_per_image=2 * steps, sec_per_step=sec)
     print("[tiền]", est.line(), flush=True)
+    print(f"[kế hoạch] real {n_real} + fake {n_fake} = {n_real + n_fake} ảnh "
+          f"(n ≤ {n} mỗi ô, {len(want)} split, {len(gens)} generator)", flush=True)
     require_estimate(est, max_usd)
 
     f, digest = _counter(dtype="float16")
@@ -471,6 +478,27 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     out = compute_maps(f, items, MAPS, meta, limit=None)
     vol.commit()
     return {"n": out["n"], "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"], "est": est.as_dict()}
+
+
+def _plan_images(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> tuple[int, int]:
+    """Đếm **đúng** số ảnh `::dire` sẽ chạy: cắt ``n`` theo từng (split, lớp).
+
+    Bản trước đếm cả cây — 82 000 ảnh cho `train,test` — nên ước lượng cho
+    ``--n 200`` cao hơn thực tế ~100 lần (91,90 USD thay vì ~0,90 USD) và
+    ``--max-usd`` (mặc định 5) **chặn oan** một lượt chạy rẻ. Ước lượng sai theo
+    hướng nào cũng là lỗi: cao thì chặn oan, thấp thì để lọt.
+    """
+    from .data import list_images  # noqa: PLC0415
+
+    n_real = sum(
+        min(len(list_images(f"{root}/{s}/real")), n)
+        for s in want if os.path.isdir(f"{root}/{s}/real")
+    )
+    n_fake = sum(
+        min(len(list_images(f"{root}/{s}/{g}")), n)
+        for s in want for g in gens if os.path.isdir(f"{root}/{s}/{g}")
+    )
+    return n_real, n_fake
 
 
 def _generators_in(root: str) -> list[str]:

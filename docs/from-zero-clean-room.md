@@ -79,15 +79,16 @@ phát triển, và nó là test duy nhất bắt được lỗi *ngữ nghĩa*: 
 **sau** phép tăng mẫu vẫn ra ảnh đúng hình dạng, vẫn hội tụ, nhưng tốn gấp 4 lần
 compute và lệch hẳn kết quả.
 
-## 3. Bốn lỗi tìm được khi viết lại
+## 3. Sáu lỗi tìm được khi viết lại
 
-Viết lại từ công thức không chỉ để "sạch". Bốn lỗi dưới đây lộ ra vì phải suy
-nghĩ lại từng chỉ số — và cả ba đều nằm trong **đường đang chạy** của repo, tức
+Viết lại từ công thức không chỉ để "sạch". Sáu lỗi dưới đây lộ ra vì phải suy
+nghĩ lại từng chỉ số — và phần lớn nằm trong **đường đang chạy** của repo, tức
 là đường mà `docs/runbook-local-manual.md` bảo người dùng chạy.
 
 **Trạng thái:** 3.1–3.3 đã sửa trong `src/dire_modal/ddim.py`, có test riêng
 (`tests/test_ddim_protocol.py`, 11 test, chạy bằng mô hình "tiên tri" nên không
-cần GPU lẫn checkpoint). Chưa lần nào chạy với trọng số ADM thật.
+cần GPU lẫn checkpoint). 3.4–3.6 lộ ra khi chạy thật: 3.4 qua `::selfcheck` trên
+A10G, 3.5 và 3.6 qua lượt `::dire` đầu tiên trên A10G (cùng một traceback).
 
 ### 3.1 `ᾱ[0] = 1,0` ⇒ DIRE map toàn `NaN` (đường cũ)
 
@@ -154,6 +155,63 @@ vẫn tự đổi tham số nếu ai đó gọi `.to(torch.float16)` thẳng.
 > skip), `test_half_keeps_norms_in_float32`, và `test_full_fp16_pipeline_is_finite`
 > chạy trọn `dire_map` 4 bước trên mô hình fp16. Bài học giống mục 3.1: **một
 > cấu hình chưa từng được chạy thì coi như chưa có test.**
+
+### 3.5 Thiết bị: `load_image` trả CPU, mô hình trên GPU
+
+Lượt `::dire` thật đầu tiên trên A10G chết ở lượt mạng **đầu tiên**:
+
+```text
+File "/root/dire_zero/unet.py", line 224, in forward
+    emb = self.time_mlp(time_embedding(timesteps, self.cfg.model_channels).to(dtype))
+RuntimeError: Expected all tensors to be on the same device, but found at least
+two devices, cuda:0 and cpu! (when checking argument for argument mat1 ...)
+```
+
+Nguyên nhân không nằm ở `unet.py`. `ModelCounter.__call__` tạo `timesteps` trên
+`x.device`; `compute_maps` lấy `img = load_image(path)` — mà `load_image` trả
+tensor **CPU** — rồi dùng thẳng. Vậy `timesteps` ở CPU ⇒ `time_embedding` ở CPU ⇒
+`time_mlp` (đã ở CUDA) nổ ở `addmm`. Dòng `.to(dtype)` trong `unet.py` không đổi
+thiết bị, nên nó không cứu được.
+
+Vì sao lọt: đường duy nhất từng chạy trên GPU là `selfcheck`, và nó gọi
+`load_image(...).cuda()` **trước** khi vào `dire_map`; mọi test khác chạy CPU nên
+hai bên cùng thiết bị.
+
+Sửa hai lớp:
+
+* `compute_maps` đưa ảnh sang `next(f.model.parameters()).device` (sau khi kiểm
+  kích thước, để ảnh sai cỡ không bị chuyển lên GPU vô ích), và `.cpu()` trước
+  `np.save` — map nằm trên GPU, `np.save` cần bộ nhớ CPU;
+* `dire_map` tự chuẩn hoá: ảnh khác `sched.device` thì `.to(sched.device)`, để
+  mọi đường gọi đều đúng thay vì nổ ở giữa `time_mlp`.
+
+Test canh: `test_compute_maps_moves_images_to_the_model_device` đặt mô hình trên
+`meta` (một thiết bị khác hẳn CPU) rồi kiểm ảnh được chuyển sang đúng đó — trên
+CPU thuần, test kiểu "hai bên cùng CPU" không bắt được gì.
+
+### 3.6 Ước lượng tiền đếm cả cây, bỏ qua `--n`
+
+Cùng lượt chạy đó in:
+
+```text
+[tiền] 82000 ảnh × 40 NFE = 3280000 NFE · 83.55 GPU-h · 91.90 USD
+```
+
+trong khi lệnh là `--n 200` trên `train,test` với **một** generator: thực tế 800
+ảnh (0,32 GPU-h, ~0,90 USD). Sai 102 lần, và sai theo hướng **chặn oan**: với
+`--max-usd` mặc định 5, lượt chạy rẻ này bị `require_estimate` từ chối.
+
+Nguyên nhân: ước lượng đếm toàn bộ cây (`n_pairs + n_fake`) còn vòng lặp dựng
+`items` cắt `[:n]` cho từng ô. Sửa: `_plan_images()` đếm **đúng thứ vòng lặp sẽ
+lấy** (`min(len(ô), n)` theo từng cặp split × lớp), và `::dire` in thêm dòng
+`[kế hoạch] real … + fake …` để chênh lệch lộ ra ngay thay vì nằm trong một con số
+trông hợp lý.
+
+Test canh: `test_plan_images_caps_every_cell_by_n_and_not_the_whole_tree`.
+
+> Bài học chung của 3.5–3.6: **ước lượng và thiết bị đều là thứ "trông đúng" khi
+> chỉ đọc code.** Một cái chỉ sai trên GPU, một cái chỉ sai khi có `--n` nhỏ hơn
+> kích thước cây. Cả hai đều phải chạy thật mới lộ.
 
 ## 4. Chạy
 

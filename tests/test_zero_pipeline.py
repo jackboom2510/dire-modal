@@ -157,3 +157,57 @@ def test_split_is_stable_across_calls(tmp_run):
     a = split_indices(gen["names"], seed=3407)
     b = split_indices(list(reversed(gen["names"])), seed=3407)
     assert a == b      # thứ tự đầu vào không đổi tập chia
+
+
+def test_compute_maps_moves_images_to_the_model_device(tmp_path, monkeypatch):
+    """Ảnh phải được đưa sang **đúng thiết bị của mô hình**.
+
+    Lỗi thật đã xảy ra trên Modal (A10G): `load_image` trả tensor CPU, `compute_maps`
+    dùng nó trực tiếp, nên `timesteps` sinh trên CPU ⇒ `time_embedding` ra CPU ⇒
+    `time_mlp` (CUDA) nổ ở `addmm` với "Expected all tensors to be on the same
+    device". Test chạy trên CPU **không** bắt được, vì ở đó hai bên cùng CPU — nên
+    ở đây mô hình được đặt trên `meta` (một thiết bị khác hẳn) và `dire_map` được
+    thay bằng bản ghi lại thiết bị nhận được.
+    """
+    from PIL import Image
+    import numpy as np
+
+    import dire_zero.pipeline as P
+
+    src = tmp_path / "src"
+    src.mkdir()
+    Image.fromarray((np.random.rand(32, 32, 3) * 255).astype("uint8")).save(src / "a.png")
+
+    model = ZeroUNet(TINY).eval().to("meta")
+    f = ModelCounter(model)
+    assert next(f.model.parameters()).device.type == "meta"
+
+    seen = {}
+
+    def fake_dire_map(f_, img, sched=None, clip=True):
+        seen["img_device"] = str(img.device)
+        seen["sched_device"] = None if sched is None else str(sched.device)
+        # trả về tensor CPU để phần lưu `.npy` vẫn chạy được
+        z = torch.zeros(1, 3, 32, 32)
+        return z, z
+
+    monkeypatch.setattr(P, "dire_map", fake_dire_map)
+    out = P.compute_maps(f, [(str(src / "a.png"), 1, "test", "adm")], tmp_path / "m",
+                         RunMeta("a" * 64, steps=2), size=32)
+
+    assert out["n"] == 1
+    assert seen["img_device"] == "meta", "compute_maps quên `.to(device)` của mô hình"
+    assert seen["sched_device"] == "meta"
+
+
+def test_dire_map_normalises_device_of_the_input_image():
+    """`dire_map` tự đưa ảnh về thiết bị của lịch, thay vì nổ ở giữa `time_mlp`."""
+    from dire_zero.diffusion import Schedule, dire_map
+
+    model = ZeroUNet(TINY).eval()
+    f = ModelCounter(model)
+    sched = Schedule(steps=2, device="cpu")
+    img = torch.zeros(1, 3, 32, 32)
+    dm, recon = dire_map(f, img, sched)
+    assert dm.device == img.device and recon.shape == img.shape
+    assert f.nfe == 4
