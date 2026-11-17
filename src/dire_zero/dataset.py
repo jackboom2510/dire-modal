@@ -69,6 +69,7 @@ __all__ = [
     "write_manifest_tsv",
     "read_manifest_tsv",
     "verify_manifest",
+    "verify_rows",
     "write_data_card",
     "MANIFEST_COLUMNS",
     "IMAGE_SUFFIXES",
@@ -1060,7 +1061,69 @@ def read_manifest_tsv(path: str | Path) -> list[dict]:
     return rows
 
 
-def verify_manifest(path: str | Path, root: str | Path | None = None) -> tuple[int, list[str]]:
+def verify_rows(
+    rows: list[dict],
+    base: str | Path | None = None,
+    workers: int = 1,
+    progress=None,
+    progress_every: int = 2000,
+) -> tuple[int, list[str]]:
+    """Băm song song các dòng manifest. Trả ``(số khớp, danh sách lỗi)``.
+
+    Vì sao có `workers`
+    ------------------
+    217 585 PNG nhỏ (~103 KB) không phải bài toán **băng thông** mà là bài toán
+    **độ trễ mở file**: 217 585 lần `open`, mỗi lần vài ms trên FUSE của Volume ⇒
+    hơn 30 phút với một luồng, đúng bằng timeout 1800 s đã gặp. Băm là việc
+    nhả GIL (C code + syscall), nên luồng thật sự chạy song song; 64 luồng trên
+    8 core rút ngắn còn vài phút.
+
+    `progress(done, total)` được gọi mỗi `progress_every` file — chỉ để thấy tiến
+    trình trong log, không ảnh hưởng kết quả.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed  # noqa: PLC0415
+
+    base_path = Path(base) if base is not None else None
+
+    def job(r: dict) -> tuple[bool, str]:
+        target = Path(r["png"])
+        if base_path is not None and not target.is_absolute():
+            target = base_path / target
+        try:
+            got = sha256_file(target)
+        except OSError as exc:
+            return False, f"{target}: {exc}"
+        if got == r["sha256"]:
+            return True, ""
+        return False, f"{target}: sha256 lệch"
+
+    results: list[tuple[bool, str]] = []
+    total = len(rows)
+    if workers and workers > 1 and total > 1:
+        with ThreadPoolExecutor(max_workers=int(workers)) as ex:
+            futures = [ex.submit(job, r) for r in rows]
+            for done, fut in enumerate(as_completed(futures), start=1):
+                results.append(fut.result())
+                if progress and progress_every and done % progress_every == 0:
+                    progress(done, total)
+    else:
+        for i, r in enumerate(rows, start=1):
+            results.append(job(r))
+            if progress and progress_every and i % progress_every == 0:
+                progress(i, total)
+
+    ok = sum(1 for good, _msg in results if good)
+    bad = [msg for good, msg in results if not good]
+    return ok, bad
+
+
+def verify_manifest(
+    path: str | Path,
+    root: str | Path | None = None,
+    workers: int = 1,
+    progress=None,
+    progress_every: int = 2000,
+) -> tuple[int, list[str]]:
     """Kiểm sha256 từng PNG so với manifest — bắt file bị sửa/xoá sau ingest.
 
     Đường dẫn tương đối được hiểu là **so với thư mục chứa manifest** (mặc định)
@@ -1070,21 +1133,8 @@ def verify_manifest(path: str | Path, root: str | Path | None = None) -> tuple[i
     """
     p = Path(path)
     base = Path(root) if root is not None else p.parent
-    bad, ok = [], 0
-    for r in read_manifest_tsv(p):
-        target = Path(r["png"])
-        if not target.is_absolute():
-            target = base / target
-        try:
-            got = sha256_file(target)
-        except OSError as exc:
-            bad.append(f"{target}: {exc}")
-            continue
-        if got == r["sha256"]:
-            ok += 1
-        else:
-            bad.append(f"{target}: sha256 lệch")
-    return ok, bad
+    return verify_rows(read_manifest_tsv(p), base, workers=workers,
+                       progress=progress, progress_every=progress_every)
 
 
 @dataclass

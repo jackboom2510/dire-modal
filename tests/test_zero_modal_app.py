@@ -154,12 +154,55 @@ def test_missing_data_card_is_reported_on_its_own(volume_gia: Path):
 
 def test_a_healthy_volume_passes_and_counts_png_on_disk(volume_gia: Path):
     _write_ok(volume_gia / "data", n_per_class=2)
-    report = _run()
+    report = _run(count_png=True)
     assert report["problems"] == []
     assert report["n_rows"] == 8 and report["n_png_on_disk"] == 8
     assert report["n_real"] == 4 and report["n_fake"] == 4
-    assert report["sha_checked"] is True and report["manifest_sha_ok"] == 8
+    assert report["sha_scope"] == "full" and report["manifest_sha_ok"] == 8
     assert report["warnings"] == []
+
+
+def test_counting_png_on_disk_is_off_by_default(volume_gia: Path):
+    """Một vòng `os.walk` qua 217 585 entry trên FUSE tốn hàng phút, và nó không
+    chặn bước nào — nên mặc định không đếm."""
+    _write_ok(volume_gia / "data", n_per_class=1)
+    assert _run()["n_png_on_disk"] is None
+
+
+def test_hashing_is_parallel_and_reports_how_long_it_took(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=3)
+    report = _run(workers=8)
+    assert report["manifest_sha_ok"] == 12 and report["sha_workers"] == 8
+    assert report["sha_checked_rows"] == 12
+    assert report["sha_seconds"] >= 0.0
+    # cùng kết quả với một luồng — song song không được đổi câu trả lời
+    assert _run(workers=1)["manifest_sha_ok"] == report["manifest_sha_ok"]
+
+
+def test_splits_filter_limits_the_work_and_says_so(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=2)
+    report = _run(splits="test")
+    assert report["filtered_splits"] == ["test"]
+    assert report["sha_checked_rows"] == 4          # chỉ 2 lớp × 2 ảnh của test
+    assert set(report["by_split_generator"]) == {"test/real", "test/adm"}
+
+
+def test_sample_is_deterministic_and_labelled_as_a_sample(volume_gia: Path):
+    """Mẫu phải nói rõ là mẫu — nếu không, báo cáo bị đọc thành "đã kiểm toàn bộ"."""
+    _write_ok(volume_gia / "data", n_per_class=5)   # 20 dòng
+    a, b = _run(sample=5), _run(sample=5)
+    assert a["sha_scope"] == "sample" and a["sha_checked_rows"] == 5
+    assert a["sha_checked_rows"] == b["sha_checked_rows"]
+    assert a["manifest_sha_ok"] == b["manifest_sha_ok"]
+
+    full = _run()
+    assert full["sha_scope"] == "full" and full["sha_checked_rows"] == 20
+
+
+def test_sample_larger_than_the_manifest_is_the_whole_manifest(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=1)   # 4 dòng
+    report = _run(sample=100)
+    assert report["sha_scope"] == "full" and report["sha_checked_rows"] == 4
 
 
 def test_extra_pngs_outside_the_manifest_warn_but_do_not_block(volume_gia: Path):
@@ -168,7 +211,8 @@ def test_extra_pngs_outside_the_manifest_warn_but_do_not_block(volume_gia: Path)
     for i in range(3):
         (volume_gia / "data" / "train" / "ours_adm").mkdir(parents=True, exist_ok=True)
         (volume_gia / "data" / "train" / "ours_adm" / f"{i:016x}.png").write_bytes(b"x")
-    report = _run()
+    assert _run()["n_png_on_disk"] is None           # không đếm trừ khi được yêu cầu
+    report = _run(count_png=True)
     assert report["problems"] == []
     assert report["n_png_on_disk"] == report["n_rows"] + 3
     assert any("ours_adm" in w for w in report["warnings"])
@@ -188,4 +232,4 @@ def test_skip_sha_skips_hashing_but_still_checks_structure(volume_gia: Path):
     victim = sorted((volume_gia / "data" / "train" / "real").glob("*.png"))[0]
     victim.write_bytes(b"khac han")
     report = _run(skip_sha=True)
-    assert report["problems"] == [] and report["sha_checked"] is False
+    assert report["problems"] == [] and report["sha_scope"] == "none"

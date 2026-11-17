@@ -337,6 +337,26 @@ phải để một lệnh tự động sửa cả cây dữ liệu; `plan` vẫn
 dữ liệu để ai muốn thì quyết định có căn cứ. Dữ liệu sinh từ máy local vẫn đi
 đường `modal volume put` quen thuộc (mục 4.4).
 
+#### `::checkdata` trên 200 nghìn file: timeout là bài toán độ trễ, không phải băng thông
+
+Lần chạy thật với `cpu=2`, **một luồng**, timeout 1800 s đã bị cắt giữa đường.
+22,5 GB không phải vấn đề (đọc tuần tự chỉ vài phút); vấn đề là **217 585 lần mở
+file** trên FUSE của Volume — mỗi lần vài ms ⇒ hơn 30 phút.
+
+Nay `checkdata` băm bằng **64 luồng** trên `cpu=8`, timeout 4 giờ, in tiến trình
+`file/s` + thời gian còn lại. Ba mức dùng:
+
+```bash
+modal run -m dire_zero.modal_app::checkdata --splits test   # vài giây, đủ để lặp nhanh
+modal run -m dire_zero.modal_app::checkdata --sample 2000   # mẫu cách đều, báo cáo ghi "sample"
+modal run -m dire_zero.modal_app::checkdata                 # toàn bộ, cần cho con số cuối
+```
+
+`--sample` **không** được đọc thành "đã kiểm toàn bộ": báo cáo ghi
+`sha_scope: "sample"` và `sha_checked_rows`. Đếm PNG trên đĩa nay mặc định
+**tắt** (`--count-png` mới bật) vì một vòng `os.walk` qua 217 585 entry cũng tốn
+hàng phút mà không chặn bước nào.
+
 ### 4.4 Trên Modal
 
 ```bash
