@@ -137,6 +137,7 @@ def selfcheck() -> dict:
         "sigma_floor": sigma_floor(sched),
         "seconds_1_image": round(dt, 3),
         "sec_per_step": round(dt / (2 * sched.steps), 4),
+        "dtype": str(next(f.model.parameters()).dtype),
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else "cpu",
         "clean_room": "gói của tác giả không tồn tại trong image (xem khối CLEAN-ROOM-CHECK)",
     }
@@ -231,6 +232,7 @@ def bench(n_warmup: int = 1, n_measure: int = 5, steps: int = 20) -> dict:
         "n_measure": n_measure,
         "gpu": torch.cuda.get_device_name(0),
         "batch": 1,
+        "dtype": "float16",
         "ckpt_sha256": digest,
         "note": "một ảnh 256×256, batch 1, fp16; đây là số dùng cho mọi ước lượng tiền",
     }

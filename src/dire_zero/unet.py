@@ -194,8 +194,14 @@ class ZeroUNet(nn.Module):
 
     # ------------------------------------------------------------------ #
     def forward(self, x: Tensor, timesteps: Tensor) -> Tensor:
-        emb = self.time_mlp(time_embedding(timesteps, self.cfg.model_channels))
+        # `time_embedding` **luôn** trả float32: sin/cos của `f_i·t` mất chính xác
+        # nhanh ở fp16 (tới 1000 ⇒ mất ~3 chữ số), nên tính ở float32 rồi mới đổi
+        # sang dtype của mô hình. Nhưng phải đổi **trước** `time_mlp`: trọng số fp16
+        # × đầu vào fp32 ⇒ `mat1 and mat2 must have the same dtype`, và lỗi này chỉ
+        # xuất hiện trên GPU (nơi `dtype="auto"` chọn fp16), không bao giờ ở test CPU
+        # chạy float32.
         dtype = next(self.parameters()).dtype
+        emb = self.time_mlp(time_embedding(timesteps, self.cfg.model_channels).to(dtype))
         h = self.stem(x.type(dtype))
         hs = [h]
         for entries in self.enc:
