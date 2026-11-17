@@ -308,8 +308,33 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print("[CHẶN] bộ lọc không chọn archive nào", file=sys.stderr)
         return 3
 
-    out = Path(args.out)
-    print(f"Đang đổ {len(items)} archive → {out} (cắt tối đa {args.limit} ảnh/archive)…")
+    # ---- chọn chỗ ghi: ổ chính trước, ổ dự phòng khi thiếu dung lượng ----
+    preferred = Path(args.out) if args.out else Path(ds.DEFAULT_OUT_ROOT)
+    fallbacks: tuple[str, ...] = ()
+    if not args.no_out_fallback:
+        fallbacks = tuple(args.out_fallback or ds.DEFAULT_OUT_FALLBACKS)
+    est = ds.estimate_output_bytes(items, limit_per_archive=args.limit)
+    try:
+        choice = ds.choose_out_root(
+            preferred, fallbacks=fallbacks, needed=est["need"],
+            reserve=int(args.min_free_gb * 1e9),
+        )
+    except ds.OutOfSpaceError as exc:
+        print(f"[CHẶN] {exc}", file=sys.stderr)
+        return 3
+    out = choice.path
+    need_txt = (f"{est['need'] / 1e9:.1f} GB" if est["need"] >= 1e9
+                else f"{est['need'] / 1e6:.0f} MB")
+    print(f"Ước lượng đầu ra: ≤ {need_txt} ({est['basis']})")
+    print(f"  chỗ ghi: {out}")
+    print(f"  lý do:   {choice.reason}")
+    for t in choice.tried[1:] if choice.redirected else []:
+        print(f"  đã thử:  {t['path']} — {t['reason']}")
+    if choice.redirected:
+        print("  [dự phòng] ổ chính không đủ chỗ ⇒ ghi sang ổ dự phòng. "
+              "Đường dẫn này được ghi vào data_card.json.", file=sys.stderr)
+    cut = f"cắt tối đa {args.limit} ảnh/archive" if args.limit else "đọc hết archive"
+    print(f"Đang đổ {len(items)} archive → {out} ({cut})…")
 
     try:
         made, stats = ds.ingest(
@@ -323,7 +348,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
 
     manifest = Path(args.manifest or (out / "manifest.tsv"))
     cardpath = Path(args.card or (out / "data_card.json"))
-    ds.write_manifest_tsv(manifest, made)
+    ds.write_manifest_tsv(manifest, made, root=out)
 
     n_real = sum(1 for m in made if m.label == 0)
     n_fake = sum(1 for m in made if m.label == 1)
@@ -339,11 +364,14 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         seed=args.seed, fake_source=fake_src, label=label,
         comparable_to_paper=(args.dataset or "").lower() in ("lsun_bedroom", "lsun-bedroom", "lsun"),
         manifest_sha256=ds.manifest_sha(made),
-        warnings=scan.warnings + scan.notes + _ingest_warnings(stats), created=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        warnings=(scan.warnings + scan.notes + _ingest_warnings(stats)
+                  + ([choice.as_warning()] if choice.redirected else [])),
+        created=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        out_root=str(out), out_reason=choice.reason,
     )
     ds.write_data_card(cardpath, card)
 
-    ok, bad = ds.verify_manifest(manifest)
+    ok, bad = ds.verify_manifest(manifest, root=out)
     for key, n in sorted(stats["per_archive"].items()):
         print(f"  {key}: {n} ảnh")
     print(f"\n[xong] {stats['written']} ảnh mới · {stats['reused']} ảnh dùng lại"
@@ -460,7 +488,15 @@ def main(argv: list[str] | None = None) -> int:
             d.add_argument("--dire-steps", type=int, default=20)
             d.add_argument("--sec-per-step", type=float, default=None)
         else:
-            d.add_argument("--out", required=True)
+            d.add_argument("--out", default=None,
+                           help=f"thư mục ra (mặc định {ds.DEFAULT_OUT_ROOT} — tương đối, không khoá ổ)")
+            d.add_argument("--out-fallback", nargs="+", default=None,
+                           help="ổ/thư mục dự phòng khi ổ chính KHÔNG ĐỦ CHỖ "
+                                f"(mặc định: {' '.join(ds.DEFAULT_OUT_FALLBACKS)})")
+            d.add_argument("--no-out-fallback", action="store_true",
+                           help="không dùng ổ dự phòng; thiếu chỗ thì dừng")
+            d.add_argument("--min-free-gb", type=float, default=0.5,
+                           help="phải còn trống ít nhất bao nhiêu GB sau khi ghi (mặc định 0.5)")
             d.add_argument("--size", type=int, default=256)
             d.add_argument("--limit", type=int, default=None, help="tối đa bao nhiêu ảnh MỖI archive")
             d.add_argument("--strict", action="store_true",

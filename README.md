@@ -182,9 +182,9 @@ Dùng **dataset riêng trên ổ** (cây `DiffusionForensics`, tar.gz) thay vì 
 ```bash
 python -m dire_zero peek    --tar F:/du-lieu/.../dire/test/lsun_bedroom/adm.tar.gz  # bên trong tar
 python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
-python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm   # PNG 256² + manifest
-#                                                                        # (+ --strict: archive hỏng ⇒ dừng,
-#                                                                        #  mặc định giữ phần đọc được và ghi chú)
+python -m dire_zero ingest  --root F:/du-lieu                        # PNG 256² + manifest
+#   → ./data/dire-zero-norm; tự sang F:/dire-zero-norm nếu ổ chính không đủ chỗ
+#   (+ --strict: archive hỏng ⇒ dừng, mặc định giữ phần đọc được và ghi chú)
 ```
 
 Trên Modal: `modal run -m dire_zero.modal_app::checkdata|selfcheck|bench|gen|dire|train|report`.

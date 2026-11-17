@@ -148,7 +148,8 @@ Nếu bạn đã có cây `DiffusionForensics` trên ổ, không cần tải l�
 ```bash
 python -m dire_zero peek    --tar F:/du-lieu/.../dire/val/lsun_bedroom/adm.tar.gz  # bên trong có gì
 python -m dire_zero dataset --root F:/du-lieu --license research-only   # kiểm, 0 đồng
-python -m dire_zero ingest  --root F:/du-lieu --out F:/dire-zero-norm --license research-only                             --splits train val test
+python -m dire_zero ingest  --root F:/du-lieu --license research-only \
+                            --splits train val test   # → ./data/dire-zero-norm (F: khi thiếu chỗ)
 ```
 
 `dataset` in bảng `split × generator` (đã gộp `stylegan_official` → `stylegan`),
