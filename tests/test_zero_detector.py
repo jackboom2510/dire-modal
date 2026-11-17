@@ -12,7 +12,13 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from dire_zero.detector import Bottleneck, ResNet, ResNetDetector  # noqa: E402
+from dire_zero.detector import (  # noqa: E402
+    AUTHOR_DETECTOR_PARAMS,
+    Bottleneck,
+    ResNet,
+    ResNetDetector,
+    load_dire_detector,
+)
 
 
 def test_param_count_is_resnet50_with_one_logit():
@@ -99,3 +105,59 @@ def test_it_can_learn():
     assert out["test"]["auc"] >= 0.8
     assert "acc_at_0.5" in out["test"]
     assert out["best_epoch"] >= 1
+
+
+# --------------------------------------------------------------------------- #
+# R0: nạp detector **của tác giả**
+# --------------------------------------------------------------------------- #
+
+def _author_state(model: ResNetDetector) -> dict:
+    """Đổi state của mình sang **torchvision naming** như file `.pth` của tác giả."""
+    table = model.backbone.imagenet_alias()
+    own, out = model.backbone.state_dict(), {}
+    for my_key, ref in table.items():
+        for suffix in ("weight", "bias", "running_mean", "running_var", "num_batches_tracked"):
+            if f"{my_key}.{suffix}" in own:
+                out[f"{ref}.{suffix}"] = own[f"{my_key}.{suffix}"]
+    out["fc.weight"] = own["fc.weight"]
+    out["fc.bias"] = own["fc.bias"]
+    return out
+
+
+def test_author_param_count_matches_the_real_file():
+    """File thật: 23.563.254 `numel`, trong đó 53.173 là buffer BN ⇒ 23.510.081 tham số."""
+    assert AUTHOR_DETECTOR_PARAMS == 23_510_081
+    assert 23_563_254 - AUTHOR_DETECTOR_PARAMS == 53_173     # 2×26.560 + 53 num_batches_tracked
+    assert ResNetDetector().n_params == AUTHOR_DETECTOR_PARAMS
+
+
+def test_load_dire_detector_roundtrip(tmp_path):
+    """`fc` **phải** được nạp: bỏ nó thì 23,5 M tham số đúng mà đầu ra vẫn ngẫu nhiên."""
+    src = ResNetDetector()
+    with torch.no_grad():
+        src.backbone.fc.weight.fill_(0.25)
+        src.backbone.fc.bias.fill_(-0.75)
+    path = tmp_path / "lsun_adm.pth"
+    torch.save(_author_state(src), path)
+
+    got = load_dire_detector(path)
+    assert torch.equal(got.backbone.fc.weight, src.backbone.fc.weight)
+    assert torch.equal(got.backbone.fc.bias, src.backbone.fc.bias)
+    assert got.n_params == AUTHOR_DETECTOR_PARAMS
+
+
+def test_load_dire_detector_rejects_imagenet_1000_classes(tmp_path):
+    state = _author_state(ResNetDetector())
+    state["fc.weight"] = torch.zeros(1000, 2048)
+    state["fc.bias"] = torch.zeros(1000)
+    path = tmp_path / "imagenet.pth"
+    torch.save(state, path)
+    with pytest.raises(ValueError, match="1000"):
+        load_dire_detector(path)
+
+
+def test_load_dire_detector_rejects_a_non_resnet_file(tmp_path):
+    path = tmp_path / "adm.pth"
+    torch.save({"input_blocks.0.0.weight": torch.zeros(3, 3, 3, 3)}, path)
+    with pytest.raises(KeyError, match="conv1.weight"):
+        load_dire_detector(path)

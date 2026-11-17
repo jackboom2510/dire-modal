@@ -17,7 +17,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
-__all__ = ["Bottleneck", "ResNet", "resnet50", "ResNetDetector"]
+__all__ = ["Bottleneck", "ResNet", "resnet50", "ResNetDetector", "load_dire_detector"]
 
 
 class Bottleneck(nn.Module):
@@ -109,6 +109,42 @@ class ResNet(nn.Module):
                 i += 1
         return alias
 
+    def load_authored(self, state: dict) -> None:
+        """Nạp detector **của tác giả** (torchvision naming, `fc` 1 logit).
+
+        Khác `load_imagenet`: bản ImageNet có 1000 lớp nên `fc` bị bỏ và giữ
+        khởi tạo ngẫu nhiên. Detector tác giả thì `fc` **chính là** đầu ra
+        thật/giả — bỏ nó đi là nạp 23,5 M tham số rồi vẫn đoán ngẫu nhiên, và
+        không có lỗi nào báo (mọi shape đều khớp).
+
+        `strict=True` ở cuối để lệch một tensor là nổ ngay tại đây.
+        """
+        table = self.imagenet_alias()
+        own = self.state_dict()
+        renamed: dict[str, "Tensor"] = {}
+        for my_key, ref_prefix in table.items():
+            for suffix in ("weight", "bias", "running_mean", "running_var", "num_batches_tracked"):
+                full, my_full = f"{ref_prefix}.{suffix}", f"{my_key}.{suffix}"
+                if full in state and my_full in own and state[full].shape == own[my_full].shape:
+                    renamed[my_full] = state[full]
+        fc_w = state.get("fc.weight")
+        if fc_w is None:
+            raise KeyError(
+                "checkpoint không có `fc.weight` — không phải detector của tác giả "
+                f"(có {len(state)} key, vd {sorted(state)[:3]})"
+            )
+        if tuple(fc_w.shape) != (1, own["fc.weight"].shape[1]):
+            raise ValueError(
+                f"`fc.weight` có shape {tuple(fc_w.shape)}, cần (1, {own['fc.weight'].shape[1]}). "
+                "Shape (1000, 2048) là ResNet-50 ImageNet, không phải detector DIRE."
+            )
+        for suffix in ("weight", "bias"):
+            full = f"fc.{suffix}"
+            if full in state:
+                renamed[f"fc.{suffix}"] = state[full]
+        own.update(renamed)
+        self.load_state_dict(own, strict=True)
+
     def load_imagenet(self, state: dict) -> list[str]:
         """Nạp trọng số ImageNet (bỏ `fc` vì 1000 lớp ≠ 1 logit). Trả key bị bỏ qua."""
         table = self.imagenet_alias()
@@ -124,6 +160,46 @@ class ResNet(nn.Module):
         own.update(renamed)          # thay tại chỗ: giữ nguyên fc và các buffer khác
         self.load_state_dict(own, strict=True)
         return skipped
+
+
+#: Tổng tham số của ResNet-50 với `fc` 1 logit — con số mà checkpoint tác giả có.
+AUTHOR_DETECTOR_PARAMS = 23_510_081
+
+
+def load_dire_detector(path: str) -> "ResNetDetector":
+    """Nạp detector tác giả từ `.pth` (chấm lại R0 — **không** dùng cho R2).
+
+    Vì sao cần cổng riêng thay vì `load_state_dict` trần: trên volume thật,
+    ``checkpoints/lsun_adm.pth`` (283 MB, 23,5 M tham số) trông y hệt một
+    checkpoint hợp lệ nhưng **không phải** trọng số ADM. Hàm này chỉ nhận đúng
+    kiến trúc ResNet-50-1-logit, sai là ném lỗi kèm lý do.
+    """
+    import torch  # noqa: PLC0415
+
+    raw = torch.load(str(path), map_location="cpu", weights_only=True)
+    for key in ("state_dict", "model", "net", "ema"):
+        if isinstance(raw, dict) and key in raw and isinstance(raw[key], dict):
+            raw = raw[key]
+            break
+    if not isinstance(raw, dict) or "conv1.weight" not in raw:
+        raise KeyError(f"{path}: không thấy `conv1.weight` — không phải detector ResNet")
+
+    # Chỉ đếm **tham số**, không đếm buffer BN: checkpoint thật có tổng `numel`
+    # 23.563.254, trong đó 53.173 là running_mean/var/num_batches_tracked.
+    n_params = sum(
+        int(v.numel()) for k, v in raw.items()
+        if hasattr(v, "numel") and not k.endswith(("running_mean", "running_var", "num_batches_tracked"))
+    )
+    if n_params != AUTHOR_DETECTOR_PARAMS:
+        hint = " (đúng cỡ ResNet-50 ImageNet 1000 lớp)" if 25_000_000 < n_params < 26_000_000 else ""
+        raise ValueError(
+            f"{path}: {n_params:,} tham số, cần {AUTHOR_DETECTOR_PARAMS:,} của detector DIRE{hint}"
+        )
+
+    det = ResNetDetector()
+    det.backbone.load_authored(raw)
+    det.eval()
+    return det
 
 
 def resnet50() -> ResNet:

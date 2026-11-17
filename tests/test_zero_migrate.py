@@ -43,7 +43,11 @@ def test_layout_is_one_volume_with_the_documented_subdirs():
     assert V.MOUNT == "/zero"
     for key, path in V.LAYOUT.items():
         assert path.startswith(V.MOUNT + "/"), (key, path)
-    assert V.CKPT.endswith("adm_lsun.pt")     # giữ tên file: 2,5 GB đã ở trên Volume
+    assert V.CKPT.endswith("adm_lsun.pt")     # giữ tên file: ADM đã ở trên Volume
+    # detector tác giả có chỗ riêng — không bao giờ trộn với ADM hay detector R2
+    assert V.CKPT_AUTHOR == f"{V.MOUNT}/ckpt/author"
+    assert V.RUNS_AUTHOR == f"{V.MOUNT}/runs/author"
+    assert V.CKPT_AUTHOR != str(Path(V.CKPT).parent)
 
 
 def test_layout_version_is_an_int_and_receipts_carry_it():
@@ -121,6 +125,14 @@ def test_copy_verified_streams_and_reports_both_hashes(tmp_path: Path):
 # Phát hiện checkpoint ở đường cũ
 # --------------------------------------------------------------------------- #
 
+def _sparse(path: Path, size: int) -> Path:
+    """File **thưa** đúng kích thước: test được ngưỡng 2,2 GB mà không ghi 2,2 GB."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as f:
+        f.truncate(size)
+    return path
+
+
 def _touch(path: Path, size: int = 10) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(b"z" * size)
@@ -160,6 +172,63 @@ def test_discover_ignores_staging_and_partial_files(tmp_path: Path):
     _touch(raw / "ckpt/adm_lsun.pt", 42)
     found = M.discover_ckpts({"dire-raw": str(raw)})
     assert [c.path for c in found] == [str(raw / "ckpt" / "adm_lsun.pt")]
+
+
+def test_a_detector_named_like_a_checkpoint_is_not_accepted_as_adm(tmp_path: Path):
+    """Ca thật trên volume: `checkpoints/lsun_adm.pth` chỉ 283 MB — đó là detector.
+
+    Nếu không có sàn kích thước, `apply` sẽ bê nó vào `ckpt/adm_lsun.pt`, biên lai
+    khai thành công, rồi `selfcheck` nổ `Missing key(s)` — hỏng **muộn** nhất có thể.
+    """
+    raw = tmp_path / "raw"
+    _sparse(raw / "checkpoints" / "lsun_adm.pth", 282_534_013)
+    _sparse(raw / "sources" / "256x256_diffusion_uncond.pt", 2_200_000_000)
+
+    adm, rejected = M.discover_adm({"dire-raw": str(raw)})
+    assert [Path(c.path).name for c in adm] == ["256x256_diffusion_uncond.pt"]
+    assert [Path(r["path"]).name for r in rejected] == ["lsun_adm.pth"]
+    assert "quá nhỏ" in rejected[0]["reason"]
+
+
+def test_classify_ckpt_size_is_the_only_place_that_decides():
+    assert M.classify_ckpt_size(282_534_013) == "author-detector"
+    assert M.classify_ckpt_size(2_200_000_000) == "adm"
+    assert M.classify_ckpt_size(42) == "too-small"
+    assert M.classify_ckpt_size(M.ADM_MIN_BYTES) == "adm"
+
+
+def test_discover_ignores_benchmark_copies(tmp_path: Path):
+    """`.bench/k1` trên volume thật là bản sao checkpoint để đo băng thông."""
+    raw = tmp_path / "raw"
+    _sparse(raw / ".bench" / "k1" / "checkpoints" / "lsun_adm.pth", 282_534_013)
+    _sparse(raw / ".state" / "x.pt", 2_200_000_000)
+    assert M.discover_adm({"dire-raw": str(raw)}) == ([], [])
+
+
+def test_author_detectors_go_to_their_own_directory(tmp_path: Path):
+    raw = tmp_path / "raw"
+    for name in ("lsun_adm", "lsun_pndm", "imagenet_adm", "celebahq_sdv2"):
+        _sparse(raw / "checkpoints" / f"{name}.pth", 282_534_013)
+    _touch(raw / "checkpoints" / "README.pth", 42)          # quá nhỏ ⇒ không phải
+
+    found = M.discover_author_detectors({"dire-raw": str(raw)})
+    assert [Path(c.path).stem for c in found] == ["celebahq_sdv2", "imagenet_adm", "lsun_adm", "lsun_pndm"]
+
+    plan = M.plan_author(found, tmp_path / "zero" / "ckpt" / "author")
+    assert plan.summary()["n_copy"] == 4
+    # tên file = tên generator ⇒ giữ nguyên, không đổi thành adm_lsun.pt
+    assert {Path(a.target).name for a in plan.to_copy} == {"lsun_adm.pth", "lsun_pndm.pth",
+                                                          "imagenet_adm.pth", "celebahq_sdv2.pth"}
+
+
+def test_plan_author_never_overwrites_with_a_different_size(tmp_path: Path):
+    d = tmp_path / "author"
+    _touch(d / "lsun_adm.pth", 300)
+    p = M.plan_author([M.Candidate("/raw/checkpoints/lsun_adm.pth", 200)], d)
+    assert p.conflicts and p.summary()["n_copy"] == 0
+
+    same = M.plan_author([M.Candidate("/raw/checkpoints/lsun_adm.pth", 300)], d)
+    assert same.summary()["n_skip"] == 1 and not same.conflicts
 
 
 def test_discover_on_missing_root_is_empty_not_an_exception(tmp_path: Path):
@@ -239,19 +308,19 @@ def test_receipt_roundtrip_and_verify(tmp_path: Path):
     copied = M.copy_verified(src, dst)
 
     M.write_receipt(root, {"layout_version": V.LAYOUT_VERSION, "copied": [copied]})
-    assert M.read_receipt(root)["layout_version"] == 1
+    assert M.read_receipt(root)["layout_version"] == V.LAYOUT_VERSION
 
     v = M.verify_receipt(root)
     assert v["ok"] is True and v["n_checked"] == 1 and v["n_bad"] == 0
     # biến kết quả từng dòng không được đè lên biên lai (đã từng đè ⇒ None)
-    assert v["layout_version"] == 1
+    assert v["layout_version"] == V.LAYOUT_VERSION
 
 
 def test_verify_reports_a_missing_or_tampered_target(tmp_path: Path):
     root = tmp_path / "zero"
     src = _touch(tmp_path / "old" / "a.pt", 64)
     copied = M.copy_verified(src, root / "ckpt" / "adm_lsun.pt")
-    M.write_receipt(root, {"layout_version": 1, "copied": [copied]})
+    M.write_receipt(root, {"layout_version": V.LAYOUT_VERSION, "copied": [copied]})
 
     (root / "ckpt" / "adm_lsun.pt").write_bytes(b"tampered")
     v = M.verify_receipt(root)
@@ -286,6 +355,7 @@ def test_apply_refuses_without_confirm():
     assert defaults.get("confirm") == "False"
     # bê dữ liệu phải là lựa chọn rõ ràng, không phải mặc định
     assert defaults.get("data") == "False"
+    assert defaults.get("author") == "True"      # detector tác giả: thuần bổ sung, cần cho R0
     # và thân hàm phải thực sự từ chối
     body = ast.unparse(fn)
     assert "confirm" in body and "RuntimeError" in body and "--confirm" in body

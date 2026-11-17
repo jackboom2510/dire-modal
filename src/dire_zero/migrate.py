@@ -17,7 +17,13 @@ Bốn luật của module này
 3. **Mặc định là ``plan``.** Muốn ghi thì phải gọi ``apply``; muốn ghi thật thì
    ``apply`` phải có ``confirm=True``. Cùng lý do như ``demo_train``: gõ thiếu
    một cờ không được phép tiêu tiền hay đổi dữ liệu.
-4. **Có biên lai.** Mỗi lần ``apply`` ghi ``_migration/receipt.json``: nguồn,
+4. **Không đoán theo tên.** Tên file không đủ để biết nó **là gì**: trên volume
+   thật, ``checkpoints/lsun_adm.pth`` là **detector của tác giả** (283 MB,
+   23,5 M tham số), không phải trọng số ADM (~2,2 GB, 552,8 M tham số). Cùng
+   tên, khác hẳn thứ. Vì vậy ADM phải qua **sàn kích thước**, còn detector tác
+   giả đi đường riêng sang ``ckpt/author/`` — không bao giờ vào
+   ``ckpt/adm_lsun.pt``.
+5. **Có biên lai.** Mỗi lần ``apply`` ghi ``_migration/receipt.json``: nguồn,
    đích, size, sha256 hai đầu, thời điểm, phiên bản bố cục. Không có biên lai thì
    lần chạy sau không biết cái gì đã chuyển.
 
@@ -32,6 +38,7 @@ Lệnh::
 
     modal run -m dire_zero.migrate::survey      # cũ có gì, đang ở đâu (0 ghi)
     modal run -m dire_zero.migrate::plan        # sẽ chuyển gì, bao nhiêu GB (0 ghi)
+    modal run -m dire_zero.migrate::apply --confirm          # ADM + detector tác giả
     modal run -m dire_zero.migrate::apply --confirm
     modal run -m dire_zero.migrate::verify      # đối chiếu biên lai với Volume
 """
@@ -72,11 +79,27 @@ VOLUMES = {
 #: đường dẫn — vì chính đường dẫn là thứ đang sai.
 CKPT_NAMES = ("adm_lsun.pt", "lsun_adm.pth", "256x256_diffusion_uncond.pt")
 
+#: Trọng số ADM 256² vô điều kiện: 552,8 M tham số × 4 B ≈ **2,2 GB**. Sàn này
+#: không phải "cho chắc": trên volume thật có sẵn file *tên là* `lsun_adm.pth`
+#: nhưng chỉ 282.534.013 B — đó là detector ResNet-50 của tác giả. Không có sàn,
+#: migration sẽ bê nhầm nó vào `ckpt/adm_lsun.pt` và `selfcheck` nổ sau đó, khi
+#: biên lai đã khai thành công.
+ADM_MIN_BYTES = 1_500_000_000
+
+#: Detector tác giả: 23,5 M tham số + trạng thái optimizer ⇒ ~283 MB. Khoảng này
+#: đủ rộng cho cả `.pth` chỉ có trọng số, và đủ hẹp để không nuốt phải ADM.
+AUTHOR_DETECTOR_MIN = 100 * 1024**2
+AUTHOR_DETECTOR_MAX = 400 * 1024**2
+
 #: Đuôi file không bao giờ chuyển: rác của quá trình tải/giải nén.
 SKIP_SUFFIXES = (".downloading", ".part", ".tmp", ".partial")
 
 #: Thư mục không chuyển: staging tạm và file bị giữ lại để kiểm tay.
-SKIP_DIRS = (".staging", "_held", "__pycache__", ".ipynb_checkpoints")
+SKIP_DIRS = (
+    ".staging", "_held", "__pycache__", ".ipynb_checkpoints",
+    ".bench",      # bản sao checkpoint để đo băng thông — không phải dữ liệu
+    ".state",      # sổ trạng thái của công cụ tải
+)
 
 CHUNK = 4 * 1024 * 1024
 
@@ -156,7 +179,20 @@ def is_skipped(path: str | Path) -> str:
     return ""
 
 
-def discover_ckpts(roots: dict[str, str] | None = None) -> list[Candidate]:
+def classify_ckpt_size(size: int) -> str:
+    """``adm`` | ``author-dector`` | ``too-small`` — thuần số, test không cần file lớn.
+
+    Đây là chỗ duy nhất quyết định "283 MB là cái gì". Tách khỏi `discover` để
+    kiểm được bằng vài con số thay vì tạo file 2 GB trong test.
+    """
+    if size >= ADM_MIN_BYTES:
+        return "adm"
+    if AUTHOR_DETECTOR_MIN <= size <= AUTHOR_DETECTOR_MAX:
+        return "author-detector"
+    return "too-small"
+
+
+def discover_ckpts(roots: dict[str, str] | None = None, min_bytes: int = 0) -> list[Candidate]:
     """Tìm mọi checkpoint ứng viên trong các volume cũ (chỉ ``stat``, không băm).
 
     So khớp **theo tên file**, không theo đường dẫn: đây chính là điểm mà bố cục
@@ -172,9 +208,68 @@ def discover_ckpts(roots: dict[str, str] | None = None) -> list[Candidate]:
             for p in sorted(base.rglob(name)):
                 if not p.is_file() or is_skipped(p):
                     continue
-                out.append(Candidate(path=str(p), size=p.stat().st_size))
+                size = p.stat().st_size
+                if size < min_bytes:
+                    continue
+                out.append(Candidate(path=str(p), size=size))
     out.sort(key=lambda c: (-c.size, c.path))
     return out
+
+
+def discover_adm(roots: dict[str, str] | None = None) -> tuple[list[Candidate], list[dict]]:
+    """ADM thật (qua **sàn** kích thước) + danh sách file cùng tên bị loại vì quá nhỏ."""
+    roots = roots or V.OLD_VOLUMES
+    found = discover_ckpts(roots)
+    adm = [c for c in found if classify_ckpt_size(c.size) == "adm"]
+    rejected = [
+        {"path": c.path, "size": c.size,
+         "reason": "quá nhỏ so với ADM 2,2 GB — nhiều khả năng là detector tác giả"}
+        for c in found if classify_ckpt_size(c.size) != "adm"
+    ]
+    return adm, rejected
+
+
+def discover_author_detectors(roots: dict[str, str] | None = None) -> list[Candidate]:
+    """Detector của tác giả: ``<volume cũ>/checkpoints/*.pth`` trong khoảng 100–400 MB.
+
+    Không khớp theo danh sách tên cố định: cây thật có sáu generator
+    (``lsun_adm``, ``lsun_iddpm``, ``lsun_pndm``, ``lsun_stylegan``,
+    ``imagenet_adm``, ``celebahq_sdv2``) và danh sách đó có thể còn dài thêm.
+    Khoảng kích thước + vị trí ``checkpoints/`` là hai dấu hiệu đủ chắc.
+    """
+    roots = roots or V.OLD_VOLUMES
+    out: list[Candidate] = []
+    for _label, root in roots.items():
+        base = Path(root) / "checkpoints"
+        if not base.is_dir():
+            continue
+        for p in sorted(base.rglob("*.pth")):
+            if not p.is_file() or is_skipped(p):
+                continue
+            size = p.stat().st_size
+            if AUTHOR_DETECTOR_MIN <= size <= AUTHOR_DETECTOR_MAX:
+                out.append(Candidate(path=str(p), size=size))
+    out.sort(key=lambda c: c.path)
+    return out
+
+
+def plan_author(cands: list[Candidate], target_dir: str | Path) -> Plan:
+    """Mỗi detector tác giả → ``ckpt/author/<tên gốc>``. Giữ tên: tên = generator."""
+    target_dir = Path(target_dir)
+    plan = Plan()
+    for c in cands:
+        dst = target_dir / Path(c.path).name
+        if not dst.exists():
+            plan.actions.append(Action(kind="copy", source=c.path, target=str(dst),
+                                       size=c.size, reason="chưa có ở đích"))
+        elif dst.stat().st_size == c.size:
+            plan.actions.append(Action(kind="skip", source=c.path, target=str(dst),
+                                       size=c.size, reason="đã có, cùng kích thước"))
+        else:
+            plan.actions.append(Action(kind="conflict", source=c.path, target=str(dst),
+                                       size=c.size,
+                                       reason="đích có nhưng khác kích thước — không ghi đè"))
+    return plan
 
 
 def plan_copy(candidates: list[Candidate], target: str | Path, target_exists: bool) -> Plan:
@@ -360,11 +455,16 @@ def survey() -> dict:
     """Volume cũ đang có gì, checkpoint nằm ở đâu. **Không ghi gì.**"""
     old = {label: _tree_summary(Path(root)) for label, root in V.OLD_VOLUMES.items()}
     cands = discover_ckpts()
+    adm, rejected = discover_adm()
+    authors = discover_author_detectors()
     new = _tree_summary(Path(V.MOUNT))
     out = {
         "new_volume": {"name": V.VOLUME_NAME, "mount": V.MOUNT, "layout_version": V.LAYOUT_VERSION},
         "old": old,
         "ckpt_candidates": [asdict(c) for c in cands],
+        "adm_candidates": [asdict(c) for c in adm],
+        "adm_rejected_by_size": rejected,
+        "author_detectors": [asdict(c) for c in authors],
         "new": new,
         "layout": V.LAYOUT,
         "warnings": [],
@@ -373,6 +473,18 @@ def survey() -> dict:
         out["warnings"].append(
             "không thấy checkpoint nào trong volume cũ. Nếu bạn biết nó ở đường khác, "
             "thêm tên file vào CKPT_NAMES rồi chạy lại survey."
+        )
+    if rejected:
+        out["warnings"].append(
+            f"{len(rejected)} file *tên giống* checkpoint nhưng chỉ ≤ "
+            f"{AUTHOR_DETECTOR_MAX // 1024**2} MB ⇒ không phải ADM (2,2 GB). "
+            "Rất có thể là detector tác giả; chúng đi sang ckpt/author/, không vào ckpt/adm_lsun.pt."
+        )
+    if not adm:
+        out["warnings"].append(
+            "KHÔNG có ứng viên ADM nào đủ lớn (≥ 1,5 GB). Migration không thể tạo ra "
+            "trọng số từ chỗ không có: cần đẩy 256x256_diffusion_uncond.pt (~2,2 GB) "
+            "lên bằng `modal volume put`."
         )
     if len(cands) > 1:
         out["warnings"].append(
@@ -386,9 +498,12 @@ def survey() -> dict:
 @app.function(volumes=VOLUMES, cpu=2, timeout=1800)
 def plan() -> dict:
     """Kế hoạch chuyển: copy gì, bỏ gì, xung đột gì. **Không ghi gì.**"""
-    cands = discover_ckpts()
+    adm, rejected = discover_adm()
     target = V.CKPT
-    p = plan_copy(cands, target, Path(target).exists())
+    p = plan_copy(adm, target, Path(target).exists())
+
+    authors = discover_author_detectors()
+    author_plan = plan_author(authors, V.CKPT_AUTHOR)
 
     # Dữ liệu cũ có thể nằm ở /raw/zero/{data,maps,gen} (đường clean-room) hoặc
     # ngay /raw/{data,maps}. Chọn **cái có thật**, không đoán.
@@ -402,9 +517,16 @@ def plan() -> dict:
     out = {
         "ckpt": {
             "target": target,
-            "candidates": [asdict(c) for c in cands],
+            "candidates": [asdict(c) for c in adm],
+            "rejected_by_size": rejected,
             "actions": [asdict(a) for a in p.actions],
             **p.summary(),
+        },
+        "author": {
+            "target_dir": V.CKPT_AUTHOR,
+            "n_candidates": len(authors),
+            "actions": [asdict(a) for a in author_plan.actions],
+            **author_plan.summary(),
         },
         "data": {
             "source_root": str(data_root) if data_root else "",
@@ -421,7 +543,7 @@ def plan() -> dict:
 
 
 @app.function(volumes=VOLUMES, cpu=2, timeout=12 * 3600)
-def apply(confirm: bool = False, data: bool = False) -> dict:
+def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dict:
     """Thực hiện chuyển. **Chỉ ghi vào volume mới**, không xoá gì ở volume cũ.
 
     ``data=False`` là mặc định có chủ ý: người ta gọi migration để **bê checkpoint
@@ -438,8 +560,8 @@ def apply(confirm: bool = False, data: bool = False) -> dict:
     skipped: list[dict] = []
     conflicts: list[dict] = []
 
-    cands = discover_ckpts()
-    p = plan_copy(cands, V.CKPT, Path(V.CKPT).exists())
+    adm, rejected = discover_adm()
+    p = plan_copy(adm, V.CKPT, Path(V.CKPT).exists())
     for a in p.actions:
         if a.kind == "copy":
             copied.append(copy_verified(a.source, a.target, a.sha256_source))
@@ -447,6 +569,26 @@ def apply(confirm: bool = False, data: bool = False) -> dict:
             conflicts.append(asdict(a))
         else:
             skipped.append(asdict(a))
+
+    # Detector tác giả + số `repro_*` của họ: đây là đường R0 (chấm lại trên map
+    # có sẵn, 0 đồng GPU). Mặc định bật vì thuần bổ sung, không ghi đè gì.
+    author_copied: list[dict] = []
+    if author:
+        ap = plan_author(discover_author_detectors(), V.CKPT_AUTHOR)
+        for a in ap.actions:
+            if a.kind == "copy":
+                author_copied.append(copy_verified(a.source, a.target))
+            elif a.kind == "conflict":
+                conflicts.append(asdict(a))
+            else:
+                skipped.append(asdict(a))
+        results_root = Path("/ckpt/results")
+        if results_root.is_dir():
+            for src in sorted(results_root.rglob("*")):
+                if src.is_file() and not is_skipped(src):
+                    dst = Path(V.RUNS_AUTHOR) / src.relative_to(results_root)
+                    if not dst.exists():
+                        author_copied.append(copy_verified(src, dst))
 
     if data:
         for old_zero in (Path("/raw/zero"), Path("/raw")):
@@ -466,11 +608,13 @@ def apply(confirm: bool = False, data: bool = False) -> dict:
         "source_volumes": V.OLD_VOLUMES,
         "target_volume": V.VOLUME_NAME,
         "copied": copied,
+        "copied_author": author_copied,
+        "adm_rejected_by_size": rejected,
         "skipped": skipped[:500],
         "n_skipped": len(skipped),
         "conflicts": conflicts[:500],
         "n_conflicts": len(conflicts),
-        "bytes_copied": sum(c["bytes"] for c in copied),
+        "bytes_copied": sum(c["bytes"] for c in copied + author_copied),
         "deleted_anything": False,
     }
     write_receipt(V.MOUNT, payload)

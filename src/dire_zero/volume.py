@@ -19,14 +19,16 @@ Không đường nào sai về mặt cú pháp, nên không có lỗi nào báo.
 Bố cục mới, một volume, một gốc::
 
     dire-zero  →  /zero
-    ├── ckpt/adm_lsun.pt          ADM 256 LSUN-Bedroom (2,5 GB, đẩy tay)
+    ├── ckpt/adm_lsun.pt          ADM 256 LSUN-Bedroom (~2,2 GB, đẩy tay)
     ├── ckpt/detector.pth         detector R2 của mình
+    ├── ckpt/author/*.pth         detector của **tác giả** — chỉ để chấm lại R0
     ├── data/<split>/<gen>/*.png  kết quả `ingest`
     ├── data/manifest.tsv
     ├── data/data_card.json
     ├── maps/<split>/<gen>/*.npy  DIRE map
     ├── gen/<split>/<gen>/*.png   R3: ảnh tự sinh
     ├── runs/*.json               gen/dire/train/eval/bench/report
+    ├── runs/author/*.json        số của tác giả (`results/repro_*`) để đối chiếu R0
     └── _migration/receipt.json   biên lai: cái gì đã chuyển từ đâu, sha nào
 
 Vì sao **một** volume thay vì hai (`dire-raw` + `dire-ckpt`)
@@ -51,12 +53,14 @@ __all__ = [
     "LAYOUT_VERSION",
     "CKPT",
     "DETECTOR",
+    "CKPT_AUTHOR",
     "DATA",
     "MANIFEST",
     "DATA_CARD",
     "MAPS",
     "GEN",
     "RUNS",
+    "RUNS_AUTHOR",
     "MIGRATION",
     "OLD_VOLUMES",
     "LAYOUT",
@@ -69,17 +73,25 @@ MOUNT = "/zero"
 
 #: Tăng số này khi bố cục đổi theo cách **không** tương thích. Biên lai migration
 #: ghi lại số này, nên đọc biên lai là biết dữ liệu được xếp theo bố cục nào.
-LAYOUT_VERSION = 1
+LAYOUT_VERSION = 2
+
+#: Vì sao 2: thêm `ckpt/author/` và `runs/author/`. Không đổi chỗ cũ nào, nhưng
+#: biên lai phải nói được "dữ liệu này đã có chỗ cho detector tác giả hay chưa".
 
 # ---- đường dẫn tuyệt đối trong container ---------------------------------- #
 CKPT = f"{MOUNT}/ckpt/adm_lsun.pt"
 DETECTOR = f"{MOUNT}/ckpt/detector.pth"
+#: Detector của **tác giả** (ResNet-50, 23,5 M tham số, ~283 MB/file). Chỉ dùng để
+#: chấm lại (R0) trên map có sẵn — không bao giờ dùng làm detector R2.
+CKPT_AUTHOR = f"{MOUNT}/ckpt/author"
 DATA = f"{MOUNT}/data"                        # <split>/<generator>/*.png
 MANIFEST = f"{DATA}/manifest.tsv"
 DATA_CARD = f"{DATA}/data_card.json"
 MAPS = f"{MOUNT}/maps"                        # <split>/<generator>/*.npy
 GEN = f"{MOUNT}/gen"                          # R3: ảnh mình sinh
 RUNS = f"{MOUNT}/runs"                        # *.json của từng bước
+#: Số của tác giả (`results/repro_*` trên volume cũ) — đích để đối chiếu R0.
+RUNS_AUTHOR = f"{MOUNT}/runs/author"
 MIGRATION = f"{MOUNT}/_migration"             # biên lai + log
 
 #: Volume cũ và điểm mount của chúng — **chỉ đọc** trong quá trình migration.
@@ -92,12 +104,14 @@ OLD_VOLUMES = {
 LAYOUT: dict[str, str] = {
     "ckpt": CKPT,
     "detector": DETECTOR,
+    "author_ckpt": CKPT_AUTHOR,
     "data": DATA,
     "manifest": MANIFEST,
     "data_card": DATA_CARD,
     "maps": MAPS,
     "gen": GEN,
     "runs": RUNS,
+    "author_runs": RUNS_AUTHOR,
     "migration": MIGRATION,
 }
 
@@ -110,11 +124,13 @@ def targets(root: str | Path = MOUNT) -> dict[str, str]:
     return {
         "ckpt": f"{base}/ckpt/adm_lsun.pt",
         "detector": f"{base}/ckpt/detector.pth",
+        "author_ckpt": f"{base}/ckpt/author",
         "data": f"{base}/data",
         "manifest": f"{base}/data/manifest.tsv",
         "data_card": f"{base}/data/data_card.json",
         "maps": f"{base}/maps",
         "gen": f"{base}/gen",
         "runs": f"{base}/runs",
+        "author_runs": f"{base}/runs/author",
         "migration": f"{base}/_migration",
     }
