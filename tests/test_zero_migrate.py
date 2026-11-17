@@ -256,9 +256,24 @@ def test_plan_refuses_to_overwrite_an_existing_target(tmp_path: Path):
     assert p.conflicts and "KHÔNG ghi đè" in p.conflicts[0].reason
 
 
-def test_plan_with_no_candidate_is_a_conflict_with_an_explanation():
+def test_missing_source_is_not_a_conflict_when_the_target_exists():
+    """Ca thật, đã xảy ra: ADM đã ở đích, volume cũ không có bản nào.
+
+    `apply` từng ném `1 xung đột — không ghi đè ... kiểm tay rồi quyết định`,
+    trong khi sự thật là *không có gì để chép*. Một thông báo sai làm người dùng
+    đi tìm một cuộc đụng độ không tồn tại.
+    """
+    p = M.plan_copy([], "/zero/ckpt/adm_lsun.pt", target_exists=True)
+    assert not p.conflicts
+    assert p.summary()["n_skip"] == 1 and p.summary()["n_missing"] == 0
+    assert "verify" in p.actions[0].reason and "selfcheck" in p.actions[0].reason
+
+
+def test_missing_source_without_target_asks_for_an_upload():
     p = M.plan_copy([], "/zero/ckpt/adm_lsun.pt", target_exists=False)
-    assert p.conflicts and "không tìm thấy" in p.conflicts[0].reason
+    assert not p.conflicts, "thiếu nguồn không phải xung đột"
+    assert p.summary()["n_missing"] == 1
+    assert "modal volume put" in p.missing[0].reason
 
 
 def test_plan_data_maps_the_tree_and_reports_junk(tmp_path: Path):
