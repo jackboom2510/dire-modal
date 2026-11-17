@@ -22,6 +22,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from dire_zero.checkpoint import check_bijection, iter_name_pairs, map_state_dict  # noqa: E402
+from dire_zero.blocks import time_embedding  # noqa: E402
 from dire_zero.unet import ADM_LSUN, UNetConfig, ZeroUNet  # noqa: E402
 
 FIXTURE = json.loads(
@@ -92,6 +93,40 @@ def test_tiny_model_roundtrip_shape_and_no_nan():
         out = model(torch.randn(2, 3, 32, 32), torch.tensor([0, 950]))
     assert out.shape == (2, 6, 32, 32)
     assert torch.isfinite(out).all()
+
+
+def test_time_embedding_is_float32_and_time_mlp_takes_half():
+    """Nhúng sin/cos **phải** ở float32: ở fp16, `f_i·t` với t tới 1000 mất ~3 chữ số.
+
+    Nhưng đầu ra float32 đó không được đi thẳng vào `time_mlp` fp16 — đó chính là
+    lỗi `mat1 and mat2 must have the same dtype` gặp trên Modal.
+    """
+    model = ZeroUNet(TINY).half()
+    e = time_embedding(torch.tensor([0, 950]), TINY.model_channels)
+    assert e.dtype == torch.float32
+    assert model.time_mlp(e.to(torch.float16)).dtype == torch.float16
+
+
+def test_forward_in_half_matches_dtype_of_input():
+    """Đường fp16 — đường duy nhất chạy trên GPU (`dtype="auto"`), và là đường
+    mà mọi test CPU float32 không chạm tới.
+
+    Lỗi thật, nguyên văn từ Modal::
+
+        RuntimeError: mat1 and mat2 must have the same dtype, but got Float and Half
+    """
+    model = ZeroUNet(TINY).eval().half()
+    x = torch.randn(1, 3, 32, 32)              # cố tình float32, như `selfcheck`
+    try:
+        with torch.inference_mode():
+            out = model(x, torch.tensor([10]))
+    except RuntimeError as exc:
+        # Chỉ bỏ qua khi *phép toán* fp16 không có trên CPU; lỗi dtype thì phải nổ.
+        if "not implemented for 'Half'" in str(exc) or "Could not run" in str(exc):
+            pytest.skip(f"CPU này không chạy conv fp16: {exc}")
+        raise
+    assert out.dtype == torch.float32           # trả về dtype của đầu vào, không phải của trọng số
+    assert torch.isfinite(out.float()).all()
 
 
 def test_resblock_downsample_is_parameterless():
