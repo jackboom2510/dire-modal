@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Các họ mô hình sinh — lý thuyết cơ sở, và vì sao DIRE cần khuếch tán</title>
+<style>
+  :root{
+    --ink:#17262d; --muted:#5c6f7a; --line:#dbe3e7; --bg:#f6f7f4; --paper:#ffffff;
+    --accent:#0f4c5c; --accent2:#17697a; --accent-soft:#eaf2f4;
+    --amber:#8a5a06; --amber-bg:#fdf5e5; --amber-line:#e6c98c;
+    --red:#7d2530; --red-bg:#fbeeef; --red-line:#e3b6bb;
+    --green:#1c6b4a; --green-bg:#edf6f1; --green-line:#b6d8c6;
+    --violet:#4a3a72; --violet-bg:#f2eefb; --violet-line:#cdc2e8;
+    --code:#8a3a1e;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,"Times New Roman",serif;
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--serif); font-size:16.5px; line-height:1.66;
+    display:grid; grid-template-columns:270px minmax(0,1fr);
+    -webkit-font-smoothing:antialiased;
+  }
+  html{scroll-behavior:smooth}
+
+  /* ---------------- sidebar ---------------- */
+  aside#side{
+    position:sticky; top:0; height:100vh; overflow-y:auto; background:#10333d;
+    padding:22px 0 26px; border-right:1px solid #0b252c; color:#cfe0e4;
+    display:flex; flex-direction:column;
+  }
+  .brand{padding:0 20px 16px; border-bottom:1px solid rgba(255,255,255,.10)}
+  .brand .k{font:600 10px/1.4 var(--sans); letter-spacing:.2em; text-transform:uppercase; color:#7fb3bf; margin:0 0 8px}
+  .brand h1{font-family:var(--serif); font-size:18px; line-height:1.3; margin:0 0 7px; color:#fff; font-weight:600}
+  .brand .meta{font:11.5px/1.55 var(--sans); color:#8fb2bb; margin:0}
+  nav#toc{padding:14px 10px 6px; flex:1}
+  nav#toc a{display:flex; gap:9px; align-items:baseline; text-decoration:none;
+    color:#bcd3d9; font:12.5px/1.35 var(--sans); padding:5px 8px; border-radius:5px;
+    border-left:2px solid transparent}
+  nav#toc a:hover{background:rgba(255,255,255,.07); color:#fff}
+  nav#toc a.on{background:rgba(255,255,255,.11); color:#fff; border-left-color:#4fb3c6}
+  nav#toc a .tn{font:10.5px/1 var(--mono); color:#7fa9b4; min-width:14px; text-align:right}
+  nav#toc a.on .tn{color:#8fd3e0}
+  .side-foot{padding:10px 20px 0; border-top:1px solid rgba(255,255,255,.10);
+    font:11px/1.6 var(--sans); color:#82a7b0}
+  .side-foot kbd{font:10px/1 var(--mono); background:rgba(255,255,255,.12);
+    border:1px solid rgba(255,255,255,.16); border-radius:4px; padding:2px 4px; color:#dcebed}
+
+  /* ---------------- top bar ---------------- */
+  header#bar{position:sticky; top:0; z-index:40; background:rgba(246,247,244,.95);
+    backdrop-filter:blur(8px); border-bottom:1px solid var(--line)}
+  .bar-in{max-width:1040px; margin:0 auto; padding:9px 34px 8px; display:flex; gap:14px; align-items:center}
+  .bar-t{font:600 12px/1.4 var(--sans); color:var(--muted); flex:1; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis}
+  .bar-t b{color:var(--accent)}
+  .toggle{display:flex; gap:6px; align-items:center; font:11.5px/1 var(--sans); color:var(--muted); cursor:pointer}
+  .toggle input{accent-color:var(--accent); width:13px; height:13px; margin:0}
+  .prog{height:2.5px; background:#e3e9ec}
+  .prog i{display:block; height:100%; width:0; background:linear-gradient(90deg,#0f4c5c,#2f93a6)}
+
+  /* ---------------- content ---------------- */
+  main{min-width:0}
+  .wrap{max-width:1040px; margin:0 auto; padding:40px 34px 120px}
+  .kicker{font:600 10.5px/1.4 var(--sans); letter-spacing:.17em; text-transform:uppercase;
+    color:#8195a0; margin:0 0 10px}
+  .kicker .sep{color:#c2ced4; margin:0 7px}
+  h1.title{font-size:33px; line-height:1.18; margin:0 0 12px; color:var(--accent);
+    font-weight:700; letter-spacing:-.01em}
+  .lede{font-size:17.5px; color:#3f535c; margin:0 0 20px; max-width:76ch; font-style:italic}
+  .chips{display:flex; flex-wrap:wrap; gap:7px; margin:0 0 30px}
+  .chip{font:10.5px/1 var(--sans); letter-spacing:.05em; text-transform:uppercase; color:#4a626c;
+    background:#fff; border:1px solid var(--line); border-radius:999px; padding:5px 9px}
+  .chip.a{color:#0f4c5c; border-color:#b9d2d8; background:#f2f8f9}
+
+  section{margin:0 0 46px; scroll-margin-top:64px}
+  section > h2{font-size:24px; line-height:1.25; color:var(--accent); margin:0 0 6px; font-weight:700;
+    letter-spacing:-.005em; display:flex; gap:12px; align-items:baseline}
+  section > h2 .num{font:600 12px/1 var(--mono); color:#9fb2ba; letter-spacing:0; flex:0 0 auto}
+  section > .sub{color:#6b8089; font-size:15px; margin:0 0 20px; max-width:74ch}
+  section h3{font:600 12px/1.4 var(--sans); letter-spacing:.09em; text-transform:uppercase;
+    color:#6d8390; margin:26px 0 10px}
+  p{margin:0 0 13px}
+  strong{color:#0d3542}
+  em{color:#41565f}
+  ul,ol{margin:0 0 14px; padding-left:22px}
+  li{margin:0 0 7px}
+  code{font-family:var(--mono); font-size:.86em; color:var(--code); background:#f7f0ec;
+    padding:1px 5px; border-radius:3px}
+  a.ref{color:var(--accent2); text-decoration:none; border-bottom:1px solid #c7dde2}
+
+  /* boxes */
+  .box{border-radius:8px; padding:14px 17px; margin:0 0 16px; border:1px solid var(--line);
+    background:var(--paper); border-left:3px solid var(--accent)}
+  .box > .t{font:600 10px/1 var(--sans); letter-spacing:.14em; text-transform:uppercase;
+    margin:0 0 9px; display:flex; align-items:center; gap:7px; color:var(--accent)}
+  .box p:last-child,.box ul:last-child,.box ol:last-child{margin-bottom:0}
+  .box.theory{background:#f4f9fa; border-color:#d5e6ea; border-left-color:#2f93a6}
+  .box.theory > .t{color:#17697a}
+  .box.gap{background:var(--amber-bg); border-color:var(--amber-line); border-left-color:#c99a3e}
+  .box.gap > .t{color:var(--amber)}
+  .box.limit{background:var(--red-bg); border-color:var(--red-line); border-left-color:#a94a55}
+  .box.limit > .t{color:var(--red)}
+  .box.insight{background:var(--green-bg); border-color:var(--green-line); border-left-color:#2f8a63}
+  .box.insight > .t{color:var(--green)}
+  .box.mine{background:var(--violet-bg); border-color:var(--violet-line); border-left-color:#6b57a8}
+  .box.mine > .t{color:var(--violet)}
+  .box .tag{font:600 9px/1 var(--sans); letter-spacing:.1em; text-transform:uppercase;
+    padding:3px 6px; border-radius:3px; background:rgba(0,0,0,.05); color:inherit}
+
+  /* equations */
+  .eq{display:grid; grid-template-columns:1fr auto; gap:14px; align-items:center;
+    background:#f4f8f9; border:1px solid #e0eaed; border-left:3px solid #a9c6ce;
+    border-radius:6px; padding:13px 16px; margin:0 0 15px; overflow-x:auto}
+  .eq math{font-size:1.06em}
+  .eq .no{font:11px/1 var(--mono); color:#7b939d; white-space:nowrap}
+  .eq .cap{grid-column:1/-1; font:11.5px/1.55 var(--sans); color:#6f858f}
+  .eq .cap b{color:#3f5c66; font-weight:600}
+  math{font-family:"Latin Modern Math","STIX Two Math","Cambria Math",math,serif}
+
+  /* tables */
+  .tablewrap{overflow-x:auto; margin:0 0 14px; border:1px solid var(--line); border-radius:8px; background:#fff}
+  table.data{width:100%; border-collapse:collapse; font-size:13px; font-variant-numeric:tabular-nums}
+  table.data caption{caption-side:top; text-align:left; padding:11px 13px 9px;
+    font:600 11px/1.5 var(--sans); color:#546c77}
+  table.data th{background:#0f4c5c; color:#fff; text-align:left; padding:8px 10px;
+    font:600 11px/1.35 var(--sans); vertical-align:bottom}
+  table.data th.c,table.data td.c{text-align:center}
+  table.data td{padding:7px 10px; border-bottom:1px solid #e8eef0; vertical-align:top}
+  table.data tr:last-child td{border-bottom:0}
+  table.data td.n{font-family:var(--mono); font-size:12px; color:var(--code); white-space:nowrap}
+  table.data td.name{font-family:var(--sans); font-size:12.5px; font-weight:600; white-space:nowrap}
+  table.data tr.hl td{background:#eaf6f0; box-shadow:inset 3px 0 0 #2f8a63}
+  table.data tr.dim td{opacity:.42}
+  table.data td.mono-s{font-family:var(--mono); font-size:11.5px; white-space:nowrap}
+  .tnote{font:11.5px/1.55 var(--sans); color:#7b8f99; margin:-4px 0 18px}
+
+  /* family cards */
+  .cards{display:grid; grid-template-columns:repeat(auto-fit,minmax(168px,1fr)); gap:10px; margin:0 0 18px}
+  button.fam{text-align:left; background:#fff; border:1px solid var(--line); border-radius:8px;
+    padding:11px 12px; cursor:pointer; font-family:var(--sans); color:var(--ink); position:relative}
+  button.fam:hover{border-color:#a9c6ce; background:#f9fcfc}
+  button.fam[aria-pressed=true]{border-color:#2f8a63; background:#effaf4; box-shadow:0 0 0 1px #2f8a63 inset}
+  button.fam .fn{display:block; font-size:13px; font-weight:700; margin-bottom:3px; color:#123b4a}
+  button.fam .fd{display:block; font-size:11px; line-height:1.4; color:#6f858f}
+  button.fam .badge{position:absolute; top:9px; right:9px; font:600 9px/1 var(--sans);
+    padding:3px 5px; border-radius:3px; background:#eef3f5; color:#5c6f7a}
+  button.fam .badge.in{background:#e3f3ea; color:#1c6b4a}
+
+  .fig{margin:0 0 18px; background:#fff; border:1px solid var(--line); border-radius:9px; padding:14px 14px 10px}
+  .fig svg{display:block; width:100%; height:auto}
+  .fig figcaption{font:11.5px/1.55 var(--sans); color:#6f858f; margin-top:9px;
+    border-top:1px solid #eef2f4; padding-top:8px}
+  .fig figcaption b{color:#3f5c66}
+  .fig .fignum{font:600 10px/1 var(--sans); letter-spacing:.13em; text-transform:uppercase;
+    color:var(--accent); margin-right:6px}
+  g.famg{cursor:pointer}
+  g.famg:hover circle.core{stroke-width:3.4}
+  g.famg.sel circle.core{stroke:#2f8a63; stroke-width:3.6}
+
+  .kw{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px}
+  .kw span{font:11.5px/1 var(--sans); background:#fff; border:1px solid var(--line);
+    border-radius:5px; padding:6px 9px; color:#4a626c}
+  .kw span b{color:var(--accent); font-family:var(--mono); font-weight:600}
+  body.no-eq .eq{display:none}
+  .hint{display:none}
+  @media (max-width:1000px){ .hint{display:block!important} }
+  .endnote{font:11.5px/1.7 var(--sans); color:#8ba0aa; border-top:1px solid var(--line);
+    padding-top:16px; margin-top:10px}
+
+  @media (max-width:1000px){
+    body{grid-template-columns:1fr}
+    aside#side{position:static; height:auto; padding-bottom:8px}
+    nav#toc{display:none}
+    aside#side.open nav#toc{display:block; max-height:62vh; overflow:auto}
+    .brand{cursor:pointer; border-bottom:0; padding-bottom:6px}
+    .bar-in{padding:8px 18px}
+    .wrap{padding:26px 18px 90px}
+    h1.title{font-size:26px}
+    section > h2{font-size:20px}
+  }
+  @media print{
+    body{display:block; background:#fff; font-size:10.5pt}
+    aside#side,header#bar{display:none!important}
+    .wrap{max-width:none; padding:0}
+    section{break-inside:avoid-page}
+    .tablewrap{overflow:visible}
+    .box{break-inside:avoid}
+  }
+</style>
+<noscript><style>nav#toc{display:block!important}</style></noscript>
+</head>
+<body>
+
+<aside id="side">
+  <div class="brand">
+    <p class="k">Bản đọc · lý thuyết nền</p>
+    <h1>Các họ mô hình sinh<br>và chỗ đứng của DIRE</h1>
+    <p class="meta">Tài liệu bổ trợ cho<br>arXiv:2303.09295v1 · 12 mục</p>
+    <p class="hint" style="font:11px/1 var(--sans);color:#8fd3e0;margin:10px 0 0">☰ chạm để mở mục lục</p>
+  </div>
+  <nav id="toc" aria-label="Mục lục"></nav>
+  <div class="side-foot">
+    Mọi công thức ghi rõ nguồn gốc. Phần đánh giá của người viết<br>được đóng khung tím và ghi “bản đọc”.
+  </div>
+</aside>
+
+<main>
+  <header id="bar">
+    <div class="bar-in">
+      <div class="bar-t"><b id="barT">Cách đọc</b> <span id="barS" style="color:#9aadb6"></span></div>
+      <label class="toggle" title="Ẩn các công thức để đọc liền mạch">
+        <input type="checkbox" id="hideEq"> ẩn công thức
+      </label>
+    </div>
+    <div class="prog"><i id="prog"></i></div>
+  </header>
+
+  <div class="wrap">
+
+    <p class="kicker">Tài liệu bổ trợ<span class="sep">/</span>không thuộc bài báo<span class="sep">/</span>12 mục</p>
+    <h1 class="title">Các họ mô hình sinh: lý thuyết cơ sở, và vì sao DIRE cần khuếch tán</h1>
+    <p class="lede">Bài DIRE chỉ dành hai câu cho GAN, VAE và flow — nhưng toàn bộ lập luận của nó đứng trên chỗ khác biệt giữa các họ ấy. Tài liệu này dựng lại phần lý thuyết bị nén đó, rồi hỏi ngược: điều kiện nào khiến một mô hình <em>có thể</em> dùng làm DIRE?</p>
+
+    <div class="chips">
+      <span class="chip a">VAE · ELBO</span>
+      <span class="chip a">GAN · minimax</span>
+      <span class="chip a">Flow · biến đổi ngược</span>
+      <span class="chip a">VQ-VAE · mã rời rạc</span>
+      <span class="chip a">LDM · không gian ẩn</span>
+      <span class="chip">Toán: MathML</span>
+      <span class="chip">Tự chứa, không CDN</span>
+    </div>
+
+    <section id="s0" data-short="Cách đọc" data-sec="Mở đầu">
+      <h2><span class="num">00</span>Cách đọc tài liệu này</h2>
+      <p class="sub">Ba loại nội dung được tách màu. Đừng trộn chúng khi trích dẫn.</p>
+
+      <p>Bài báo gốc nói về các họ mô hình sinh ở đúng hai chỗ: §2.1 (kể tên các mô hình khuếch tán) và §3.2 (câu mở đầu: <em>“Due to the intrinsic differences between diffusion models and previous generative models (i.e., GANs, Flow-based models, VAEs), existing generated image detectors experience dramatic performance drops”</em>). Câu đó là một <strong>tiền đề</strong> của cả bài, nhưng bài không giải thích nó. Tài liệu này giải thích.</p>
+
+      <div class="box theory">
+        <p class="t"><span class="tag">xanh</span>Lý thuyết chuẩn</p>
+        <p>Công thức và kết quả đã có trong tài liệu: ELBO của VAE, minimax của GAN, đổi biến của flow, codebook của VQ-VAE, mục tiêu của LDM. Không phải phát minh của bản đọc; mỗi công thức ghi nguồn.</p>
+      </div>
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Đánh giá của bản đọc</p>
+        <p>Suy luận nối lý thuyết với DIRE — ví dụ “flow có nghịch đảo chính xác nên DIRE sẽ bằng 0”. Đây là phân tích, không phải nội dung bài báo. Nếu bạn trích, trích như nhận định của tài liệu này.</p>
+      </div>
+      <div class="box gap">
+        <p class="t"><span class="tag">vàng</span>Chưa xác minh</p>
+        <p>Những chỗ tài liệu này <em>không</em> chắc: nguồn gốc vài generator trong cây dữ liệu, chi tiết triển khai của mô hình đóng (Midjourney), hoặc con số không đọc được từ bản arXiv. Ghi rõ thay vì đoán.</p>
+      </div>
+
+      <p>Phần lớn nội dung dưới đây là kiến thức nền ổn định (2013–2022), nên không có tranh chấp. Chỗ duy nhất mang tính tranh luận là <a class="ref" href="#s8">§08</a>: điều kiện để DIRE có nghĩa. Đó là phần đáng đọc chậm nhất.</p>
+    </section>
+
+    <section id="s1" data-short="Bản đồ phân loại" data-sec="Tổng quan">
+      <h2><span class="num">01</span>Bản đồ: hai trục quyết định DIRE có dùng được hay không</h2>
+      <p class="sub">Không phải “mô hình nào mạnh hơn”, mà “mô hình nào có quá trình ngược đủ tốt để đo sai số tái tạo”.</p>
+
+      <p>Có nhiều cách phân loại mô hình sinh: theo likelihood, theo kiến trúc, theo số bước. Với bài toán DIRE, chỉ hai trục là quyết định:</p>
+      <ul>
+        <li><strong>Trục ngang — số bước sinh.</strong> Một phép ánh xạ (GAN, VAE, flow) hay một quỹ đạo nhiều bước (khuếch tán, kể cả biến thể rời rạc và biến thể trong không gian ẩn).</li>
+        <li><strong>Trục dọc — chất lượng phép nghịch đảo.</strong> Từ “không có nghịch đảo” (GAN), qua “xấp xỉ” (VAE, khuếch tán), tới “chính xác về lý thuyết” (flow).</li>
+      </ul>
+
+      <figure class="fig">
+        <svg viewBox="0 0 720 400" role="img" aria-label="Mặt phẳng hai trục: số bước sinh và chất lượng nghịch đảo; vùng DIRE hoạt động ở góc phải trên">
+          <defs>
+            <linearGradient id="zone" x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0" stop-color="#2f8a63" stop-opacity=".05"/>
+              <stop offset="1" stop-color="#2f8a63" stop-opacity=".17"/>
+            </linearGradient>
+          </defs>
+          <rect width="720" height="400" fill="#fcfdfd"/>
+          <!-- zone -->
+          <path d="M470,300 L660,300 L660,70 L470,70 Z" fill="url(#zone)" stroke="#9ccdb4" stroke-dasharray="6 5"/>
+          <text x="565" y="60" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="10.5" fill="#2f8a63">vùng DIRE đo được</text>
+          <!-- axes -->
+          <line x1="90" y1="310" x2="680" y2="310" stroke="#33525e" stroke-width="1.4"/>
+          <line x1="90" y1="310" x2="90" y2="60" stroke="#33525e" stroke-width="1.4"/>
+          <text x="385" y="345" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="11.5" fill="#3f5c66">số bước sinh (1 → T)</text>
+          <text x="34" y="185" text-anchor="middle" font-family="ui-sans-serif,sans-serif" font-size="11.5" fill="#3f5c66" transform="rotate(-90 34 185)">chất lượng nghịch đảo</text>
+          <text x="96" y="328" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">1</text>
+          <text x="286" y="328" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">~20</text>
+          <text x="600" y="328" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">T = 1000</text>
+          <text x="72" y="80" text-anchor="end" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">chính xác</text>
+          <text x="72" y="300" text-anchor="end" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">không có</text>
+          <line x1="84" y1="74" x2="96" y2="74" stroke="#c3d2d8"/>
+          <line x1="84" y1="300" x2="96" y2="300" stroke="#c3d2d8"/>
+
+          <!-- Flow -->
+          <g class="famg" data-fam="flow">
+            <circle class="core" cx="178" cy="92" r="12" fill="#fff" stroke="#6b57a8" stroke-width="2"/>
+            <text x="200" y="88" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#4a3a72">Flow</text>
+            <text x="200" y="103" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">nghịch đảo chính xác ⇒ DIRE ≡ 0</text>
+          </g>
+          <!-- GAN -->
+          <g class="famg" data-fam="gan">
+            <circle class="core" cx="178" cy="290" r="12" fill="#fff" stroke="#a94a55" stroke-width="2"/>
+            <text x="200" y="286" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#7d2530">GAN</text>
+            <text x="200" y="301" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">không có quá trình ngược, phải “invert”</text>
+          </g>
+          <!-- VAE -->
+          <g class="famg" data-fam="vae">
+            <circle class="core" cx="252" cy="212" r="12" fill="#fff" stroke="#8a5a06" stroke-width="2"/>
+            <text x="274" y="208" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#8a5a06">VAE</text>
+            <text x="274" y="223" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">có encoder, nhưng 1 bước và mất chi tiết</text>
+          </g>
+          <!-- VQ-VAE -->
+          <g class="famg" data-fam="vq">
+            <circle class="core" cx="316" cy="248" r="12" fill="#fff" stroke="#17697a" stroke-width="2"/>
+            <text x="338" y="244" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#17697a">VQ-VAE</text>
+            <text x="338" y="259" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">encoder rời rạc hoá, 1 bước</text>
+          </g>
+          <!-- Diffusion -->
+          <g class="famg" data-fam="diff">
+            <circle class="core" cx="520" cy="140" r="12" fill="#fff" stroke="#0f4c5c" stroke-width="2"/>
+            <text x="542" y="136" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#0f4c5c">ADM / DDPM / PNDM</text>
+            <text x="542" y="151" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">nghịch đảo xấp xỉ, sai số Euler</text>
+          </g>
+          <!-- LDM -->
+          <g class="famg" data-fam="ldm">
+            <circle class="core" cx="600" cy="196" r="12" fill="#fff" stroke="#2f8a63" stroke-width="2"/>
+            <text x="470" y="222" text-anchor="end" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#1c6b4a">LDM / SD</text>
+            <text x="470" y="237" text-anchor="end" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">khuếch tán trong không gian ẩn</text>
+          </g>
+          <!-- VQ-Diffusion -->
+          <g class="famg" data-fam="vqd">
+            <circle class="core" cx="636" cy="262" r="12" fill="#fff" stroke="#2f8a63" stroke-width="2"/>
+            <text x="628" y="288" text-anchor="end" font-family="ui-sans-serif,sans-serif" font-size="12" font-weight="600" fill="#1c6b4a">VQ-Diffusion</text>
+          </g>
+
+          <text x="104" y="382" font-family="ui-sans-serif,sans-serif" font-size="10" fill="#7b8f99">Bấm vào một điểm để tô sáng dòng tương ứng ở bảng §07.</text>
+        </svg>
+        <figcaption><span class="fignum">Hình 1</span>Hai trục quyết định. Vùng xanh lá là nơi DIRE <em>có thể</em> hoạt động: nhiều bước <b>và</b> nghịch đảo chỉ xấp xỉ. Flow rơi ra ngoài vì nghịch đảo quá tốt (DIRE sẽ bằng 0 với mọi ảnh); GAN rơi ra ngoài vì không có quá trình ngược để đo.</figcaption>
+      </figure>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Vì sao hai trục này, không phải ba</p>
+        <p>DIRE là <em>sai số của một phép biến đổi vòng</em>. Muốn có sai số ấy, phải có (a) một phép đi và một phép về, và (b) phép về không hoàn hảo. Thiếu (a) — như GAN — thì không có gì để đo. Có (b) quá tốt — như flow — thì đo được đúng số 0 cho mọi ảnh. Khuếch tán nằm đúng giữa: có quá trình ngược rẻ, và nó <em>không</em> chính xác.</p>
+      </div>
+    </section>
+
+    <section id="s2" data-short="VAE — cận dưới biến phân" data-sec="Họ mô hình">
+      <h2><span class="num">02</span>VAE: nén vào không gian ẩn rồi dựng lại</h2>
+      <p class="sub">Họ mô hình duy nhất trong nhóm này cho một <em>cận dưới</em> của log-likelihood, và cũng là họ duy nhất có sẵn một phép “nghịch đảo” — encoder.</p>
+
+      <p>VAE (Kingma &amp; Welling, 2013) đặt một biến ẩn <em>z</em> và học hai mạng: encoder <em>q<sub>φ</sub></em>(<em>z</em>|<em>x</em>) và decoder <em>p<sub>θ</sub></em>(<em>x</em>|<em>z</em>), với tiên nghiệm <em>p</em>(<em>z</em>) = 𝒩(0, I). Mục tiêu là cực đại log-likelihood, nhưng tích phân theo <em>z</em> không tính được, nên người ta tối ưu cận dưới:</p>
+
+      <div class="eq">
+        <math display="block">
+          <mi>log</mi><msub><mi>p</mi><mi>θ</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo>
+          <mo>≥</mo>
+          <msub><mi>E</mi><mrow><msub><mi>q</mi><mi>φ</mi></msub><mo>(</mo><mi>z</mi><mo>|</mo><mi>x</mi><mo>)</mo></mrow></msub>
+          <mrow><mo>[</mo><mi>log</mi><msub><mi>p</mi><mi>θ</mi></msub><mo>(</mo><mi>x</mi><mo>|</mo><mi>z</mi><mo>)</mo><mo>]</mo></mrow>
+          <mo>−</mo>
+          <msub><mi>D</mi><mtext>KL</mtext></msub>
+          <mrow><mo>(</mo><msub><mi>q</mi><mi>φ</mi></msub><mo>(</mo><mi>z</mi><mo>|</mo><mi>x</mi><mo>)</mo><mo>‖</mo><mi>p</mi><mo>(</mo><mi>z</mi><mo>)</mo><mo>)</mo></mrow>
+        </math>
+        <span class="no">ELBO</span>
+        <span class="cap"><b>Hai số hạng, hai lực ngược nhau:</b> số hạng đầu muốn tái tạo chính xác; số hạng KL muốn <em>z</em> giống nhiễu chuẩn. Cân bằng hai lực này là toàn bộ nghệ thuật huấn luyện VAE.</span>
+      </div>
+
+      <p>Khoảng cách giữa ELBO và log-likelihood thật đúng bằng <em>D</em><sub>KL</sub>(<em>q</em>(<em>z</em>|<em>x</em>) ‖ <em>p</em>(<em>z</em>|<em>x</em>)). Vì vậy VAE <strong>không</strong> cho likelihood chính xác — nó cho một cận dưới, và chất lượng cận dưới phụ thuộc vào encoder. Đây là điểm khác biệt cơ bản với flow ở §04.</p>
+
+      <h3>Lấy mẫu</h3>
+      <p>Một bước: <em>z</em> ~ 𝒩(0, I) → <em>p<sub>θ</sub></em>(<em>x</em>|<em>z</em>). Không có quỹ đạo, không có bước trung gian. Vì vậy không có gì để “đảo ngược” theo nghĩa DIRE.</p>
+
+      <h3>Dấu vết để lại</h3>
+      <ul>
+        <li><strong>Mờ / thiếu chi tiết tần số cao.</strong> Nếu decoder dùng likelihood Gauss với phương sai cố định, hàm mất mát quy về MSE, và MSE tối ưu là <em>trung bình có điều kiện</em> — tức ảnh mờ tại chỗ có nhiều khả năng. Đây là hệ quả toán học, không phải lỗi triển khai.</li>
+        <li><strong>Posterior collapse.</strong> Nếu KL thắng, <em>q</em>(<em>z</em>|<em>x</em>) → <em>p</em>(<em>z</em>) và decoder bỏ qua <em>z</em>; mô hình thoái hoá thành một mô hình không điều kiện.</li>
+        <li><strong>“Lỗ” trong không gian ẩn.</strong> Vùng <em>z</em> không có dữ liệu vẫn được giải mã thành ảnh, thường vô nghĩa.</li>
+      </ul>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>VAE và DIRE</p>
+        <p>Bài báo không đánh giá VAE. Nhưng có thể dự đoán hướng: ảnh VAE <em>mờ</em>, và độ mờ là loại sai lệch mà mô hình khuếch tán tái tạo rất tốt (nó vốn được huấn luyện để khử nhiễu và làm mịn). Theo lập luận ở §08, DIRE của ảnh VAE nhiều khả năng <em>thấp</em> — tức bị phân loại là “giả”, đúng nhãn. Nhưng đây là dự đoán chưa có số; đừng trích như kết quả.</p>
+        <p>Điều chắc chắn hơn: VAE <strong>không thể</strong> là bộ tái tạo cho DIRE. Nó không có quá trình lặp, và encoder của nó là xấp xỉ biến phân chứ không phải nghịch đảo của decoder.</p>
+      </div>
+
+      <div class="box theory">
+        <p class="t"><span class="tag">xanh</span>Một liên hệ đáng biết: khuếch tán là VAE phân tầng</p>
+        <p>Có thể viết DDPM như một VAE với <em>T</em> tầng ẩn và <strong>encoder cố định</strong> (quá trình thuận, không học). Khi đó ELBO phân rã thành tổng các KL giữa từng bước, và mục tiêu rút gọn chính là Eq. (4) của bài DIRE. Đây là lý do hai họ này gần nhau về toán nhưng khác nhau về <em>cấu trúc</em>: VAE có một tầng ẩn học được; khuếch tán có <em>T</em> tầng với encoder cho trước. Chính cấu trúc nhiều tầng tạo ra quỹ đạo — và quỹ đạo là thứ DIRE đo.</p>
+      </div>
+    </section>
+
+    <section id="s3" data-short="GAN — đối kháng" data-sec="Họ mô hình">
+      <h2><span class="num">03</span>GAN: học phân phối mà không cần likelihood</h2>
+      <p class="sub">Không có hàm mật độ, không có nghịch đảo. Đây là lý do GAN vừa khó phát hiện bằng DIRE, vừa — nghịch lý — lại bị DIRE phát hiện tốt.</p>
+
+      <p>GAN (Goodfellow et al., 2014) gồm bộ sinh <em>G</em> và bộ phân biệt <em>D</em>, huấn luyện bằng trò chơi minimax:</p>
+
+      <div class="eq">
+        <math display="block">
+          <munder><mi>min</mi><mi>G</mi></munder>
+          <munder><mi>max</mi><mi>D</mi></munder>
+          <mi>V</mi><mo>(</mo><mi>D</mi><mo>,</mo><mi>G</mi><mo>)</mo>
+          <mo>=</mo>
+          <msub><mi>E</mi><mrow><mi>x</mi><mo>∼</mo><msub><mi>p</mi><mtext>data</mtext></msub></mrow></msub>
+          <mrow><mo>[</mo><mi>log</mi><mi>D</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>]</mo></mrow>
+          <mo>+</mo>
+          <msub><mi>E</mi><mrow><mi>z</mi><mo>∼</mo><msub><mi>p</mi><mi>z</mi></msub></mrow></msub>
+          <mrow><mo>[</mo><mi>log</mi><mo>(</mo><mn>1</mn><mo>−</mo><mi>D</mi><mo>(</mo><mi>G</mi><mo>(</mo><mi>z</mi><mo>)</mo><mo>)</mo><mo>)</mo><mo>]</mo></mrow>
+        </math>
+        <span class="no">minimax</span>
+        <span class="cap"><b>Kết quả cổ điển:</b> với <em>D</em> tối ưu, giá trị này bằng <em>−log 4 + 2·JSD</em>(<em>p</em><sub>data</sub> ‖ <em>p<sub>g</sub></em>). Vì vậy GAN được đọc là “cực tiểu hoá khoảng cách Jensen–Shannon” — nhưng chỉ khi <em>D</em> đủ mạnh, điều không được bảo đảm trong thực tế.</span>
+      </div>
+
+      <p>Hai hệ quả cho bài toán của chúng ta:</p>
+      <ol>
+        <li><strong>Không có likelihood.</strong> Không thể tính <em>p<sub>g</sub></em>(<em>x</em>) cho một ảnh cụ thể, nên không có “điểm bất thường” tự nhiên để dùng làm detector.</li>
+        <li><strong>Không có quá trình ngược.</strong> <em>G</em> đi từ <em>z</em> sang <em>x</em> trong một bước; muốn đi ngược phải giải bài toán tối ưu (GAN inversion) — tốn, không tất định, và không phải một phần của mô hình. Vì vậy không tồn tại cặp (<em>I</em>, <em>R</em>) sẵn có như với khuếch tán.</li>
+      </ol>
+
+      <h3>StyleGAN: kiến trúc và dấu vết</h3>
+      <p>Bài dùng ảnh StyleGAN [20] làm một trong ba bộ sinh huấn luyện (Table 2) và là cột kiểm trong Table 3. StyleGAN khác GAN cổ điển ở ba điểm, và cả ba đều để lại dấu vết:</p>
+      <ul>
+        <li><strong>Mapping network.</strong> <em>z</em> → <em>w</em> qua MLP 8 tầng, tách “nhiễu vào” khỏi “phong cách”. Không gian <em>W</em> mượt hơn <em>Z</em>, nên ảnh ít đa dạng hơn — một nguồn thiên lệch phân phối.</li>
+        <li><strong>AdaIN theo tầng.</strong> Thống kê (trung bình, phương sai) của đặc trưng bị ghi đè bằng <em>w</em> ở từng độ phân giải. Đây là phép chuẩn hoá <em>toàn cục</em> — nó xoá luôn thống kê cục bộ mà ảnh thật có.</li>
+        <li><strong>Nhiễu theo tầng (per-layer noise).</strong> Nhiễu Gauss độc lập được cộng vào từng tầng. Đây là dấu tay rõ nhất và cũng là thứ các detector dựa trên nhiễu khai thác.</li>
+      </ul>
+
+      <div class="box insight">
+        <p class="t"><span class="tag">xanh lá</span>Kết quả đáng chú ý nhất của bài, đọc lại từ góc lý thuyết</p>
+        <p>DIRE huấn luyện trên ảnh StyleGAN vẫn đạt <strong>97,9% ACC trung bình</strong> trên tám bộ sinh khuếch tán (Table 2), và ảnh sinh từ ADM/iDDPM được phát hiện với <strong>99,9%</strong> khi kiểm trên StyleGAN (Table 3). Nghĩa là tín hiệu <em>không</em> đặc thù cho quá trình khuếch tán: một mô hình khuếch tán có thể tái tạo ảnh GAN tốt hơn ảnh thật.</p>
+        <p>Điều này phù hợp với cách phát biểu ở §1 (so <em>p<sub>g</sub></em> với <em>p<sub>r</sub></em>, không so kiến trúc), nhưng nó <em>mâu thuẫn</em> với trực giác “DIRE đo dấu vết quỹ đạo khuếch tán”. Xem §08 để biết vì sao đây là điểm mấu chốt.</p>
+      </div>
+
+      <h3>Vì sao ảnh GAN lại “dễ tái tạo”?</h3>
+      <p>Bài chỉ viết một câu, ở §4.3: <em>“This might be attributed to DIRE's capability of incorporating the generation properties of other generation models besides diffusion models.”</em> Câu đó là một giả thuyết, không phải lời giải thích. Ba ứng viên khả dĩ hơn, tất cả đều kiểm được:</p>
+      <ul>
+        <li><strong>(a) Cùng đa tạp dữ liệu.</strong> StyleGAN trong bài được huấn luyện trên LSUN-Bedroom — cùng tập với ADM. Ảnh của nó nằm gần đa tạp mà ADM đã học, nên tái tạo tốt. Nếu đúng, dự đoán: DIRE trên StyleGAN huấn luyện ở <em>miền khác</em> (ví dụ FFHQ) sẽ kém hơn nhiều.</li>
+        <li><strong>(b) Thiếu nhiễu cảm biến.</strong> Ảnh thật có nhiễu đọc cảm biến, méo ống kính, xử lý JPEG trong máy. Ảnh GAN (và ảnh khuếch tán) sạch hơn ở mức điểm ảnh. ADM tái tạo ảnh sạch tốt hơn ⇒ DIRE nhỏ.</li>
+        <li><strong>(c) Mất chi tiết tần số cao.</strong> Cả StyleGAN lẫn khuếch tán đều có xu hướng mất năng lượng ở dải cao; DIRE nhạy với đúng phần năng lượng đó.</li>
+      </ul>
+      <p>Ba giả thuyết này không loại trừ nhau, và <strong>bài báo không phân biệt chúng</strong>. Nếu (b) đúng, DIRE thực chất đang đo “mức độ tự nhiên của nhiễu cảm biến” — một kết luận rất khác với “đo khả năng tái tạo của quá trình khuếch tán”.</p>
+    </section>
+
+    <section id="s4" data-short="Flow — nghịch đảo chính xác" data-sec="Họ mô hình">
+      <h2><span class="num">04</span>Flow: mô hình duy nhất mà DIRE <em>không thể</em> hoạt động</h2>
+      <p class="sub">Một phép song ánh khả nghịch chính xác. Đây không phải chi tiết kỹ thuật — nó là một phản chứng cho cách hiểu “DIRE đo độ khó tái tạo”.</p>
+
+      <p>Normalizing flow (Dinh et al. 2016; Kingma &amp; Dhariwal 2018) học một song ánh khả nghịch <em>f</em>: không gian ảnh ↔ không gian nhiễu, và dùng công thức đổi biến để tính likelihood <strong>chính xác</strong>:</p>
+
+      <div class="eq">
+        <math display="block">
+          <mi>log</mi><msub><mi>p</mi><mi>X</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo>
+          <mo>=</mo>
+          <mi>log</mi><msub><mi>p</mi><mi>Z</mi></msub><mo>(</mo><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo>
+          <mo>+</mo>
+          <mi>log</mi>
+          <mrow><mo>|</mo><mi>det</mi>
+            <mfrac><mrow><mo>∂</mo><mi>f</mi><mo>(</mo><mi>x</mi><mo>)</mo></mrow><mrow><mo>∂</mo><mi>x</mi></mrow></mfrac>
+          <mo>|</mo></mrow>
+        </math>
+        <span class="no">đổi biến</span>
+        <span class="cap"><b>Điều kiện:</b> <em>f</em> phải khả nghịch và định thức Jacobian phải tính được rẻ. Hai ràng buộc này định hình toàn bộ kiến trúc flow (coupling layer, autoregressive, 1×1 conv).</span>
+      </div>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Phản chứng: nếu dùng flow làm bộ tái tạo thì DIRE ≡ 0</p>
+        <p>Giả sử ta chọn <em>I</em> = <em>f</em><sup>−1</sup> (đi từ ảnh lên nhiễu) và <em>R</em> = <em>f</em> (đi từ nhiễu xuống ảnh). Vì <em>f</em> khả nghịch <em>chính xác</em>, <em>R</em>(<em>I</em>(<em>x</em>)) = <em>x</em> với <strong>mọi</strong> ảnh — không chỉ ảnh sinh, mà cả ảnh thật, ảnh nhiễu, ảnh vẽ tay. Do đó DIRE(<em>x</em>) = 0 với mọi <em>x</em>, và bộ phân loại không có gì để học.</p>
+        <p>Kết luận: DIRE không đo “mức độ giống dữ liệu huấn luyện”. Nó đo <strong>sai số của một phép nghịch đảo xấp xỉ</strong>. Đó là lý do khuếch tán phù hợp: phép đảo ngược DDIM chỉ là Euler bậc một, nên nó sai — và sai khác nhau giữa các ảnh.</p>
+      </div>
+
+      <p>Hệ quả thứ hai, tinh tế hơn: nếu ai đó huấn luyện một flow <em>trên chính ảnh sinh</em> rồi dùng nó làm <em>I</em>/<em>R</em>, DIRE vẫn bằng 0. Nghĩa là <strong>không phải “khớp phân phối” tạo ra tín hiệu, mà là “khớp phân phối + nghịch đảo không hoàn hảo”</strong>. Bài báo không nói điều này; Phụ lục B chỉ nói về sai số Euler mà không so sánh với trường hợp nghịch đảo hoàn hảo.</p>
+
+      <div class="box gap">
+        <p class="t"><span class="tag">vàng</span>Điều chưa kiểm được từ bài</p>
+        <p>Bài không thử flow như bộ tái tạo, cũng không thử flow như một lớp ảnh cần phát hiện. Vì vậy câu “DIRE cần nghịch đảo xấp xỉ” là suy luận của tài liệu này từ định nghĩa, không phải kết quả thực nghiệm. Nó <em>đúng về mặt toán</em> với flow lý tưởng; flow thực tế (dấu phẩy động, Jacobian xấp xỉ) sẽ cho sai số nhỏ nhưng khác 0.</p>
+      </div>
+    </section>
+
+    <section id="s5" data-short="VQ-VAE &amp; VQ-Diffusion" data-sec="Họ mô hình">
+      <h2><span class="num">05</span>VQ-VAE và VQ-Diffusion: khi không gian ẩn bị rời rạc hoá</h2>
+      <p class="sub">Bước trung gian quan trọng: nếu mã hoá ảnh thành chỉ số rời rạc, thì “khuếch tán” có thể chạy trên chuỗi chỉ số thay vì trên pixel.</p>
+
+      <p>VQ-VAE (van den Oord et al., 2017) thay encoder liên tục bằng một <strong>codebook</strong> gồm <em>K</em> vectơ. Mỗi vị trí trong bản đồ đặc trưng được gán về vectơ gần nhất — một phép lượng tử hoá, không khả vi. Để huấn luyện, người ta dùng straight-through estimator và ba số hạng mất mát:</p>
+
+      <div class="eq">
+        <math display="block">
+          <mi>L</mi><mo>=</mo>
+          <mi>log</mi><msub><mi>p</mi><mi>θ</mi></msub><mo>(</mo><mi>x</mi><mo>|</mo><msub><mi>z</mi><mi>q</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo>
+          <mo>+</mo>
+          <msup><mrow><mo>‖</mo><mi>sg</mi><mo>[</mo><msub><mi>z</mi><mi>e</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>]</mo><mo>−</mo><mi>e</mi><mo>‖</mo></mrow><mn>2</mn></msup>
+          <mo>+</mo>
+          <mi>β</mi>
+          <msup><mrow><mo>‖</mo><msub><mi>z</mi><mi>e</mi></msub><mo>(</mo><mi>x</mi><mo>)</mo><mo>−</mo><mi>sg</mi><mo>[</mo><mi>e</mi><mo>]</mo><mo>‖</mo></mrow><mn>2</mn></msup>
+        </math>
+        <span class="no">VQ loss</span>
+        <span class="cap"><b>Đọc:</b> số hạng 1 là tái tạo; số hạng 2 kéo codebook về phía encoder; số hạng 3 (có <em>β</em>, thường 0,25) giữ encoder gần codebook. <code>sg[·]</code> = stop-gradient, mẹo để có gradient xấp xỉ qua phép lấy gần nhất.</span>
+      </div>
+
+      <h3>Từ VQ-VAE tới VQ-Diffusion</h3>
+      <p>Khi ảnh đã thành lưới chỉ số rời rạc, có thể áp mô hình sinh lên chuỗi chỉ số đó. VQ-Diffusion (Gu et al., 2021) làm đúng vậy bằng một <strong>quá trình khuếch tán rời rạc</strong>: thay vì cộng nhiễu Gauss, nó “làm hỏng” token theo ma trận chuyển trạng thái, rồi học quá trình ngược để khôi phục token. Bài mô tả chính xác điều này trong một câu:</p>
+      <blockquote class="orig" style="margin:0 0 14px;padding:12px 16px;background:#fff;border:1px solid var(--line);border-left:3px solid #b7c9d0;font-size:14.5px;color:#33474f">
+        “VQ-Diffusion [14] is based on a VQ-VAE [45] and models the latent space by a conditional variant of DDPMs.”
+        <cite style="display:block;margin-top:7px;font:11px/1 var(--sans);font-style:normal;color:#8498a2">§2.1, nguyên văn</cite>
+      </blockquote>
+
+      <div class="box theory">
+        <p class="t"><span class="tag">xanh</span>Ba tầng trong một mô hình</p>
+        <p>VQ-Diffusion có <em>ba</em> tầng biến đổi: (1) encoder tích chập → bản đồ đặc trưng; (2) lượng tử hoá → lưới chỉ số; (3) khuếch tán rời rạc trên chỉ số; rồi (4) decoder dựng lại pixel. Mỗi tầng đều để lại dấu vết riêng — và tầng (2) là tầng mất thông tin nhiều nhất.</p>
+      </div>
+
+      <p>Với DIRE, mô hình này vẫn cho kết quả hoàn hảo: <strong>100/100</strong> ACC/AP ở cột VQDiffusion của Table 2, và 100/100 ở Table 3 khi huấn luyện trên StyleGAN. Điều đó hợp lý nếu nhớ rằng bộ tái tạo vẫn là ADM pixel: ảnh VQ-Diffusion sau khi giải mã đã mất chi tiết tần số cao do lượng tử hoá, nên ADM tái tạo nó dễ hơn ảnh thật.</p>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Một dự đoán kiểm được</p>
+        <p>Nếu DIRE nhạy với mất mát tần số cao, thì chất lượng decoder của VQ-VAE phải ảnh hưởng rõ: cùng một bộ khuếch tán, ảnh giải mã bằng decoder tốt hơn sẽ khó phát hiện hơn. Bài không làm thí nghiệm này — nhưng nó rẻ, và nó phân biệt được giả thuyết (c) ở §03 với các giả thuyết khác.</p>
+      </div>
+    </section>
+
+    <section id="s6" data-short="LDM / Stable Diffusion" data-sec="Họ mô hình">
+      <h2><span class="num">06</span>LDM: khuếch tán trong không gian ẩn — cầu nối giữa hai nhóm</h2>
+      <p class="sub">Về toán là khuếch tán; về kiến trúc là VAE + khuếch tán. Đây là lý do nó vừa dễ phát hiện bằng DIRE (99,7%), vừa là nơi dễ hiểu sai nhất.</p>
+
+      <p>Latent Diffusion (Rombach et al., 2022) không khuếch tán trên pixel mà trên biểu diễn ẩn <em>z</em> = <em>E</em>(<em>x</em>) của một autoencoder (thường nén khoảng 8× mỗi chiều). Quá trình khuếch tán diễn ra trên <em>z</em>; ảnh được dựng lại bằng decoder <em>D</em>. Mục tiêu huấn luyện:</p>
+
+      <div class="eq">
+        <math display="block">
+          <msub><mi>L</mi><mtext>LDM</mtext></msub>
+          <mo>=</mo>
+          <msub><mi>E</mi><mrow><mi>ℰ</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>,</mo><mi>ε</mi><mo>,</mo><mi>t</mi></mrow></msub>
+          <mrow><mo>[</mo>
+            <msup><mrow><mo>‖</mo><mi>ε</mi><mo>−</mo>
+              <msub><mi>ε</mi><mi>θ</mi></msub><mo>(</mo><msub><mi>z</mi><mi>t</mi></msub><mo>,</mo><mi>t</mi><mo>,</mo><msub><mi>τ</mi><mi>θ</mi></msub><mo>(</mo><mi>y</mi><mo>)</mo><mo>)</mo>
+            <mo>‖</mo></mrow><mn>2</mn></msup>
+          <mo>]</mo></mrow>
+        </math>
+        <span class="no">LDM</span>
+        <span class="cap"><b>Đọc:</b> giống Eq. (4) của bài, nhưng <em>x</em> được thay bằng <em>z</em> = <em>E</em>(<em>x</em>), và mạng nhận thêm điều kiện <em>τ<sub>θ</sub></em>(<em>y</em>) — với SD là embedding văn bản qua cross-attention.</span>
+      </div>
+
+      <p>Ba điểm cần nhớ:</p>
+      <ul>
+        <li><strong>Hai tầng mất mát.</strong> Khuếch tán trong không gian ẩn không bao giờ tốt hơn khả năng của decoder <em>D</em>. Mọi artifact của VAE (mờ, sai màu nhẹ, mất chi tiết) vẫn còn trong ảnh cuối.</li>
+        <li><strong>Điều kiện hoá bằng cross-attention.</strong> Văn bản không được nối vào đầu vào mà đi vào từng khối qua attention. Đây là lý do prompt ảnh hưởng mạnh tới phân phối ảnh — và là lý do bài cố định prompt <em>“A photo of bedroom”</em> cho mọi mô hình text→image.</li>
+        <li><strong>Hướng dẫn không phân loại (CFG).</strong> Điểm số được trộn giữa có điều kiện và không điều kiện với hệ số <em>w</em>: <em>ε̃</em> = <em>ε</em><sub>∅</sub> + <em>w</em>(<em>ε<sub>c</sub></em> − <em>ε</em><sub>∅</sub>). <em>w</em> lớn ⇒ ảnh “sắc” hơn, bão hoà hơn, xa phân phối thật hơn. Bài <strong>không báo cáo <em>w</em></strong> cho SD/LDM — một chi tiết tái lập bị thiếu (đã ghi ở bản từng trang, Phụ lục A).</li>
+      </ul>
+
+      <div class="box insight">
+        <p class="t"><span class="tag">xanh lá</span>Nghịch lý cần giải thích</p>
+        <p>Bộ tái tạo của bài là ADM <em>pixel</em>, huấn luyện trên LSUN-Bedroom ở 256². Ảnh SD-v1 là khuếch tán <em>ẩn</em>, sinh ở 512² rồi hạ xuống 256². Vậy mà DIRE vẫn đạt 99,7/100 (Table 2). Nếu DIRE thật sự đo “dấu vết của quá trình khuếch tán”, việc đổi không gian (pixel → ẩn) và đổi độ phân giải phải làm nó sụp. Nó không sụp.</p>
+        <p>Điều này ủng hộ cách đọc ở §08: DIRE đo một tính chất <em>thống kê mức thấp</em> của ảnh (độ “sạch”, mức chi tiết tần số cao, thiếu nhiễu cảm biến), chứ không đo dấu vết kiến trúc.</p>
+      </div>
+
+      <h3>Bảng đối chiếu nhanh: ba mô hình trong bài</h3>
+      <div class="tablewrap">
+        <table class="data">
+          <caption>Ba mô hình đại diện cho ba cách đặt quá trình khuếch tán</caption>
+          <thead><tr><th>Mô hình</th><th>Không gian khuếch tán</th><th>Bộ giải mã</th><th class="c">Kết quả DIRE (Table 2)</th></tr></thead>
+          <tbody>
+            <tr><td class="name">ADM / DDPM / iDDPM / PNDM</td><td>pixel 256²</td><td>không có (trực tiếp)</td><td class="n">100 / 100 / 100 / 99,7</td></tr>
+            <tr><td class="name">LDM / SD v1, v2</td><td>không gian ẩn của VAE</td><td>VAE decoder</td><td class="n">100 / 99,7 / 100</td></tr>
+            <tr><td class="name">VQ-Diffusion</td><td>chỉ số rời rạc (VQ)</td><td>VQ decoder</td><td class="n">100</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tnote">Cột cuối là ACC/AP của hàng <em>DIRE (ADM)</em> — huấn luyện trên ADM, kiểm trên từng bộ sinh. Nguồn: Table 2.</p>
+    </section>
+
+    <section id="s7" data-short="Bảng tổng hợp 6 họ" data-sec="Tổng hợp">
+      <h2><span class="num">07</span>Bảng tổng hợp: sáu họ, tám tiêu chí</h2>
+      <p class="sub">Bấm vào một thẻ ở trên (hoặc một điểm ở Hình 1) để tô sáng dòng tương ứng.</p>
+
+      <div class="cards" id="cards">
+        <button class="fam" data-fam="vae" aria-pressed="false">
+          <span class="badge">ngoài bài</span>
+          <span class="fn">VAE</span><span class="fd">ELBO · 1 bước · có encoder</span>
+        </button>
+        <button class="fam" data-fam="gan" aria-pressed="false">
+          <span class="badge in">trong bài</span>
+          <span class="fn">GAN / StyleGAN</span><span class="fd">minimax · 1 bước · không nghịch đảo</span>
+        </button>
+        <button class="fam" data-fam="flow" aria-pressed="false">
+          <span class="badge">ngoài bài</span>
+          <span class="fn">Flow</span><span class="fd">đổi biến · nghịch đảo chính xác</span>
+        </button>
+        <button class="fam" data-fam="vq" aria-pressed="false">
+          <span class="badge">nền của VQ-Diff</span>
+          <span class="fn">VQ-VAE</span><span class="fd">codebook · thẳng-through</span>
+        </button>
+        <button class="fam" data-fam="diff" aria-pressed="false">
+          <span class="badge in">trong bài</span>
+          <span class="fn">Khuếch tán pixel</span><span class="fd">DDPM · S bước · nghịch đảo xấp xỉ</span>
+        </button>
+        <button class="fam" data-fam="ldm" aria-pressed="false">
+          <span class="badge in">trong bài</span>
+          <span class="fn">LDM / SD</span><span class="fd">khuếch tán ẩn · VAE decoder</span>
+        </button>
+        <button class="fam" data-fam="vqd" aria-pressed="false">
+          <span class="badge in">trong bài</span>
+          <span class="fn">VQ-Diffusion</span><span class="fd">khuếch tán rời rạc trên token</span>
+        </button>
+      </div>
+
+      <div class="tablewrap">
+        <table class="data" id="cmp">
+          <caption>Sáu họ mô hình sinh — so theo các tiêu chí quyết định với DIRE</caption>
+          <thead>
+            <tr>
+              <th>Họ</th>
+              <th>Mục tiêu huấn luyện</th>
+              <th class="c">Likelihood</th>
+              <th class="c">Số bước</th>
+              <th class="c">Có phép ngược?</th>
+              <th>Dấu vết điển hình</th>
+              <th class="c">DIRE dùng được?</th>
+              <th class="c">Có trong bài?</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-fam="vae">
+              <td class="name">VAE</td>
+              <td>ELBO (cận dưới)</td>
+              <td class="c">cận dưới</td>
+              <td class="c">1</td>
+              <td class="c">encoder (xấp xỉ biến phân)</td>
+              <td>mờ, thiếu tần số cao, lỗ không gian ẩn</td>
+              <td class="c">không tự nhiên</td>
+              <td class="c">không</td>
+            </tr>
+            <tr data-fam="gan">
+              <td class="name">GAN / StyleGAN</td>
+              <td>minimax (JS divergence)</td>
+              <td class="c">không</td>
+              <td class="c">1</td>
+              <td class="c">không (phải invert)</td>
+              <td>phóng to tạo cấu trúc phổ, nhiễu theo tầng, AdaIN</td>
+              <td class="c">không phải là <em>I</em>/<em>R</em>; nhưng là lớp cần phát hiện — 97,9%</td>
+              <td class="c">có (StyleGAN)</td>
+            </tr>
+            <tr data-fam="flow">
+              <td class="name">Flow</td>
+              <td>log-likelihood chính xác</td>
+              <td class="c">chính xác</td>
+              <td class="c">1</td>
+              <td class="c">chính xác</td>
+              <td>ràng buộc kiến trúc, Jacobian, ảnh hơi “phẳng”</td>
+              <td class="c">không — DIRE ≡ 0</td>
+              <td class="c">không</td>
+            </tr>
+            <tr data-fam="vq">
+              <td class="name">VQ-VAE</td>
+              <td>tái tạo + codebook</td>
+              <td class="c">không (autoencoder)</td>
+              <td class="c">1</td>
+              <td class="c">encoder rời rạc</td>
+              <td>ô vuông, codebook collapse, mất chi tiết</td>
+              <td class="c">không tự nhiên</td>
+              <td class="c">nền của VQ-Diffusion</td>
+            </tr>
+            <tr data-fam="diff">
+              <td class="name">Khuếch tán pixel</td>
+              <td>dự đoán nhiễu (Eq. 4)</td>
+              <td class="c">ELBO (có, không dùng)</td>
+              <td class="c">T, rút còn S</td>
+              <td class="c">có — DDIM, xấp xỉ</td>
+              <td>quỹ đạo khử nhiễu; thiếu nhiễu cảm biến</td>
+              <td class="c"><b>có — đây là cấu hình của bài</b></td>
+              <td class="c">ADM, DDPM, iDDPM, PNDM</td>
+            </tr>
+            <tr data-fam="vqd">
+              <td class="name">VQ-Diffusion</td>
+              <td>khuếch tán rời rạc trên token</td>
+              <td class="c">ELBO rời rạc</td>
+              <td class="c">T, rút còn S</td>
+              <td class="c">có — nhưng trên token</td>
+              <td>artifact lượng tử hoá (ô vuông, mất chi tiết)</td>
+              <td class="c">có (bộ tái tạo vẫn là ADM pixel)</td>
+              <td class="c">VQ-Diffusion</td>
+            </tr>
+            <tr data-fam="ldm">
+              <td class="name">LDM / SD</td>
+              <td>dự đoán nhiễu trong không gian ẩn</td>
+              <td class="c">ELBO trên <em>z</em></td>
+              <td class="c">T, rút còn S</td>
+              <td class="c">có — DDIM trên <em>z</em></td>
+              <td>artifact của VAE decoder + dấu vết của không gian ẩn</td>
+              <td class="c">có</td>
+              <td class="c">LDM, SD-v1, SD-v2</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tnote">Cột “DIRE dùng được?” là đánh giá của bản đọc, không phải của bài. Cột “Likelihood” phân biệt mô hình cho mật độ chính xác (flow), cho cận dưới (VAE, khuếch tán), hay không cho mật độ (GAN).</p>
+    </section>
+
+    <section id="s8" data-short="Ba điều kiện để DIRE có nghĩa" data-sec="Lý thuyết">
+      <h2><span class="num">08</span>Ba điều kiện để DIRE có nghĩa — và vì sao khuếch tán thoả cả ba</h2>
+      <p class="sub">Phần này là phân tích của bản đọc. Nó không có trong bài, nhưng nó giải thích được cả kết quả mạnh nhất (99,9%) lẫn kết quả lạ nhất (97,9% trên GAN).</p>
+
+      <h3>Phát biểu</h3>
+      <p>Viết <em>P</em> = <em>R</em> ∘ <em>I</em> cho phép biến đổi vòng. Khi đó:</p>
+      <div class="eq">
+        <math display="block">
+          <mtext>DIRE</mtext><mo>(</mo><mi>x</mi><mo>)</mo>
+          <mo>=</mo>
+          <mrow><mo>|</mo><mi>x</mi><mo>−</mo><mi>P</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>|</mo></mrow>
+          <mo>,</mo>
+          <mspace width="1em"/>
+          <mtext>và nếu </mtext><mi>P</mi>
+          <mtext> là phép chiếu lên </mtext>
+          <mrow><mo>ℳ</mo></mrow>
+          <mo>,</mo>
+          <mspace width="0.5em"/>
+          <mtext>DIRE</mtext><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mtext>dist</mtext><mo>(</mo><mi>x</mi><mo>,</mo><mi>ℳ</mi><mo>)</mo>
+        </math>
+        <span class="no">bản đọc</span>
+        <span class="cap"><b>Đọc:</b> nếu phép vòng hoạt động như một phép chiếu lên đa tạp <em>ℳ</em> mà mô hình đã học, thì DIRE chính là khoảng cách từ ảnh tới đa tạp đó. Đây là cách phát biểu làm cho “tái tạo tốt/xấu” trở thành một đại lượng hình học.</span>
+      </div>
+
+      <p>Ba điều kiện để đại lượng này dùng được làm tín hiệu phân loại:</p>
+
+      <div class="tablewrap">
+        <table class="data">
+          <caption>Ba điều kiện, và họ mô hình nào thoả</caption>
+          <thead><tr><th class="c">ĐK</th><th>Nội dung</th><th>Vì sao cần</th><th>Ai thoả</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="c n">C1</td>
+              <td class="name">Có cặp (<em>I</em>, <em>R</em>) sẵn có, <strong>xấp xỉ</strong> nghịch đảo của nhau</td>
+              <td>Nếu chính xác tuyệt đối thì <em>P</em>(<em>x</em>) = <em>x</em>, DIRE ≡ 0 (§04). Nếu không có <em>I</em> thì không có gì để đo (§03).</td>
+              <td>Khuếch tán (DDIM); <em>không</em>: flow (quá chính xác), GAN (không có), VAE (encoder không phải nghịch đảo)</td>
+            </tr>
+            <tr>
+              <td class="c n">C2</td>
+              <td class="name"><em>P</em> co về một đa tạp <em>ℳ</em> mà mô hình đã học</td>
+              <td>DIRE chỉ là “khoảng cách tới <em>ℳ</em>” nếu <em>P</em> thật sự chiếu. Nếu <em>P</em> là ánh xạ tuỳ ý, hiệu số không có nghĩa hình học.</td>
+              <td>Khuếch tán (đảo ngược + tái tạo kéo về vùng dữ liệu); flow cũng có nhưng vô dụng vì C1</td>
+            </tr>
+            <tr>
+              <td class="c n">C3</td>
+              <td class="name">Phân phối của DIRE khác nhau giữa <em>p<sub>r</sub></em> và <em>p<sub>g</sub></em></td>
+              <td>Đây là điều kiện <em>thực nghiệm</em>: nếu hai lớp có cùng phân phối residual, classifier không học được gì dù C1–C2 đúng.</td>
+              <td>Được kiểm bởi Table 2–6; điều kiện này <em>không</em> suy ra được từ lý thuyết</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Hệ quả 1: DIRE không cần bộ sinh cùng họ</h3>
+      <p>Nếu <em>P</em> chiếu lên đa tạp <em>ℳ</em> của dữ liệu huấn luyện (LSUN-Bedroom), thì mọi ảnh nằm gần <em>ℳ</em> đều có DIRE nhỏ — bất kể ảnh do GAN, khuếch tán hay do con người vẽ. Điều này giải thích gọn kết quả 97,9% trên StyleGAN: StyleGAN trong bài cũng học LSUN-Bedroom, nên ảnh của nó nằm gần cùng một đa tạp.</p>
+      <p>Nó cũng dự đoán điều ngược lại: StyleGAN huấn luyện trên <strong>miền khác</strong> (FFHQ, theo hướng khác) sẽ có DIRE <em>lớn</em> và bị phân loại là thật. Bài không kiểm — nhưng đây là một thí nghiệm rất rẻ.</p>
+
+      <h3>Hệ quả 2: DIRE đo “độ tự nhiên mức thấp”, không đo “dấu vết khuếch tán”</h3>
+      <p>Với C1–C3, tín hiệu mà classifier học là <em>phân phối của dist(<em>x</em>, <em>ℳ</em>)</em>. Đại lượng ấy thấp khi ảnh sạch, mịn, không có nhiễu cảm biến và không có chi tiết tần số cao bất thường. Cả ba nhóm ảnh sinh (GAN, khuếch tán pixel, khuếch tán ẩn) đều có tính chất này; ảnh thật thì không.</p>
+      <div class="box insight">
+        <p class="t"><span class="tag">xanh lá</span>Dự đoán mạnh, kiểm được bằng một thí nghiệm</p>
+        <p>Nếu đúng, thì <strong>thêm nhiễu cảm biến tổng hợp vào ảnh thật sẽ làm DIRE của nó giảm</strong> (tiến gần mức của ảnh sinh), và ngược lại, <strong>khử nhiễu mạnh một ảnh thật</strong> cũng làm DIRE giảm. Nếu hai hiệu ứng này mạnh, thì “phát hiện ảnh sinh” thực chất là “phát hiện ảnh đã qua xử lý làm sạch” — một kết luận hẹp hơn nhiều so với tên gọi của bài.</p>
+        <p>Bài không làm thí nghiệm này. Đây là chỗ hở lớn nhất về mặt lý thuyết, và cũng là chỗ dễ sinh ra false positive nhất trong triển khai thật: ảnh từ điện thoại đã qua khử nhiễu AI sẽ bị gắn nhãn “giả”.</p>
+      </div>
+
+      <h3>Hệ quả 3: vì sao ảnh thật vẫn có DIRE khác 0</h3>
+      <p>Ba nguồn, cộng dồn:</p>
+      <ol>
+        <li><strong>Sai số Euler</strong> của phép đảo ngược (Phụ lục B của bài) — giảm khi <em>S</em> tăng.</li>
+        <li><strong>Phép cắt giá trị</strong> [−1, 1] sau mỗi bước — không giảm khi <em>S</em> tăng, vì nó là phi tuyến cứng.</li>
+        <li><strong>Khoảng cách thật tới <em>ℳ</em></strong> — phần “tín hiệu” mà ta muốn đo.</li>
+      </ol>
+      <p>Ba nguồn này không tách được bằng một thí nghiệm duy nhất. Muốn tách phải quét <em>S</em> <strong>và</strong> tắt phép cắt, đo DIRE trung bình theo lớp trước khi huấn luyện classifier. Không ai làm trong bài — và đó là lý do §08 vẫn là giả thuyết chứ không phải kết luận.</p>
+    </section>
+
+    <section id="s9" data-short="Mười generator của bài" data-sec="Đối chiếu">
+      <h2><span class="num">09</span>Mười generator trong bài thuộc họ nào</h2>
+      <p class="sub">Bảng 1 của bài liệt kê mười tập con. Đây là bản đồ sang sáu họ ở trên, kèm kết quả DIRE tương ứng.</p>
+
+      <div class="tablewrap">
+        <table class="data">
+          <caption>Generator của DiffusionForensics → họ mô hình → kết quả DIRE (Table 2, hàng DIRE (ADM))</caption>
+          <thead>
+            <tr><th>Generator</th><th>Họ</th><th>Không gian</th><th class="c">Số bước</th><th class="c">ACC / AP</th><th>Ghi chú lý thuyết</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="name">ADM</td><td>Khuếch tán pixel</td><td>pixel 256²</td><td class="c">50 (sinh)</td><td class="n">100/100</td><td>trùng mô hình tái tạo ⇒ in-distribution</td></tr>
+            <tr><td class="name">DDPM</td><td>Khuếch tán pixel</td><td>pixel 256²</td><td class="c">1000</td><td class="n">100/100</td><td>quá trình Markov đầy đủ, khác bộ lấy mẫu</td></tr>
+            <tr><td class="name">iDDPM</td><td>Khuếch tán pixel</td><td>pixel 256²</td><td class="c">~250</td><td class="n">100/100</td><td>học phương sai ⇒ ít bước hơn</td></tr>
+            <tr><td class="name">PNDM</td><td>Khuếch tán pixel</td><td>pixel 256²</td><td class="c">50</td><td class="n">99,7/100</td><td>bộ giải ODE bậc cao ⇒ quỹ đạo khác DDIM</td></tr>
+            <tr><td class="name">LDM</td><td>LDM</td><td>ẩn (VAE)</td><td class="c">50</td><td class="n">100/100</td><td>text→image, prompt cố định</td></tr>
+            <tr><td class="name">SD-v1</td><td>LDM</td><td>ẩn (VAE)</td><td class="c">50</td><td class="n">99,7/100</td><td>512² → 256² bicubic; <em>không có trong bản LSUN phát hành</em></td></tr>
+            <tr><td class="name">SD-v2</td><td>LDM</td><td>ẩn (VAE)</td><td class="c">50</td><td class="n">100/100</td><td>cùng kiến trúc, khác checkpoint</td></tr>
+            <tr><td class="name">VQ-Diffusion</td><td>Khuếch tán rời rạc</td><td>chỉ số VQ</td><td class="c">100</td><td class="n">100/100</td><td>hai tầng: lượng tử hoá + khuếch tán</td></tr>
+            <tr><td class="name">StyleGAN</td><td>GAN</td><td>pixel</td><td class="c">1</td><td class="n">98,8/100</td><td>hàng DIRE (StyleGAN); 97,9 trung bình</td></tr>
+            <tr><td class="name">ADM (ImageNet)</td><td>Khuếch tán pixel</td><td>pixel 256²</td><td class="c">50</td><td class="n">90,2/97,9</td><td>khác miền ⇒ Table 3, không phải Table 2</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="tnote">Cột “Số bước” là số bước <em>khi sinh dữ liệu</em> (Phụ lục A), không phải <em>S</em> = 20 của DIRE. Đừng lẫn — đây là lỗi tái lập phổ biến nhất.</p>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Đọc bảng này theo họ, không theo cột</p>
+        <p>Bảy trong tám cột của Table 2 là khuếch tán (pixel, ẩn, hoặc rời rạc). Vì vậy con số “99,9% trung bình” chủ yếu đo khả năng chuyển giữa các <em>bộ lấy mẫu</em> và <em>không gian khuếch tán</em>, chứ không đo khả năng chuyển giữa các họ. Bằng chứng duy nhất về chuyển họ là cột StyleGAN (97,9%) và Table 3 — và đó lại là kết quả mạnh nhất về mặt lý thuyết, vì nó cho thấy tín hiệu không phụ thuộc họ.</p>
+      </div>
+    </section>
+
+    <section id="s10" data-short="Generator ngoài bài" data-sec="Đối chiếu">
+      <h2><span class="num">10</span>Những generator ngoài bài (và chỗ chưa xác minh)</h2>
+      <p class="sub">Cây dữ liệu trên đĩa có thêm vài thư mục không nằm trong Table 1. Ghi rõ cái gì biết, cái gì không.</p>
+
+      <div class="tablewrap">
+        <table class="data">
+          <caption>Các generator gặp trong cây dữ liệu nhưng không có trong bài</caption>
+          <thead><tr><th>Tên</th><th>Họ (suy ra)</th><th>Cơ sở</th><th class="c">Mức chắc chắn</th></tr></thead>
+          <tbody>
+            <tr><td class="name">dalle2</td><td>Khuếch tán ẩn + prior</td><td>unCLIP: prior sinh embedding CLIP, decoder khuếch tán dựng ảnh — bài dẫn [35] cho kiến trúc này</td><td class="c">cao (kiến trúc), trung bình (đúng checkpoint nào)</td></tr>
+            <tr><td class="name">if</td><td>Khuếch tán pixel, thác nước</td><td>Imagen-family: chuỗi mô hình ở độ phân giải tăng dần — bài dẫn [39]</td><td class="c">trung bình</td></tr>
+            <tr><td class="name">projectedgan</td><td>GAN</td><td>Projected GAN (Sauer et al., 2021): dùng đặc trưng của mạng đã huấn luyện trong <em>D</em></td><td class="c">cao</td></tr>
+            <tr><td class="name">midjourney</td><td>Không công bố</td><td>Mô hình đóng; không có bài báo kiến trúc. Chỉ biết là mô hình sinh ảnh chất lượng cao</td><td class="c">không</td></tr>
+            <tr><td class="name">diff-projectedgan<br>diff-stylegan</td><td>Không rõ</td><td>Tên gợi ý một mô hình khuếch tán áp lên ảnh GAN (hoặc ngược lại), nhưng <strong>không tìm được mô tả</strong> trong bài hay tài liệu kèm theo</td><td class="c">rất thấp</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="box gap">
+        <p class="t"><span class="tag">vàng</span>Nguyên tắc: không suy đoán từ tên thư mục</p>
+        <p>Hai thư mục <code>diff-projectedgan</code> và <code>diff-stylegan</code> có tên rất gợi, nhưng tên không phải tài liệu. Có ít nhất ba cách hiểu khác nhau (ảnh GAN đi qua khuếch tán; khuếch tán huấn luyện trên dữ liệu GAN; mô hình lai), và chúng cho ba kết luận khác nhau về ý nghĩa của một dòng trong bảng kết quả. Cách xử lý đúng: mở tar, xem ảnh, đối chiếu với repo tác giả — hoặc ghi “không rõ” trong báo cáo. Đừng đoán.</p>
+      </div>
+
+      <div class="box mine">
+        <p class="t"><span class="tag">tím</span>Nếu muốn dùng các generator này trong báo cáo</p>
+        <p>Vì chúng không có trong Table 2, mọi con số trên chúng là <em>mở rộng</em>, không phải <em>tái lập</em>. Cách ghi trung thực: tách bảng thành hai khối — “8 cột của bài” và “mở rộng ngoài bài” — và không bao giờ tính trung bình gộp hai khối. Với <code>midjourney</code> chỉ có 100 ảnh, khoảng tin cậy 95% ở ACC 90% là ±5,9 điểm, nên nó không đủ để xếp hạng.</p>
+      </div>
+    </section>
+
+    <section id="s11" data-short="Hạn chế &amp; nguồn" data-sec="Kết">
+      <h2><span class="num">11</span>Hạn chế của tài liệu này, và nguồn</h2>
+      <p class="sub">Tài liệu bổ trợ cũng phải khai giới hạn của nó.</p>
+
+      <div class="box limit">
+        <p class="t"><span class="tag">đỏ</span>Bốn hạn chế</p>
+        <ol>
+          <li><strong>Không có thực nghiệm mới.</strong> Mọi kết luận về “họ nào DIRE dùng được” là suy luận từ định nghĩa và từ số liệu có sẵn của bài, không phải đo.</li>
+          <li><strong>Phần §08 là phân tích của bản đọc.</strong> Cách phát biểu “DIRE = khoảng cách tới đa tạp” là mô hình hoá, không phải định lý. Nó đúng khi <em>P</em> là phép chiếu — điều bài không chứng minh và có thể sai một phần.</li>
+          <li><strong>Không bao quát hết các họ.</strong> Thiếu mô hình tự hồi quy (autoregressive trên token ảnh), thiếu mô hình dựa trên năng lượng (EBM), thiếu flow matching / rectified flow — những họ đáng lẽ phải có trong một bản đồ đầy đủ năm 2026.</li>
+          <li><strong>Mô tả kiến trúc ở mức khái quát.</strong> StyleGAN, LDM, VQ-Diffusion đều có nhiều phiên bản; tài liệu này mô tả phần chung, không gắn với một commit cụ thể.</li>
+        </ol>
+      </div>
+
+      <h3>Nguồn cho từng công thức</h3>
+      <ul style="font-size:14.5px;line-height:1.55">
+        <li>ELBO, VAE — Kingma &amp; Welling, <em>Auto-Encoding Variational Bayes</em>, 2013 (arXiv:1312.6114).</li>
+        <li>Minimax, quan hệ với JS divergence — Goodfellow et al., <em>Generative Adversarial Nets</em>, NeurIPS 2014.</li>
+        <li>StyleGAN (mapping, AdaIN, nhiễu theo tầng) — Karras et al., CVPR 2019; StyleGAN2 — Karras et al., CVPR 2020.</li>
+        <li>Đổi biến, coupling — Dinh et al., <em>Density estimation using Real NVP</em>, 2016; Glow — Kingma &amp; Dhariwal, 2018.</li>
+        <li>Codebook, straight-through — van den Oord et al., <em>Neural Discrete Representation Learning</em>, NeurIPS 2017.</li>
+        <li>Khuếch tán rời rạc — Gu et al., <em>Vector Quantized Diffusion Model for Text-to-Image Synthesis</em>, CVPR 2022.</li>
+        <li>LDM — Rombach et al., CVPR 2022; DDPM — Ho et al., 2020; DDIM — Song et al., 2020.</li>
+        <li>Projected GAN — Sauer et al., NeurIPS 2021. unCLIP (DALL·E 2) — Ramesh et al., 2022. Imagen — Saharia et al., 2022.</li>
+        <li>Số liệu DIRE — arXiv:2303.09295v1, Table 1–3 và Phụ lục A.</li>
+      </ul>
+
+      <p class="endnote">
+        Tài liệu này đi kèm <code>docs/paper-tung-trang.html</code> (bản đọc từng trang của bài gốc).
+        Phần lý thuyết ở đây là kiến thức nền ổn định; phần đánh giá (§08, các khung tím) là của người viết bản đọc.
+        Mọi công thức dùng MathML, không phụ thuộc mạng — đọc được offline và trong iframe không có internet.
+      </p>
+    </section>
+
+  </div><!-- /wrap -->
+</main>
+
+<script>
+(function(){
+  "use strict";
+  var secs = Array.prototype.slice.call(document.querySelectorAll('section'));
+  var toc = document.getElementById('toc');
+  var barT = document.getElementById('barT');
+  var barS = document.getElementById('barS');
+  var prog = document.getElementById('prog');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('button.fam'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#cmp tbody tr'));
+  var svgNubs = Array.prototype.slice.call(document.querySelectorAll('g.famg'));
+
+  function dec(x){ var d = document.createElement('div'); d.innerHTML = x; return d.textContent; }
+
+  // ---- TOC ----
+  var lastSec = null;
+  secs.forEach(function(s, i){
+    var kind = s.dataset.sec || '';
+    if (kind !== lastSec) {
+      var p = document.createElement('p');
+      p.style.cssText = 'font:600 9.5px/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;'+
+                        'color:#6ea3af;margin:16px 8px 6px';
+      p.textContent = kind;
+      toc.appendChild(p);
+      lastSec = kind;
+    }
+    var a = document.createElement('a');
+    a.href = '#' + s.id;
+    a.dataset.i = i;
+    var n = document.createElement('span'); n.className = 'tn';
+    n.textContent = ('0' + s.id.replace('s','')).slice(-2);
+    var t = document.createElement('span');
+    t.innerHTML = s.dataset.short || s.id;
+    a.appendChild(n); a.appendChild(t);
+    toc.appendChild(a);
+  });
+  var links = Array.prototype.slice.call(toc.querySelectorAll('a'));
+
+  // ---- scroll spy ----
+  var current = 0;
+  function setActive(i){
+    current = i;
+    links.forEach(function(a){ a.classList.toggle('on', Number(a.dataset.i) === i); });
+    var s = secs[i];
+    barT.textContent = dec(s.dataset.short || s.id);
+    barS.textContent = '· ' + (s.dataset.sec || '');
+    var act = toc.querySelector('a.on');
+    if (act && act.scrollIntoView) act.scrollIntoView({block:'nearest'});
+  }
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if (e.isIntersecting) {
+          var i = secs.indexOf(e.target);
+          if (i >= 0 && i !== current) setActive(i);
+        }
+      });
+    }, {rootMargin:'-15% 0px -70% 0px', threshold:0});
+    secs.forEach(function(s){ io.observe(s); });
+  }
+  function onScroll(){
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    prog.style.width = (max > 0 ? (h.scrollTop / max * 100) : 0) + '%';
+    if (!('IntersectionObserver' in window)) {
+      var y = h.scrollTop + 120, idx = 0;
+      secs.forEach(function(s, i){ if (s.offsetTop <= y) idx = i; });
+      if (idx !== current) setActive(idx);
+    }
+  }
+  window.addEventListener('scroll', onScroll, {passive:true});
+  onScroll();
+  setActive(0);
+
+  // ---- focus a family ----
+  var sel = null;
+  function focusFam(fam){
+    sel = (sel === fam) ? null : fam;
+    rows.forEach(function(r){ r.classList.toggle('hl', !!sel && r.dataset.fam === sel); });
+    cards.forEach(function(b){ b.setAttribute('aria-pressed', String(!!sel && b.dataset.fam === sel)); });
+    svgNubs.forEach(function(g){ g.classList.toggle('sel', !!sel && g.dataset.fam === sel); });
+  }
+  cards.forEach(function(b){
+    b.addEventListener('click', function(){
+      focusFam(b.dataset.fam);
+      var t = document.getElementById('cmp');
+      if (sel && t && t.scrollIntoView) t.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  });
+  svgNubs.forEach(function(g){
+    g.addEventListener('click', function(){
+      focusFam(g.dataset.fam);
+      var t = document.getElementById('cmp');
+      if (t && t.scrollIntoView) t.scrollIntoView({behavior:'smooth', block:'center'});
+    });
+  });
+
+  // ---- hide equations ----
+  var hide = document.getElementById('hideEq');
+  hide.addEventListener('change', function(){
+    document.body.classList.toggle('no-eq', hide.checked);
+  });
+
+  // ---- mobile toc toggle ----
+  var side = document.getElementById('side');
+  side.querySelector('.brand').addEventListener('click', function(){
+    if (window.innerWidth <= 1000) side.classList.toggle('open');
+  });
+
+  // ---- keyboard: j/k + numbers ----
+  document.addEventListener('keydown', function(e){
+    var tag = (e.target && e.target.tagName) || '';
+    if (/INPUT|SELECT|TEXTAREA|BUTTON/.test(tag)) return;
+    if (e.key === 'j' || e.key === 'PageDown') { e.preventDefault(); var n1 = secs[Math.min(current+1, secs.length-1)]; if (n1.scrollIntoView) n1.scrollIntoView({behavior:'smooth'}); }
+    else if (e.key === 'k' || e.key === 'PageUp') { e.preventDefault(); var p1 = secs[Math.max(current-1, 0)]; if (p1.scrollIntoView) p1.scrollIntoView({behavior:'smooth'}); }
+    else if (e.key === 'Home') { e.preventDefault(); window.scrollTo({top:0, behavior:'smooth'}); }
+    else if (e.key === 'End') { e.preventDefault(); window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
+    else if (/^[0-9]$/.test(e.key)) {
+      var idx = Number(e.key);
+      if (idx < secs.length) { e.preventDefault(); if (secs[idx].scrollIntoView) secs[idx].scrollIntoView({behavior:'smooth'}); }
+    }
+  });
+})();
+</script>
+</body>
+</html>
