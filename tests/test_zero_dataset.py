@@ -395,3 +395,152 @@ def test_tar_inventory_sample_is_capped(tmp_path: Path):
             ti.size = len(data)
             tf.addfile(ti, io.BytesIO(data))
     assert len(ds.tar_inventory(p, n_sample=2)["sample"]) == 2
+
+
+# --------------------------------------------------------------------------- #
+# Đường dự phòng khi ingest hỏng giữa đường
+# --------------------------------------------------------------------------- #
+
+def _single(tmp_path: Path, name: str, images: list[bytes], labels=(1,), gen="adm") -> list:
+    """Một archive + Item tương ứng, để test đường dự phòng ở phạm vi hẹp."""
+    p = _make_tar(tmp_path / name, images)
+    return [ds.Item(source=p, split="test", dataset="lsun_bedroom",
+                    generator=gen, label=labels[0])]
+
+
+def test_truncated_archive_falls_back_to_streaming_read(tmp_path: Path):
+    """Tar tải thiếu đuôi: `r:*` chết, `r|*` phải cứu được phần đầu.
+
+    Đây là lỗi thật của người dùng (tải 4 GB từ Baidu, hỏng 3 %). Trước đây nó
+    làm mất trắng archive dù 97 % nội dung nằm ở đầu file.
+    """
+    imgs = [_png_bytes((i * 20, 40, 90), seed=i) for i in range(8)]
+    good = _make_tar(tmp_path / "adm.tar.gz", imgs)
+    raw = good.read_bytes()
+    broken = tmp_path / "adm_cut.tar.gz"
+    broken.write_bytes(raw[: int(len(raw) * 0.6)])
+
+    made, stats = ds.ingest(
+        [ds.Item(source=broken, split="test", dataset="lsun_bedroom", generator="adm", label=1)],
+        tmp_path / "out", size=32,
+    )
+    # không ném, giữ được phần đọc tới chỗ hỏng
+    assert stats["written"] > 0
+    assert made and all(m.generator == "adm" for m in made)
+    # và phải KHAI là đã đọc dở, không được im lặng
+    assert len(stats["partial_archives"]) == 1
+    rec = stats["partial_archives"][0]
+    assert rec["read"] == stats["written"]
+    assert "EOFError" in rec["error"] or "ReadError" in rec["error"]
+    assert rec["mode"] == "r|*"
+
+
+def test_strict_still_refuses_a_broken_archive(tmp_path: Path):
+    imgs = [_png_bytes((i * 20, 40, 90), seed=i) for i in range(6)]
+    good = _make_tar(tmp_path / "adm.tar.gz", imgs)
+    broken = tmp_path / "adm_cut.tar.gz"
+    broken.write_bytes(good.read_bytes()[: int(good.stat().st_size * 0.6)])
+
+    with pytest.raises(ds.IntegrityError, match="archive hỏng"):
+        ds.ingest(
+            [ds.Item(source=broken, split="test", dataset="lsun_bedroom", generator="adm", label=1)],
+            tmp_path / "out", size=32, on_error="strict",
+        )
+
+
+def test_cut_image_gets_a_second_chance_and_is_declared(tmp_path: Path):
+    """Ảnh cụt trong tar: đọc lại bằng LOAD_TRUNCATED_IMAGES, và ghi lại là đã dùng."""
+    full = _png_bytes((10, 200, 10), size=96, seed=5)
+    cut = full[: len(full) - 60]
+    items = _single(tmp_path, "adm.tar.gz", [full, cut])
+    made, stats = ds.ingest(items, tmp_path / "out", size=32)
+
+    assert stats["written"] == 2          # ảnh cụt vẫn dùng được
+    assert stats["n_rejects"] == 0
+    assert stats["n_fallbacks"] == 1
+    assert "ảnh cụt" in stats["fallbacks"][0]
+
+
+def test_undecodable_member_is_named_not_just_counted(tmp_path: Path):
+    """Bỏ ảnh hỏng thì được, nhưng phải biết **ảnh nào** — nếu không thì không sửa được."""
+    items = _single(tmp_path, "adm.tar.gz", [_png_bytes((5, 5, 5)), b"\x00" * 300])
+    made, stats = ds.ingest(items, tmp_path / "out", size=32)
+
+    assert stats["written"] == 1
+    assert stats["n_rejects"] == 1
+    rec = stats["rejects"][0]
+    assert rec["member"] == "000001.png"
+    assert rec["generator"] == "adm" and rec["split"] == "test"
+    assert "UnidentifiedImageError" in rec["reason"]
+    assert stats["skipped"] == 1          # vẫn giữ con số cũ cho báo cáo
+
+
+def test_resume_does_not_write_twice(tmp_path: Path):
+    """Chạy lại sau khi hỏng phải là thao tác an toàn, không nhân đôi dữ liệu."""
+    items = _single(tmp_path, "adm.tar.gz", [_png_bytes((i * 9, 0, 0), seed=i) for i in range(4)])
+    out = tmp_path / "out"
+    _, first = ds.ingest(items, out, size=32)
+    n_files = len(list(out.rglob("*.png")))
+    _, second = ds.ingest(items, out, size=32)      # chạy lại y nguyên
+
+    assert len(list(out.rglob("*.png"))) == n_files == 4
+    assert first["written"] == 4 and first["reused"] == 0
+    assert second["written"] == 0 and second["reused"] == 4
+
+
+def test_resume_no_resume_rewrites(tmp_path: Path):
+    items = _single(tmp_path, "adm.tar.gz", [_png_bytes((7, 7, 7))])
+    out = tmp_path / "out"
+    ds.ingest(items, out, size=32)
+    _, second = ds.ingest(items, out, size=32, resume=False)
+    assert second["written"] == 1 and second["reused"] == 0
+
+
+def test_cross_run_leak_is_caught(tmp_path: Path):
+    """Điểm khó nhất của resume: rò rỉ **qua ranh giới hai lần chạy**.
+
+    Không seed `pix_seen` từ PNG đã có thì lần chạy trước để lại `real/x.png`,
+    lần này `adm` có đúng pixel đó ⇒ không thấy trùng ⇒ ACC ~100 % mà không có
+    lỗi nào báo. Đây chính là lý do phải quét lại thư mục đầu ra.
+    """
+    out = tmp_path / "out"
+    same = _png_bytes((33, 66, 99), seed=2)
+    ds.ingest(_single(tmp_path, "real.tar.gz", [same], labels=(0,), gen="real"),
+              out, size=32)
+    with pytest.raises(ds.IntegrityError, match="trùng pixel"):
+        ds.ingest(_single(tmp_path, "adm.tar.gz", [same], labels=(1,), gen="adm"),
+                  out, size=32)
+
+
+def test_cli_reports_partial_archive_in_card_and_exit_code(tmp_path: Path, capsys):
+    """Mã thoát + `data_card.warnings`: dữ liệu thiếu phải đi theo dữ liệu."""
+    base = tmp_path / "DiffusionForensics"
+    imgs = [_png_bytes((i * 15, 30, 60), seed=i) for i in range(6)]
+    good = _make_tar(base / "images/test/lsun_bedroom/adm.tar.gz", imgs)
+    cut = base / "images/test/lsun_bedroom/adm_cut.tar.gz"
+    cut.write_bytes(good.read_bytes()[: int(good.stat().st_size * 0.6)])
+    good.unlink()                                # chỉ còn archive hỏng
+
+    out = tmp_path / "norm"
+    rc = cli_main(["ingest", "--root", str(base), "--out", str(out),
+                   "--license", "research-only", "--splits", "test"])
+    assert rc == 3                               # KHÔNG được nói "xong" khi thiếu dữ liệu
+    text = capsys.readouterr()
+    assert "dự phòng" in text.out + text.err
+    card = json.loads((out / "data_card.json").read_text(encoding="utf-8"))
+    assert any("[dự phòng]" in w for w in card["warnings"])
+    assert "archive đọc dở" in " ".join(card["warnings"])
+
+
+def test_cli_strict_flag_turns_fallback_off(tmp_path: Path, capsys):
+    base = tmp_path / "DiffusionForensics"
+    imgs = [_png_bytes((i * 15, 30, 60), seed=i) for i in range(6)]
+    good = _make_tar(base / "images/test/lsun_bedroom/adm.tar.gz", imgs)
+    cut = base / "images/test/lsun_bedroom/adm_cut.tar.gz"
+    cut.write_bytes(good.read_bytes()[: int(good.stat().st_size * 0.6)])
+    good.unlink()
+
+    rc = cli_main(["ingest", "--root", str(base), "--out", str(tmp_path / "norm"),
+                   "--license", "research-only", "--splits", "test", "--strict"])
+    assert rc == 3
+    assert not any((tmp_path / "norm").rglob("*.png"))   # strict: không ghi gì dở dang

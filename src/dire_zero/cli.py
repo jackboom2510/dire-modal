@@ -243,6 +243,49 @@ def cmd_dataset(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ingest_warnings(stats: dict) -> list[str]:
+    """Đường dự phòng đã dùng ⇒ vào thẳng ``data_card.warnings``.
+
+    Không có bước này thì ``data_card.json`` của một dataset thiếu 3 % trông
+    y hệt dataset đủ — và đó là kiểu sai lệch tệ nhất, vì nó đi theo dữ liệu
+    lên Volume, vào báo cáo, vào con số cuối cùng.
+    """
+    out: list[str] = []
+    for rec in stats.get("partial_archives", []):
+        out.append(
+            f"[dự phòng] archive đọc dở {rec['key']}: {rec['read']} ảnh, "
+            f"đọc bằng {rec['mode']} ({rec['error']})"
+        )
+    if stats.get("n_fallbacks"):
+        out.append(f"[dự phòng] {stats['n_fallbacks']} ảnh đọc ở chế độ chấp nhận ảnh cụt")
+    if stats.get("n_rejects"):
+        out.append(f"[dự phòng] {stats['n_rejects']} ảnh không dùng được (xem stats['rejects'])")
+    if stats.get("reused"):
+        out.append(f"[resume] {stats['reused']} ảnh đã có từ lần chạy trước, không ghi lại")
+    return out
+
+
+def _print_fallbacks(stats: dict) -> None:
+    """In phần dự phòng — chỉ in khi có, và in đủ để sửa được."""
+    partial = stats.get("partial_archives") or []
+    if partial:
+        print(f"\n[dự phòng] {len(partial)} archive đọc dở:")
+        for rec in partial[:5]:
+            print(f"  ! {rec['key']}: {rec['read']} ảnh · {rec['mode']} · {rec['error']}")
+        if len(partial) > 5:
+            print(f"  … và {len(partial) - 5} archive khác")
+    if stats.get("n_fallbacks"):
+        print(f"[dự phòng] {stats['n_fallbacks']} ảnh đọc ở chế độ ảnh cụt (vài dòng cuối khác gốc):")
+        for line in (stats.get("fallbacks") or [])[:3]:
+            print(f"  ~ {line}")
+    if stats.get("n_rejects"):
+        print(f"[dự phòng] {stats['n_rejects']} ảnh bỏ (không giải mã được / không ghi được):")
+        for rec in (stats.get("rejects") or [])[:3]:
+            print(f"  - {rec['split']}/{rec['generator']}:{rec['member']} — {rec['reason']}")
+    if stats.get("reused"):
+        print(f"[resume] {stats['reused']} ảnh đã có sẵn, dùng lại (không ghi lại)")
+
+
 def cmd_ingest(args: argparse.Namespace) -> int:
     """tar.gz → PNG 256² + manifest sha256, rồi in lệnh đẩy lên Volume."""
     import datetime as _dt
@@ -269,7 +312,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     print(f"Đang đổ {len(items)} archive → {out} (cắt tối đa {args.limit} ảnh/archive)…")
 
     try:
-        made, stats = ds.ingest(items, out, size=args.size, limit_per_archive=args.limit)
+        made, stats = ds.ingest(
+            items, out, size=args.size, limit_per_archive=args.limit,
+            on_error="strict" if args.strict else "record",
+            resume=not args.no_resume,
+        )
     except ds.IntegrityError as exc:
         print(f"[CHẶN] {exc}", file=sys.stderr)
         return 3
@@ -292,25 +339,36 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         seed=args.seed, fake_source=fake_src, label=label,
         comparable_to_paper=(args.dataset or "").lower() in ("lsun_bedroom", "lsun-bedroom", "lsun"),
         manifest_sha256=ds.manifest_sha(made),
-        warnings=scan.warnings + scan.notes, created=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        warnings=scan.warnings + scan.notes + _ingest_warnings(stats), created=_dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
     ds.write_data_card(cardpath, card)
 
     ok, bad = ds.verify_manifest(manifest)
     for key, n in sorted(stats["per_archive"].items()):
         print(f"  {key}: {n} ảnh")
-    print(f"\n[xong] {stats['written']} ảnh · thật {n_real} · giả {n_fake} · bỏ {stats['skipped']} ảnh hỏng")
+    print(f"\n[xong] {stats['written']} ảnh mới · {stats['reused']} ảnh dùng lại"
+          f" · thật {n_real} · giả {n_fake} · bỏ {stats['n_rejects']} ảnh hỏng")
     print(f"  manifest: {manifest}\n  data_card: {cardpath}")
     print(f"  kiểm lại sha256: {ok} khớp, {len(bad)} lệch")
     for b in bad[:5]:
         print(f"    ! {b}")
     print(f"  nhãn tối đa được nói: {label}")
 
-    print("\nĐẩy lên Volume:")
+    _print_fallbacks(stats)
+
+    if stats["partial_archives"]:
+        print("\nĐẩy lên Volume — **CHỈ SAU KHI** tải lại archive hỏng và chạy lại:")
+    else:
+        print("\nĐẩy lên Volume:")
     print(f"  modal volume put dire-raw {out} zero/data -r")
     print("  modal volume put dire-raw " + str(manifest) + " zero/data/manifest.tsv")
     print("  modal volume put dire-raw " + str(cardpath) + " zero/data/data_card.json")
     print("\nRồi:  modal run -m dire_zero.modal_app::checkdata")
+    if stats["partial_archives"]:
+        print("\n[KHÔNG ĐẦY ĐỦ] có archive đọc dở ⇒ kế hoạch NFE/chi phí tính trên số ảnh"
+              " thực có sẽ sai. Tải lại archive đó rồi chạy lại (resume sẽ không ghi trùng).",
+              file=sys.stderr)
+        return 3
     return 0 if not bad else 3
 
 
@@ -405,6 +463,10 @@ def main(argv: list[str] | None = None) -> int:
             d.add_argument("--out", required=True)
             d.add_argument("--size", type=int, default=256)
             d.add_argument("--limit", type=int, default=None, help="tối đa bao nhiêu ảnh MỖI archive")
+            d.add_argument("--strict", action="store_true",
+                           help="archive hỏng ⇒ dừng hẳn (mặc định: giữ phần đọc được + ghi chú)")
+            d.add_argument("--no-resume", action="store_true",
+                           help="ghi lại cả PNG đã có (mặc định: bỏ qua file đã đúng)")
 
     args = p.parse_args(argv)
     return args.func(args)

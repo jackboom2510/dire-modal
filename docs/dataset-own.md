@@ -151,7 +151,57 @@ python -m dire_zero ingest --root F:/du-lieu --out F:/dire-zero-norm \
 - in sẵn lệnh `modal volume put`.
 
 `--limit N` cắt **N ảnh đầu** mỗi archive (thứ tự trong tar ổn định ⇒ tái lập
-được), không cắt ngẫu nhiên.
+được), không cắt ngẫu nhiên. Thêm hai cờ:
+
+- `--strict` — archive hỏng ⇒ dừng, **không ghi gì** (mặc định: giữ phần đọc được
+  và ghi chú; xem 3.4);
+- `--no-resume` — ghi lại cả PNG đã có (mặc định bỏ qua file đã đúng).
+
+### 3.4 Khi ingest gặp lỗi — bốn đường dự phòng, và một điều cấm
+
+Cây 12 GB đọc từ ổ ngoài, tải tay từ Baidu. Hỏng giữa đường là **chuyện thường**:
+tar thiếu đuôi, một JPEG cụt, ổ đầy đúng lúc ghi. Trước đây một trong số đó làm
+chết cả lượt chạy và để lại thư mục đầu ra nửa vời, không manifest, không
+`data_card`.
+
+Nay mỗi tầng có đường lui riêng:
+
+| Lỗi | Đường dự phòng | Ghi lại ở đâu |
+|---|---|---|
+| tar không mở được `r:*` | đọc tuần tự `r\|*`, giữ phần đọc được | `stats["partial_archives"]` + `data_card.warnings` |
+| ảnh cụt / header hỏng | đọc lại với `LOAD_TRUNCATED_IMAGES` | `stats["fallbacks"]` |
+| ghi file lỗi (ổ đầy, file bị khoá) | thử lại sau 50 ms, rồi bỏ qua | `stats["rejects"]` |
+| chạy lại sau khi hỏng | bỏ qua PNG đã đúng, **vẫn** kiểm rò rỉ | `data_card.warnings` (`[resume]`) |
+
+Ba chi tiết quyết định đường dự phòng này có dùng được hay không:
+
+**a. `r|*` là đường lui thật cho tar tải thiếu.** `r:*` cần bảng chỉ mục ở **cuối**
+file; thiếu 3 % đuôi là `tarfile.open` ném lỗi và mất trắng archive dù 97 % nội
+dung nằm ở đầu. `r|*` đọc tuần tự, không cần bảng chỉ mục, nên cứu được đúng
+phần còn nguyên. Member đã đưa ra ở lần đọc trước được bỏ qua (theo tên + size)
+để không đếm hai lần.
+
+**b. Resume phải kiểm rò rỉ qua ranh giới hai lần chạy.** Đây là chỗ dễ sai
+nhất. Nếu chỉ "bỏ qua file đã có", lần chạy trước để lại `real/abc.png`, lần này
+`adm` có **đúng pixel đó** ⇒ không thấy trùng ⇒ ACC ~100 % và **không có lỗi
+nào báo**. Vì vậy trước khi ghi, `ingest` quét lại `<out>/**/*.png` để dựng bảng
+`sha → nhãn`. Rò rỉ qua nhiều lần chạy bị bắt như rò rỉ trong một lần.
+
+**c. `--strict` kiểm **trước** khi ghi.** Nếu chỉ dừng lúc phát hiện hỏng ở cuối
+archive thì ảnh đã nằm trên đĩa rồi — vẫn là thư mục dở dang, chỉ khác là có
+thêm thông báo. Nên `--strict` đi hết archive một lượt chỉ-đọc-header trước
+(đọc đúp; chỉ ở chế độ này), rồi mới ghi. Đổi lại: hoặc ghi đủ, hoặc không ghi gì.
+
+**Điều cấm: dự phòng im lặng.** Một dataset thiếu 3 % mà `data_card.json` nói đủ
+là kiểu sai lệch tệ hơn hẳn việc chương trình dừng — vì nó đi theo dữ liệu lên
+Volume, vào báo cáo, vào con số cuối cùng, và không ai kiểm lại. Nên:
+
+- có archive đọc dở ⇒ lệnh `ingest` **exit 3**, in `[KHÔNG ĐẦY ĐỦ]`, và không
+  khuyến khích đẩy lên Volume;
+- mọi lần dùng đường lui đều nằm trong `data_card.warnings` với tiền tố
+  `[dự phòng]`;
+- `stats["rejects"]` ghi **tên member** + lý do, không chỉ đếm. "Bỏ 7 ảnh" thì
+  không sửa được gì; "`test/adm:000417.png` — UnidentifiedImageError" thì sửa được.
 
 ## 4. Thư mục ảnh nằm cạnh tar — phải cảnh báo, không được im lặng
 
