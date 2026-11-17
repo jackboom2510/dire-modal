@@ -22,7 +22,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from dire_zero.checkpoint import check_bijection, iter_name_pairs, map_state_dict  # noqa: E402
-from dire_zero.blocks import time_embedding  # noqa: E402
+from dire_zero.blocks import GroupNorm32, time_embedding  # noqa: E402
 from dire_zero.unet import ADM_LSUN, UNetConfig, ZeroUNet  # noqa: E402
 
 FIXTURE = json.loads(
@@ -105,6 +105,58 @@ def test_time_embedding_is_float32_and_time_mlp_takes_half():
     e = time_embedding(torch.tensor([0, 950]), TINY.model_channels)
     assert e.dtype == torch.float32
     assert model.time_mlp(e.to(torch.float16)).dtype == torch.float16
+
+
+def test_group_norm_accepts_half_parameters():
+    """`model.half()` đổi cả tham số của lớp norm, nhưng lớp đó **cố ý** tính ở float32.
+
+    Lỗi thật trên GPU::
+
+        RuntimeError: mixed dtype (CPU): expect parameter to have scalar type of Float
+
+    Test này chạy được trên CPU vì chỉ dùng GroupNorm — không cần conv fp16, thứ
+    mà nhiều bản PyTorch CPU không có. Nhờ vậy nó **không bị skip** đúng ở cái
+    máy cần nó nhất.
+    """
+    gn = GroupNorm32(8, 32).half()
+    y = gn(torch.randn(1, 32, 4, 4, dtype=torch.float16))
+    assert y.dtype == torch.float16 and y.shape == (1, 32, 4, 4)
+    assert torch.isfinite(y.float()).all()
+
+    # và đầu vào float32 vẫn cho đầu ra float32 (đường CPU thường)
+    assert gn(torch.randn(1, 32, 4, 4)).dtype == torch.float32
+
+
+def test_half_keeps_norms_in_float32():
+    """Đúng như ADM: chỉ conv/linear xuống fp16, chuẩn hoá ở lại float32."""
+    model = ZeroUNet(TINY).half()
+    norm = {p.dtype for n, p in model.named_parameters() if "norm" in n}
+    conv = {p.dtype for n, p in model.named_parameters() if "conv" in n}
+    assert norm == {torch.float32}, norm
+    assert conv == {torch.float16}, conv
+
+
+def test_full_fp16_pipeline_is_finite():
+    """`dire_map` trọn vẹn trên mô hình fp16 — đường mà mọi test khác bỏ qua.
+
+    Hai lỗi dtype liên tiếp đã lọt ra GPU vì mọi test đều chạy float32 trên CPU:
+    `time_embedding` float32 → `time_mlp` half, rồi `GroupNorm32` half. Một lượt
+    `dire_map` 4 bước bắt được **cả hai** cùng lúc.
+    """
+    from dire_zero.diffusion import ModelCounter, Schedule, dire_map
+
+    model = ZeroUNet(TINY).eval().half()
+    f = ModelCounter(model)
+    img = torch.rand(1, 3, 32, 32) * 2 - 1
+    try:
+        dm, recon = dire_map(f, img, Schedule(steps=4, device="cpu"))
+    except RuntimeError as exc:
+        if "not implemented for 'Half'" in str(exc) or "Could not run" in str(exc):
+            pytest.skip(f"CPU này không chạy conv fp16: {exc}")
+        raise
+    assert dm.shape == img.shape and recon.shape == img.shape
+    assert torch.isfinite(dm).all() and torch.isfinite(recon).all()
+    assert f.nfe == 2 * 4                      # S bước đảo + S bước tái tạo
 
 
 def test_forward_in_half_matches_dtype_of_input():

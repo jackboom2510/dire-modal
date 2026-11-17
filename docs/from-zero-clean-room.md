@@ -79,13 +79,13 @@ phát triển, và nó là test duy nhất bắt được lỗi *ngữ nghĩa*: 
 **sau** phép tăng mẫu vẫn ra ảnh đúng hình dạng, vẫn hội tụ, nhưng tốn gấp 4 lần
 compute và lệch hẳn kết quả.
 
-## 3. Ba lỗi tìm được khi viết lại
+## 3. Bốn lỗi tìm được khi viết lại
 
-Viết lại từ công thức không chỉ để "sạch". Ba lỗi dưới đây lộ ra vì phải suy
+Viết lại từ công thức không chỉ để "sạch". Bốn lỗi dưới đây lộ ra vì phải suy
 nghĩ lại từng chỉ số — và cả ba đều nằm trong **đường đang chạy** của repo, tức
 là đường mà `docs/runbook-local-manual.md` bảo người dùng chạy.
 
-**Trạng thái:** cả ba đã sửa trong `src/dire_modal/ddim.py`, có test riêng
+**Trạng thái:** 3.1–3.3 đã sửa trong `src/dire_modal/ddim.py`, có test riêng
 (`tests/test_ddim_protocol.py`, 11 test, chạy bằng mô hình "tiên tri" nên không
 cần GPU lẫn checkpoint). Chưa lần nào chạy với trọng số ADM thật.
 
@@ -125,6 +125,35 @@ chuyển cả phân bố chứ không thêm nhiễu ngẫu nhiên.
 > làm chương trình dừng.** Chúng cho ra ảnh, ra file `.npy`, ra báo cáo — chỉ là
 > báo cáo toàn `NaN` hoặc lệch vài phần trăm. Đó là lý do tồn tại của
 > `selfcheck` và của các test dùng mô hình tiên tri.
+
+### 3.4 fp16: hai lỗi dtype chỉ tồn tại trên GPU
+
+`selfcheck` nạp ADM thật (2,2 GB, `strict=True` qua 566 tensor) rồi chết ở lượt
+mạng **đầu tiên**, hai lần liên tiếp, với hai thông báo khác nhau:
+
+```text
+RuntimeError: mat1 and mat2 must have the same dtype, but got Float and Half
+RuntimeError: mixed dtype (CPU): expect parameter to have scalar type of Float
+```
+
+Cả hai đều là hệ quả của một quyết định **đúng**: `time_embedding` và `GroupNorm32`
+cố ý tính ở float32, vì sin/cos của `f_i·t` (t tới 1000) và chuẩn hoá theo nhóm
+đều mất chính xác ở fp16 — đúng chỗ tín hiệu DIRE sống. Nhưng:
+
+* đầu ra float32 của `time_embedding` đi thẳng vào `time_mlp` fp16;
+* `model.half()` biến tham số của chính `GroupNorm32` thành fp16, trong khi lớp
+  đó đẩy `x` lên float32 để tính.
+
+Sửa: nhúng thời gian đổi dtype **trước** `time_mlp`; `ZeroUNet.half()` giữ các
+lớp norm ở float32 (đúng như ADM, nơi chỉ conv được chuyển fp16). `GroupNorm32`
+vẫn tự đổi tham số nếu ai đó gọi `.to(torch.float16)` thẳng.
+
+> Vì sao hai lỗi này lọt: **toàn bộ** test chạy float32 trên CPU, còn lỗi chỉ
+> xuất hiện ở fp16 trên GPU. Nay có ba test chạm đúng đường đó —
+> `test_group_norm_accepts_half_parameters` (không cần conv fp16 nên không bị
+> skip), `test_half_keeps_norms_in_float32`, và `test_full_fp16_pipeline_is_finite`
+> chạy trọn `dire_map` 4 bước trên mô hình fp16. Bài học giống mục 3.1: **một
+> cấu hình chưa từng được chạy thì coi như chưa có test.**
 
 ## 4. Chạy
 
