@@ -48,6 +48,8 @@ import io
 import json
 import re
 import tarfile
+import time
+import zlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -444,21 +446,34 @@ def select(
 # Ingest: archive → PNG 256²
 # --------------------------------------------------------------------------- #
 
-def _norm_image(data: bytes, size: int):
-    """bytes → (ảnh RGB 256², w_gốc, h_gốc). Resize cạnh ngắn + cắt giữa."""
-    from PIL import Image  # noqa: PLC0415
+def _norm_image(data: bytes, size: int, truncated_ok: bool = False):
+    """bytes → (ảnh RGB 256², w_gốc, h_gốc). Resize cạnh ngắn + cắt giữa.
 
-    with Image.open(io.BytesIO(data)) as im:
-        w, h = im.size
-        im = im.convert("RGB")
-        short = min(w, h)
-        if short != size:
-            scale = size / short
-            im = im.resize((max(size, round(w * scale)), max(size, round(h * scale))), Image.BICUBIC)
-        left = (im.size[0] - size) // 2
-        top = (im.size[1] - size) // 2
-        im = im.crop((left, top, left + size, top + size))
-        return im.copy(), w, h
+    ``truncated_ok=True`` là **đường dự phòng thứ hai**: JPEG/PNG bị cắt cụt
+    (tải thiếu vài KB cuối, hoặc tar member bị ghi dở) vẫn đọc được phần đầu.
+    Pillow mặc định từ chối; bật cờ này thì nó đọc tới chỗ có dữ liệu rồi lấp
+    phần thiếu. Ảnh nhận được **không** giống ảnh gốc ở vài dòng cuối, nên chỉ
+    dùng khi lần đọc sạch đã thất bại, và người gọi phải ghi lại là đã dùng.
+    """
+    from PIL import Image, ImageFile  # noqa: PLC0415
+
+    prev = ImageFile.LOAD_TRUNCATED_IMAGES
+    if truncated_ok:
+        ImageFile.LOAD_TRUNCATED_IMAGES = True
+    try:
+        with Image.open(io.BytesIO(data)) as im:
+            w, h = im.size
+            im = im.convert("RGB")
+            short = min(w, h)
+            if short != size:
+                scale = size / short
+                im = im.resize((max(size, round(w * scale)), max(size, round(h * scale))), Image.BICUBIC)
+            left = (im.size[0] - size) // 2
+            top = (im.size[1] - size) // 2
+            im = im.crop((left, top, left + size, top + size))
+            return im.copy(), w, h
+    finally:
+        ImageFile.LOAD_TRUNCATED_IMAGES = prev
 
 
 def ingest(
@@ -467,10 +482,14 @@ def ingest(
     size: int = 256,
     limit_per_archive: int | None = None,
     progress=None,
+    on_error: str = "record",
+    resume: bool = True,
+    rejects_max: int = 50,
 ) -> tuple[list[Item], dict]:
     """Đổ archive ra PNG ``out_root/<split>/<generator>/<sha16>.png``.
 
-    Tên PNG = 16 ký tự đầu sha256 **của byte gốc trong tar**. Nhờ vậy:
+    Tên PNG = 16 ký tự đầu sha256 **của PNG đã chuẩn hoá** (tức của pixel mô
+    hình nhìn thấy, không phải của byte trong tar). Nhờ vậy:
 
     * hai ảnh trùng nội dung ⇒ cùng tên ⇒ ghi đè, không thành hai mẫu;
     * tên gốc kiểu ``000123.jpg`` không mang thông tin, bỏ đi thì chia train/test
@@ -478,67 +497,108 @@ def ingest(
     * truy ngược được về ``source_tar`` + ``member`` khi cần kiểm.
 
     Ảnh **trùng giữa hai lớp** (rò rỉ) không thể phát hiện chắc chắn nếu chỉ so
-    sha của byte gốc (JPEG khác encoder ra sha khác). Vì vậy ở đây còn so
-    **sha của pixel đã chuẩn hoá** — đó mới là thứ mô hình nhìn thấy.
+    sha của byte gốc (JPEG khác encoder ra sha khác). Vì vậy ở đây so **sha của
+    pixel đã chuẩn hoá** — đó mới là thứ mô hình nhìn thấy.
+
+    Đường dự phòng (``on_error="record"``, mặc định)
+    ------------------------------------------------
+    Ingest chạy trên cây 12 GB đọc từ ổ ngoài, nên hỏng giữa đường là chuyện
+    thường, không phải ngoại lệ hiếm: tar tải thiếu, một JPEG cụt, ổ đầy giữa
+    lúc ghi. Trước đây **một** trong số đó làm chết cả lượt chạy và để lại thư
+    mục đầu ra nửa vời không manifest. Nay mỗi tầng có đường lui riêng, và
+    **mọi** đường lui đều được ghi lại:
+
+    ==========================  ==========================================
+    lỗi                         đường dự phòng
+    ==========================  ==========================================
+    tar không mở được ``r:*``   đọc tuần tự ``r|*``; giữ phần đọc được
+    ảnh cụt / hỏng header       đọc lại với ``LOAD_TRUNCATED_IMAGES``
+    ghi file lỗi (ổ/khoá file)  thử lại sau 50 ms, rồi ghi nhận vào ``rejects``
+    chạy lại sau khi hỏng       bỏ qua PNG đã đúng, **vẫn** kiểm rò rỉ
+    ==========================  ==========================================
+
+    Nguyên tắc: **dự phòng thì được, im lặng thì không.** Mọi lần dùng đường lui
+    nằm trong ``stats["fallbacks"]`` / ``stats["partial_archives"]``, và
+    ``cmd_ingest`` đẩy chúng vào ``data_card.warnings``. Một dataset thiếu 3 %
+    mà ``data_card`` nói đủ là loại lỗi tệ hơn hẳn việc chương trình dừng.
+
+    ``on_error="strict"`` trả lại hành vi cũ: archive hỏng ⇒ ``IntegrityError``.
     """
+    if on_error not in ("record", "strict"):
+        raise ValueError(f"on_error phải là 'record' hoặc 'strict', không phải {on_error!r}")
+
+    if on_error == "strict":
+        # `strict` chỉ có nghĩa nếu **không ghi gì** trước khi biết archive đọc được.
+        # Không kiểm trước thì ảnh đã ghi ra đĩa rồi mới phát hiện hỏng ở cuối ⇒
+        # vẫn là thư mục dở dang, chỉ khác là có thêm thông báo.
+        for it in items:
+            if not _is_archive(it.source):
+                continue
+            ok, err = _archive_is_readable(it.source)
+            if not ok:
+                raise IntegrityError(
+                    f"archive hỏng: {it.source}\n  {err}\n"
+                    "Chạy lại không kèm --strict để giữ phần đọc được (có ghi chú)."
+                )
+
     out_root = Path(out_root)
     made: list[Item] = []
-    pix_seen: dict[str, tuple[int, str]] = {}
+    pix_seen: dict[str, tuple[int, str]] = _seed_pix_seen(out_root) if resume else {}
     leaks: list[str] = []
-    skipped = 0
+    rejects: list[dict] = []
+    fallbacks: list[str] = []
+    partial_archives: list[dict] = []
     per_archive: dict[str, int] = {}
+    reused = 0
 
     for it in items:
+        src_state: dict = {}
         if _is_archive(it.source):
-            sources = _iter_tar_images(it.source, limit_per_archive)
+            sources = _iter_tar_images(it.source, limit_per_archive, state=src_state)
         else:                                      # ảnh rời (bố cục real/ + fake/)
             sources = [(it.source.name, it.source.read_bytes())]
 
-        for name, data in sources:
-            try:
-                img, w0, h0 = _norm_image(data, size)
-            except Exception:                      # noqa: BLE001 — ảnh hỏng trong dataset
-                skipped += 1
-                continue
-            buf = io.BytesIO()
-            img.save(buf, format="PNG", optimize=False)
-            png_bytes = buf.getvalue()
-            sha = hashlib.sha256(png_bytes).hexdigest()
-            prev = pix_seen.get(sha)
-            if prev and prev[0] != it.label:
-                leaks.append(f"{it.generator}:{name} trùng pixel với {prev[1]} ở lớp khác")
-                continue
-            pix_seen[sha] = (it.label, f"{it.generator}:{name}")
-
-            key = f"{it.split}/{it.generator}"
-            per_archive[key] = per_archive.get(key, 0) + 1
-            dst = out_root / it.split / it.generator / f"{sha[:16]}.png"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            dst.write_bytes(png_bytes)
-            made.append(
-                Item(
-                    source=it.source,
-                    member=name,
-                    label=it.label,
-                    generator=it.generator,
-                    split=it.split,
-                    dataset=it.dataset,
-                    sha256=sha,
-                    width=size,
-                    height=size,
-                    png=str(dst),
-                    n_images=1,
+        try:
+            for name, data in sources:
+                reused += _ingest_one(
+                    it, name, data, out_root, size, pix_seen, leaks,
+                    made, rejects, fallbacks, per_archive, rejects_max, resume,
                 )
-            )
+        except (OSError, EOFError, tarfile.TarError, zlib.error) as exc:
+            # Lỗi ngoài dự kiến của archive (vd. file biến mất giữa lúc đọc).
+            src_state.setdefault("error", f"{type(exc).__name__}: {exc}")
+            src_state["partial"] = True
+
+        if src_state.get("partial"):
+            rec = {
+                "archive": str(it.source),
+                "key": f"{it.split}/{it.dataset}/{it.generator}",
+                "read": src_state.get("n", 0),
+                "error": src_state.get("error", ""),
+                "mode": src_state.get("mode", "r:*"),
+            }
+            partial_archives.append(rec)
+            if on_error == "strict":
+                raise IntegrityError(
+                    f"đọc archive hỏng: {it.source}\n  {rec['error']}\n"
+                    f"  đã đọc được {rec['read']} ảnh trước khi hỏng.\n"
+                    "Chạy lại không kèm --strict để giữ phần đọc được (có ghi chú)."
+                )
         if progress:
             progress(it)
 
     stats = {
-        "written": len(made),
-        "skipped": skipped,
+        "written": len(made) - reused,
+        "reused": reused,
+        "skipped": len(rejects),
+        "rejects": rejects[:rejects_max],
+        "n_rejects": len(rejects),
         "leaks": leaks[:10],
         "n_leaks": len(leaks),
         "per_archive": per_archive,
+        "partial_archives": partial_archives,
+        "fallbacks": fallbacks[:rejects_max],
+        "n_fallbacks": len(fallbacks),
     }
     if leaks:
         raise IntegrityError(
@@ -547,6 +607,94 @@ def ingest(
             "Đây là rò rỉ: ACC sẽ ~100% và vô nghĩa. Loại một trong hai phía rồi chạy lại."
         )
     return made, stats
+
+
+def _ingest_one(
+    it: Item,
+    name: str,
+    data: bytes,
+    out_root: Path,
+    size: int,
+    pix_seen: dict[str, tuple[int, str]],
+    leaks: list[str],
+    made: list[Item],
+    rejects: list[dict],
+    fallbacks: list[str],
+    per_archive: dict[str, int],
+    rejects_max: int,
+    resume: bool = True,
+) -> int:
+    """Một member: chuẩn hoá → kiểm rò rỉ → ghi. Mọi lỗi thành bản ghi, không ném.
+
+    Trả 1 nếu file đã có sẵn và được dùng lại (resume), 0 nếu vừa ghi.
+    """
+    try:
+        img, _w0, _h0 = _norm_image(data, size)
+    except Exception as exc0:              # noqa: BLE001 — ảnh hỏng là dữ liệu, không phải bug
+        try:                               # đường lui 2: chấp nhận ảnh cụt
+            img, _w0, _h0 = _norm_image(data, size, truncated_ok=True)
+        except Exception as exc1:          # noqa: BLE001
+            if len(rejects) < rejects_max:
+                rejects.append(
+                    {"member": name, "generator": it.generator, "split": it.split,
+                     "reason": f"{type(exc0).__name__}: {exc0}",
+                     "retry": f"{type(exc1).__name__}: {exc1}"}
+                )
+            return 0
+        if len(fallbacks) < rejects_max:
+            fallbacks.append(f"{it.split}/{it.generator}:{name} đọc ở chế độ ảnh cụt")
+
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", optimize=False)
+    png_bytes = buf.getvalue()
+    sha_full = hashlib.sha256(png_bytes).hexdigest()
+    sha16 = sha_full[:16]          # tên file ngắn; cột manifest giữ sha đầy đủ
+
+    prev = pix_seen.get(sha16)
+    if prev and prev[0] != it.label:
+        leaks.append(f"{it.generator}:{name} trùng pixel với {prev[1]} ở lớp khác")
+        return 0
+    pix_seen[sha16] = (it.label, f"{it.generator}:{name}")
+
+    dst = out_root / it.split / it.generator / f"{sha16}.png"
+    reused_here = False
+    if resume and dst.exists() and dst.stat().st_size == len(png_bytes):
+        reused_here = True                 # resume: file đã đúng, không ghi lại
+    else:
+        for attempt in (0, 1):             # đường lui 3: thử lại 1 lần
+            try:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                dst.write_bytes(png_bytes)
+                break
+            except OSError as exc:
+                if attempt:
+                    if len(rejects) < rejects_max:
+                        rejects.append(
+                            {"member": name, "generator": it.generator, "split": it.split,
+                             "reason": f"ghi file lỗi: {type(exc).__name__}: {exc}",
+                             "retry": "2 lần"}
+                        )
+                    return 0
+                time.sleep(0.05)           # NTFS/AV giữ file trong vài chục ms
+
+    key = f"{it.split}/{it.generator}"
+    per_archive[key] = per_archive.get(key, 0) + 1
+    made.append(
+        Item(
+            source=it.source,
+            member=name,
+            label=it.label,
+            generator=it.generator,
+            split=it.split,
+            dataset=it.dataset,
+            sha256=sha_full,
+            width=size,
+            height=size,
+            png=str(dst),
+            n_images=1,
+        )
+    )
+    return 1 if reused_here else 0
 
 
 def tar_inventory(path: str | Path, n_sample: int = 3) -> dict:
@@ -586,24 +734,102 @@ def _is_archive(path: str | Path) -> bool:
     return str(path).lower().endswith((".tar.gz", ".tgz", ".tar"))
 
 
-def _iter_tar_images(path: Path, limit: int | None):
+def _iter_tar_images(path: Path, limit: int | None = None, state: dict | None = None):
     """Sinh ``(tên member, bytes)`` cho tối đa ``limit`` ảnh, theo thứ tự trong tar.
 
     Thứ tự trong tar là **ổn định** (do người đóng gói), nên ``limit`` cắt tiền
     tố đầu — tái lập được bằng tham số, khác với cắt ngẫu nhiên.
+
+    Hai chế độ đọc, đây chính là đường dự phòng ở tầng archive:
+
+    * ``r:*`` — truy cập ngẫu nhiên, **cần đọc được bảng chỉ mục ở cuối file**.
+      Nhanh, nhưng file tải thiếu vài MB cuối thì ``tarfile.open`` ném lỗi ngay
+      và **mất trắng** archive dù 99 % nội dung nằm ở đầu.
+    * ``r|*`` — đọc **tuần tự**, không cần bảng chỉ mục. Đọc được đúng phần dữ
+      liệu còn nguyên và dừng ở chỗ hỏng.
+
+    Nên: thử ``r:*`` trước; lỗi thì ghi lại và đọc lại bằng ``r|*``, bỏ qua
+    member đã đưa ra (trùng tên+size) để không đếm hai lần. Lỗi được ghi vào
+    ``state`` chứ **không** im lặng nuốt: người gọi phải báo cho người dùng biết
+    dữ liệu này là một phần.
     """
-    n = 0
-    with tarfile.open(path, "r:*") as tf:
-        for m in tf:
-            if not (m.isfile() and _is_image_member(m.name)):
-                continue
-            fh = tf.extractfile(m)
-            if fh is None:
-                continue
-            yield m.name, fh.read()
-            n += 1
-            if limit is not None and n >= limit:
-                return
+    state = {} if state is None else state
+    state.setdefault("error", "")
+    state.setdefault("partial", False)
+    state.setdefault("n", 0)
+    state.setdefault("retried", False)
+    state.setdefault("mode", "r:*")
+    seen: set[tuple[str, int]] = set()
+
+    def _walk(mode: str):
+        with tarfile.open(path, mode) as tf:
+            for m in tf:
+                if not (m.isfile() and _is_image_member(m.name)):
+                    continue
+                if limit is not None and state["n"] >= limit:
+                    return
+                key = (m.name, m.size)
+                if key in seen:           # đã đưa ra ở lần đọc trước
+                    continue
+                fh = tf.extractfile(m)
+                if fh is None:
+                    continue
+                data = fh.read()
+                seen.add(key)
+                state["n"] += 1
+                yield m.name, data
+
+    try:
+        yield from _walk("r:*")
+    except (tarfile.TarError, OSError, EOFError, zlib.error) as exc:
+        state["error"] = f"{type(exc).__name__}: {exc}"
+        state["partial"] = True
+        if state["retried"] or (limit is not None and state["n"] >= limit):
+            return
+        state["retried"] = True
+        state["mode"] = "r|*"
+        try:
+            yield from _walk("r|*")
+        except (tarfile.TarError, OSError, EOFError, zlib.error) as exc2:
+            state["error"] += f" · đọc tuần tự cũng hỏng: {type(exc2).__name__}: {exc2}"
+
+
+def _archive_is_readable(path: Path) -> tuple[bool, str]:
+    """Đi hết archive **chỉ đọc header** (không giải mã ảnh, không ghi) để biết nó nguyên vẹn.
+
+    Dùng cho ``on_error="strict"``: đọc đúp, nhưng đổi lại được quyền nói "hoặc
+    ghi đủ, hoặc không ghi gì". Với cây 12 GB, đọc đúp chỉ ở chế độ strict là
+    đánh đổi chấp nhận được; chế độ mặc định chỉ đọc một lần.
+    """
+    try:
+        with tarfile.open(path, "r:*") as tf:
+            for _m in tf:
+                pass
+        return True, ""
+    except (tarfile.TarError, OSError, EOFError, zlib.error) as exc:
+        return False, f"{type(exc).__name__}: {exc}"
+
+
+def _seed_pix_seen(out_root: Path) -> dict[str, tuple[int, str]]:
+    """Nhặt ``sha16 → (nhãn, nguồn)`` từ PNG **đã có** trong ``out_root``.
+
+    Cần cho hai việc khi chạy lại sau khi hỏng giữa đường:
+
+    * không ghi lại file đã đúng (resume);
+    * **vẫn bắt được rò rỉ qua ranh giới hai lần chạy**. Không có bước này, lần
+      chạy trước để lại ``real/abc.png``, lần này ingest ``adm`` có đúng pixel đó
+      ⇒ không thấy trùng, ACC ~100 % và không có lỗi nào báo.
+    """
+    seen: dict[str, tuple[int, str]] = {}
+    if not out_root.is_dir():
+        return seen
+    for f in out_root.rglob("*.png"):
+        rel = f.relative_to(out_root)
+        if len(rel.parts) != 3:            # <split>/<generator>/<sha16>.png
+            continue
+        gen = rel.parts[1]
+        seen.setdefault(f.stem, (label_for_generator(gen), f"{gen}/{f.name} (lần chạy trước)"))
+    return seen
 
 
 # --------------------------------------------------------------------------- #

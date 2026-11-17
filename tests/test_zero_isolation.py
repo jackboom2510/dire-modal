@@ -27,7 +27,7 @@ FORBIDDEN_STRINGS = ("/opt/dire", "ZhendongWang6", "compute_dire.py", "third_par
 ALLOWED_TOP = {
     "__future__", "abc", "argparse", "collections", "dataclasses", "datetime", "hashlib",
     "importlib", "io", "json", "math", "os", "pathlib", "random", "re", "shutil", "sys",
-    "tarfile", "tempfile", "time", "typing", "numpy", "PIL", "torch", "modal",
+    "tarfile", "tempfile", "time", "typing", "zlib", "numpy", "PIL", "torch", "modal",
 }
 
 BLOCK_START = "# CLEAN-ROOM-CHECK"
