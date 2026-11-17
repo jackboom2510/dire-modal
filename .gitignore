@@ -41,3 +41,4 @@ docs/media/triplets/
 *.egg-info/
 build/
 dist/
+logs/
