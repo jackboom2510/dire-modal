@@ -254,6 +254,18 @@ thì trọng số ADM **chưa có trên Modal** — migration không thể tạo
 tồn tại; phải đẩy `256x256_diffusion_uncond.pt` (~2,2 GB) lên bằng
 `modal volume put dire-zero … ckpt/adm_lsun.pt`.
 
+**Ba trạng thái của đích ADM, ba thông báo khác nhau** (bản đầu gộp cả ba thành
+"1 xung đột", và lần chạy thật đã ra đúng thông báo sai đó):
+
+| Trạng thái | `apply` nói gì |
+|---|---|
+| `ckpt/adm_lsun.pt` đã có, ≥ 1,5 GB | `[adm] đã có (2,xx GB) — không có gì để chuyển` |
+| file ở đó nhưng < 1,5 GB | **dừng**, nói rõ "không phải trọng số ADM", không xoá, không ghi đè |
+| không có ở đích **và** không có ở nguồn | **dừng** kèm lệnh `modal volume put …` |
+
+Thiếu nguồn **không phải** xung đột: xung đột là có dữ liệu khác ở đích và cần
+người quyết định; thiếu nguồn thì chỉ cần biết đích đã có hay chưa.
+
 Detector tác giả đi đường riêng: `checkpoints/*.pth` trong khoảng 100–400 MB ⇒
 `ckpt/author/<tên gốc>.pth` (giữ tên = tên generator: `lsun_adm`, `lsun_pndm`,
 `imagenet_adm`, …), và `results/repro_*` ⇒ `runs/author/`. Đây là đường **R0**

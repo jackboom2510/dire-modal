@@ -14,6 +14,11 @@ Bốn luật của module này
 2. **Không ghi đè nội dung khác.** Đích đã có file cùng tên nhưng sha khác ⇒
    dừng, báo ``conflict``, không ghi. Ghi đè im lặng là cách mất một checkpoint
    tốt mà không ai biết.
+2b. **"Không có nguồn" không phải "xung đột".** Hai thứ cần hai cách xử lý: xung
+   đột là có dữ liệu **khác** ở đích và cần người quyết định; thiếu nguồn chỉ là
+   không có gì để chép. Gộp chúng lại (bản đầu đã gộp) làm `apply` ném
+   "1 xung đột" trong khi sự thật là *đích đã có ADM, không có bản cũ để so* —
+   người dùng đi tìm một cuộc đụng độ không tồn tại.
 3. **Mặc định là ``plan``.** Muốn ghi thì phải gọi ``apply``; muốn ghi thật thì
    ``apply`` phải có ``confirm=True``. Cùng lý do như ``demo_train``: gõ thiếu
    một cờ không được phép tiêu tiền hay đổi dữ liệu.
@@ -121,7 +126,7 @@ class Candidate:
 class Action:
     """Một việc sẽ làm (hoặc đã làm) với một file."""
 
-    kind: str                # copy | skip | conflict
+    kind: str                # copy | skip | conflict | missing
     source: str
     target: str
     size: int = 0
@@ -147,6 +152,10 @@ class Plan:
         return [a for a in self.actions if a.kind == "conflict"]
 
     @property
+    def missing(self) -> list[Action]:
+        return [a for a in self.actions if a.kind == "missing"]
+
+    @property
     def bytes_to_copy(self) -> int:
         return sum(a.size for a in self.to_copy)
 
@@ -155,6 +164,7 @@ class Plan:
             "n_copy": len(self.to_copy),
             "n_skip": sum(1 for a in self.actions if a.kind == "skip"),
             "n_conflict": len(self.conflicts),
+            "n_missing": len(self.missing),
             "bytes_to_copy": self.bytes_to_copy,
             "gb_to_copy": round(self.bytes_to_copy / 1e9, 2),
         }
@@ -277,8 +287,21 @@ def plan_copy(candidates: list[Candidate], target: str | Path, target_exists: bo
 
     target = str(target)
     if not candidates:
-        return Plan([Action(kind="conflict", source="", target=target,
-                            reason="không tìm thấy checkpoint nào trong volume cũ")])
+        # Đích đã có ⇒ không có gì phải làm, và cũng không có gì để so: bản cũ
+        # không tồn tại nên "kiểm sha hai đầu" là bất khả. `verify` (biên lai) và
+        # `selfcheck` (nạp thật) mới là hai cổng kiểm cho trường hợp này.
+        if target_exists:
+            return Plan([Action(
+                kind="skip", source="", target=target,
+                reason="đích đã có; không có bản nào ở volume cũ để so sha — "
+                       "kiểm bằng `::verify` hoặc `::selfcheck`",
+            )])
+        return Plan([Action(
+            kind="missing", source="", target=target,
+            reason="không tìm thấy checkpoint ADM nào đủ lớn (≥ 1,5 GB) ở volume cũ; "
+                   "đích cũng chưa có — phải đẩy 256x256_diffusion_uncond.pt bằng "
+                   "`modal volume put`",
+        )])
 
     # Ứng viên lớn nhất trước (đã sắp trong discover). Nhiều bản cùng tên ở nhiều
     # đường là chuyện thật; chọn bản lớn nhất là chọn bản **đầy đủ nhất**, và
@@ -559,6 +582,7 @@ def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dic
     copied: list[dict] = []
     skipped: list[dict] = []
     conflicts: list[dict] = []
+    missing: list[dict] = []
 
     adm, rejected = discover_adm()
     p = plan_copy(adm, V.CKPT, Path(V.CKPT).exists())
@@ -567,8 +591,19 @@ def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dic
             copied.append(copy_verified(a.source, a.target, a.sha256_source))
         elif a.kind == "conflict":
             conflicts.append(asdict(a))
+        elif a.kind == "missing":
+            missing.append(asdict(a))
         else:
             skipped.append(asdict(a))
+
+    # Trạng thái thật của đích ADM — thứ mà `missing` không nói được một mình.
+    adm_size = Path(V.CKPT).stat().st_size if Path(V.CKPT).exists() else 0
+    adm_state = {
+        "target": V.CKPT,
+        "exists": bool(adm_size),
+        "size": adm_size,
+        "classify": classify_ckpt_size(adm_size) if adm_size else "absent",
+    }
 
     # Detector tác giả + số `repro_*` của họ: đây là đường R0 (chấm lại trên map
     # có sẵn, 0 đồng GPU). Mặc định bật vì thuần bổ sung, không ghi đè gì.
@@ -614,6 +649,8 @@ def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dic
         "n_skipped": len(skipped),
         "conflicts": conflicts[:500],
         "n_conflicts": len(conflicts),
+        "missing": missing,
+        "adm_target": adm_state,
         "bytes_copied": sum(c["bytes"] for c in copied + author_copied),
         "deleted_anything": False,
     }
@@ -621,9 +658,27 @@ def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dic
     vol_new.commit()
 
     print(json.dumps({k: v for k, v in payload.items() if k != "copied"}, ensure_ascii=False, indent=2))
+
     if conflicts:
         raise RuntimeError(
             f"{len(conflicts)} xung đột — không ghi đè. Xem receipt.json, kiểm tay rồi quyết định."
+        )
+    # Ba trạng thái của ADM, ba thông báo khác nhau. Trước đây cả ba đều ra
+    # "1 xung đột", và người dùng đi tìm một cuộc đụng độ không tồn tại.
+    if adm_state["classify"] == "adm":
+        print(f"[adm] {V.CKPT} đã có ({adm_state['size'] / 1e9:.2f} GB) — không có gì để chuyển.", flush=True)
+    elif adm_state["exists"]:
+        raise RuntimeError(
+            f"{V.CKPT} tồn tại nhưng chỉ {adm_state['size'] / 1e9:.2f} GB ⇒ **không phải** "
+            "trọng số ADM (cần ~2,2 GB). Nhiều khả năng ai đó đã đẩy nhầm detector vào đó.\n"
+            "Migration không xoá và không ghi đè: hãy tự đổi tên/kiểm tay rồi chạy lại, "
+            "hoặc trỏ sang chỗ khác. Kiểm nhanh bằng `modal run -m dire_zero.modal_app::selfcheck`."
+        )
+    else:
+        raise RuntimeError(
+            "chưa có trọng số ADM ở đích và cũng không tìm thấy ở volume cũ.\n"
+            "Migration chỉ chuyển được thứ đã tồn tại — hãy đẩy lên:\n"
+            "  modal volume put dire-zero <256x256_diffusion_uncond.pt> ckpt/adm_lsun.pt"
         )
     return payload
 
@@ -631,9 +686,21 @@ def apply(confirm: bool = False, data: bool = False, author: bool = True) -> dic
 @app.function(volumes=VOLUMES, cpu=2, timeout=1800)
 def verify() -> dict:
     """Kiểm biên lai với đĩa thật — chạy sau `apply`, và chạy lại được bất cứ lúc nào."""
+    size = Path(V.CKPT).stat().st_size if Path(V.CKPT).exists() else 0
     out = {
         "receipt": str(receipt_path(V.MOUNT)),
         **verify_receipt(V.MOUNT),
+        # `layout_targets` chỉ nói "có tồn tại". ADM cần thêm **kích thước**:
+        # một file 283 MB ở đúng đường dẫn trông y hệt một file 2,2 GB.
+        "adm_target": {
+            "path": V.CKPT,
+            "exists": bool(size),
+            "size": size,
+            "classify": classify_ckpt_size(size) if size else "absent",
+            "ok": size >= ADM_MIN_BYTES,
+        },
+        "author_detectors": sorted(p.name for p in Path(V.CKPT_AUTHOR).glob("*.pth"))
+        if Path(V.CKPT_AUTHOR).is_dir() else [],
         "layout_targets": {k: os.path.exists(v) for k, v in V.LAYOUT.items()},
     }
     print(json.dumps(out, ensure_ascii=False, indent=2), flush=True)
