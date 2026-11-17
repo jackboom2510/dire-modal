@@ -59,7 +59,7 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
 | `docs/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
-| `platforms/hf-spaces/` | Demo Gradio trên HF Spaces (CPU free) |
+| `platforms/hf-spaces/` | Demo Streamlit trên HF Spaces (CPU free) |
 
 ## Ba sự thật về tải Baidu (đã đo, đừng suy lại)
 

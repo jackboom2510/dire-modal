@@ -286,7 +286,7 @@ kho này **không** phụ thuộc `third_party/DIRE` (thư mục đó rỗng).
 | `src/dire_modal/paper_table2.tsv` | 32 ô Table 2 + 4 hàng avg | `compare_to_paper` không có gì để so; test `test_paper_table.py` kiểm avg khớp 8 ô |
 | `src/dire_modal/tiers.yaml` | định nghĩa tier (`e2min`, `e2`, `ckpts`…) và policy `NEVER` | `manifest.load_policy` rơi về `_POLICY_FALLBACK`, có thể **cho phép** file lẽ ra bị chặn |
 | `src/dire_modal/demo_train.yaml` | cấu hình cho `demo_train` | demo chạy với mặc định, không rõ đã đổi gì |
-| `platforms/hf-spaces/app.py` | UI Gradio: `detect(image)`, `visualize(name)`, `_gallery_items()` | mặt tiền demo công khai mất |
+| `platforms/hf-spaces/app.py` | UI Streamlit: 5 trang; `gallery` đọc qua `demolib.provenance` | mặt tiền demo công khai mất |
 | `platforms/site/build.py` | đọc repo → `data.json` + `index.html` | trang web tự bịa số (module này ghi số **ở đây**, không ở HTML, để trang không thể bịa) |
 
 # Phần 14 — Hạ tầng: script, nền tảng, công cụ
@@ -311,7 +311,7 @@ Vì sao **không** đặt tái lập trong script riêng: đã có giai đoạn 
 
 | Thư mục | Dùng cho | Ghi chú |
 |---|---|---|
-| `hf-spaces/` | demo công khai (CPU free) | `app.py` Gradio: tải ảnh → `Detector.score_pils` → xác suất; `visualize(name)` hiện bộ ba ảnh/DIRE có sẵn; `requirements.txt` ghim phiên bản |
+| `hf-spaces/` | demo công khai (CPU free) | `app.py` Streamlit + `demolib/` (toy2d, provenance, charts, cost); **không** có đường ảnh→xác suất; `requirements.txt` ghim phiên bản |
 | `site/` | trang tĩnh | `build.py` đọc repo (manifest, demo, status) rồi sinh `data.json`; `deck.js` + `style.css` hiển thị; số liệu khai **trong Python**, không trong HTML |
 | `kaggle/` | notebook mirror dữ liệu | `notebook.ipynb` — chạy trên Kaggle để tải/mirror, egress $0 |
 | `runpod/` | GPU rẻ hơn Modal cho job dài | `run.sh`: clone code, lấy dữ liệu từ R2/HF (**không** copy dữ liệu vào pod vì pod có thể bị thu hồi), chạy job |

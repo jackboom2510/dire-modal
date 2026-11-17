@@ -1,7 +1,8 @@
-# HF Spaces (CPU free) — gim phiên bản để build ổn định
-gradio==4.44.1
-torch==2.4.1
-torchvision==0.19.1
-huggingface_hub>=0.34
-pillow==10.4.0
-numpy==1.26.4
+# HF Spaces (CPU free) — đúng một phụ thuộc, có lý do.
+#
+# Không torch, không torchvision, không gradio:
+#   * Space này KHÔNG chấm ảnh và KHÔNG tính DIRE lúc chạy — map đã tính sẵn;
+#   * bỏ torch cắt cold start từ ~40 s xuống ~2 s và bỏ 800 MB cài đặt;
+#   * bỏ gradio vì UI viết lại bằng Streamlit (xem docs/demo-hf-spaces-plan.md §3).
+# Thêm một gói ở đây là thêm một tầng có thể hỏng lúc build — cân nhắc trước.
+streamlit==1.67.0

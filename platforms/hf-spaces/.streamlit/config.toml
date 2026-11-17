@@ -1,0 +1,22 @@
+# Cấu hình của Space. Tệp này nằm ở gốc repo HF Spaces, nên Streamlit đọc nó
+# khi khởi động: `streamlit run app.py`.
+#
+# `gatherUsageStats = false` không phải chuyện khẩu vị: demo công khai cho người
+# xem thuộc trường đại học, và yêu cầu ở `docs/demo-hf-spaces-plan.md` §8 là
+# **không có request nào ra ngoài `*.hf.space`**. Telemetry của Streamlit là
+# request duy nhất có thể vi phạm điều đó mà không ai thấy.
+
+[browser]
+gatherUsageStats = false
+
+[server]
+# Không cần phục vụ tệp tĩnh: ảnh gallery do `st.image` đọc, không qua HTTP riêng.
+enableStaticServing = false
+# Giữ mặc định an toàn của Streamlit (CORS + XSRF). Space chạy sau proxy của HF,
+# nên Host và Origin cùng một tên miền; nới hai cờ này là mở cửa cho mọi website.
+enableCORS = true
+enableXsrfProtection = true
+
+[theme]
+base = "light"
+primaryColor = "#1d4ed8"

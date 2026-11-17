@@ -808,26 +808,37 @@ def test_eval_one_never_raises_out_of_the_map():
 
 
 # ---------------------------------------------------------------------------
-# 10. Demo HF Spaces phải dùng CÙNG quy ước lớp cuối (nếu không: im lặng sai)
+# 10. Demo HF Spaces: đường "ảnh RGB → xác suất" đã bị bỏ, và phải ở yên như thế
 # ---------------------------------------------------------------------------
-def test_hf_space_detects_fc_width_instead_of_hardcoding_two_classes():
-    """`num_classes=2` + `strict=False` ⇒ lớp fc KHÔNG được nạp mà chỉ in warn.
+# Hai test dưới đây từng kiểm app Gradio cũ: nó nạp `fc.weight` để biết số lớp,
+# và chuẩn hoá ImageNet đúng như lúc train. Cả hai đều đúng — và cả hai đều **vô
+# nghĩa**, vì app đó đưa ảnh RGB vào một model học trên DIRE map. Sửa phép chuẩn
+# hoá cho khớp không làm con số có nghĩa hơn; nó chỉ làm con số khó nghi ngờ hơn.
+#
+# Nên app Streamlit hiện tại không có bộ phân loại nào để nạp sai. Điểm số chỉ đến
+# từ `.json` của gallery, sau khi qua cổng `gate == "passed"`. Ba test dưới khoá
+# đúng điều đó; phần số học và giao diện nằm ở `tests/test_hf_spaces_demo.py`.
+def test_hf_space_has_no_classifier_to_misload():
+    src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
+    for banned in ("num_classes", "fc.weight", "sigmoid", "softmax", "torch"):
+        assert banned not in src, f"app.py không được dựng lại đường chấm ảnh ({banned!r})"
 
-    Demo vẫn "chạy", vẫn trả hai con số cộng lại bằng 1 — nhưng là xác suất của
-    một cái đầu phân loại chưa từng được train. Cùng gốc với sự cố eval
-    2026-10-28, chỉ khác là ở đây nó KHÔNG ném lỗi.
+
+def test_hf_space_has_no_image_preprocessing():
+    """Không còn `Resize(256) → CenterCrop(224) → Normalize` vì không còn ảnh đầu vào.
+
+    Đây là điều *tốt*: mỗi bước tiền xử lý là một chỗ để lệch âm thầm so với lúc
+    train (`Normalize` sai từng làm hỏng điểm của tác giả, README dòng 40).
     """
     src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
-    assert "num_classes=2)" not in src, "hard-code 2 lớp ⇒ fc không bao giờ được nạp"
-    assert "n_out" in src and "fc.weight" in src, "phải đọc số unit từ checkpoint"
-    assert "sigmoid" in src, "checkpoint 1 logit cần sigmoid, không phải softmax"
+    for banned in ("RESIZE", "CenterCrop", "Normalize", "file_uploader"):
+        assert banned not in src, f"app.py không được nhận ảnh người dùng ({banned!r})"
 
 
-def test_hf_space_preprocessing_matches_the_author_pipeline():
-    """Resize(256) → CenterCrop(224) → Normalize(ImageNet): lệch là lệch số."""
-    src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
-    assert "RESIZE = 256" in src and "CROP = 224" in src, src[:200]
-    assert "0.485" in src and "0.229" in src, "phải chuẩn hoá ImageNet như lúc train"
+def test_hf_space_score_only_after_the_gate():
+    src = (ROOT / "platforms/hf-spaces/demolib/provenance.py").read_text(encoding="utf-8")
+    assert 'gate != "passed"' in src, "phải chặn điểm khi detector chưa qua cổng"
+    assert 'threshold_split") != "val"' in src, "ngưỡng phải chọn trên val, không trên test"
 
 
 # ---------------------------------------------------------------------------
