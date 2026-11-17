@@ -1,9 +1,12 @@
 # Kế hoạch demo web — cái gì chạy được thật, cái gì phải nói "chưa"
 
-- **Trạng thái:** kế hoạch (chưa sửa app) · **Ngày:** 2026-11-16
+- **Trạng thái:** kế hoạch (đã sửa app — xem `docs/demo-hf-spaces-plan.md`) · **Ngày:** 2026-11-16
 - **Liên quan:** `platforms/hf-spaces/` (app hiện có), `platforms/site/` (trang
   tĩnh), `docs/figures-plan.md` (dùng chung gallery), `docs/dataset-own.md` (nhãn
   R0/R1+R2/R3), `docs/runbook-free.md` (§ demo), ADR-0003
+- **Đã thực hiện:** app Gradio → app **Streamlit** 5 trang; Tab 1 (upload ảnh →
+  `P(fake)`) đã bị bỏ, không phải sửa. Kế hoạch triển khai, số đo cold start và
+  quy trình deploy: **`docs/demo-hf-spaces-plan.md`**.
 - **Mục đích:** chốt *demo làm được gì trên CPU free* trước khi viết thêm UI.
   Repo đã có sẵn một app Gradio; vấn đề không phải "chưa có demo", mà là **app
   hiện tại đang trả một con số vô nghĩa** (mục 2).

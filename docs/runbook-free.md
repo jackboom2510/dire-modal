@@ -831,20 +831,32 @@ Scene `TrainMechanism` cần log thật (§7b). **Chưa có log thì scene hiệ
 
 ## 9. Gallery + demo công khai (~$0.5 + $0)
 
+Demo là **Streamlit, không có ô upload**, và **không nạp checkpoint trên Space** —
+kế hoạch đầy đủ ở `docs/demo-hf-spaces-plan.md`. Đường "ảnh RGB → `P(fake)`" của
+bản Gradio cũ đã bị bỏ (`docs/demo-web-plan.md` §2): nó chấm một phân bố đầu vào
+chưa từng được train.
+
 ```bash
-# 9a. Sinh gallery trên GPU (cần checkpoint ADM)
-modal run -m dire_modal.compute_dire::make_gallery --n 12 --steps 20
-modal volume get dire-shards /_gallery ./platforms/hf-spaces/gallery
+# 9a. Tính DIRE map cho một ít ảnh test (nếu chưa có)
+modal run -m dire_zero.modal_app::dire --splits test --generator adm --n 8 --max-usd 1
 
-# 9b. Đẩy checkpoint lên HF để Space tải được
-#     (dùng checkpoint TÁC GIẢ, không phải bản train lại)
-modal volume get dire-raw /checkpoints/lsun_adm.pth ./
-huggingface-cli upload <user>/dire-detector ./lsun_adm.pth dire_resnet50.pth
+# 9b. Dựng gallery từ map + ảnh gốc — đường dẫn truyền tường minh
+python tools/make_gallery.py \
+    --maps  <volume>/maps/test --orig <volume>/images/test \
+    --out   platforms/hf-spaces/gallery \
+    --n 8 --steps 20 --label R1+R2 \
+    --map-source "maps/test/*.npy · ::dire --steps 20"
 
-# 9c. Tạo Space (xem platforms/hf-spaces/README.md)
+# 9c. Tạo Space (SDK: streamlit, hardware: CPU basic) rồi đẩy thư mục này lên
+#     xem platforms/hf-spaces/README.md §Deploy
 ```
 
-✅ **CỔNG 9**: Space public mở được, upload 1 ảnh → ra P(real)/P(fake); tab viz hiện ảnh với chú thích.
+`--scores <json> --gate passed` chỉ thêm **sau** khi cổng 2 (`demo-web-plan.md` §5)
+chạy xong trên `val`; mặc định tool không gắn điểm nào.
+
+✅ **CỔNG 9**: Space public mở được trong 60 s; 5 trang không traceback; trang
+gallery hiện `ảnh gốc | DIRE | điểm` kèm dòng `DIRE: … · detector: … · nhãn: … · S=…`;
+không có request nào ra ngoài `*.hf.space`.
 
 ---
 
@@ -1081,8 +1093,7 @@ Nên `load_state_dict` từ chối, và vì nó nằm trong `eval_one` (một `.
 | `resnet50(num_classes=2)` cố định | `fc_out_features(state)` đọc `fc.weight` shape **từ checkpoint**, dựng đúng 1 hay 2 lớp; không đọc được thì báo rõ thay vì đoán |
 | `softmax(dim=1)[:, 1]` cho mọi checkpoint | `prob_fake(rows, n_out)`: `n_out=1` ⇒ `sigmoid` (DIRE gốc), `n_out>=2` ⇒ `softmax[:, 1]`; chặn tràn số ở logit ±800 |
 | một cặp lỗi ⇒ `.map()` huỷ tất cả, mất trắng | `eval_one` không raise: trả `{"error": …}`, `main` ghi CSV với metric **để trống** + cột `error`, commit, rồi mới `SystemExit` để script dừng (không đốt thêm 3 detector với cùng lỗi) |
-| `platforms/hf-spaces/app.py`: `num_classes=2` + `strict=False` | đọc `fc.weight` từ checkpoint, `sigmoid` khi 1 logit, và **coi việc `fc.*` không nạp được là LỖI** (trước đây chỉ in warn ⇒ demo trả xác suất của đầu phân loại chưa train, trông vẫn "chạy") |
-| demo: crop thẳng 224, `Normalize([0.5]*3, …)` | `Resize(256) → CenterCrop(224) → Normalize(ImageNet)`, khớp `utils/datasets.py` |
+| `platforms/hf-spaces/app.py` (bản Gradio): `num_classes=2` + `strict=False`, rồi `Resize/CenterCrop/Normalize` được sửa cho khớp lúc train | **bỏ cả đường đó**: sửa tiền xử lý cho khớp không làm một model học trên DIRE map có nghĩa khi nhận ảnh RGB. App Streamlit hiện tại không có bộ phân loại nào; điểm chỉ đọc từ `.json` của gallery sau cổng `gate == "passed"` (`docs/demo-hf-spaces-plan.md`) |
 
 Đọc kết quả khi có cặp lỗi:
 
