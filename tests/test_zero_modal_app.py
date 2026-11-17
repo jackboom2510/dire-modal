@@ -14,6 +14,9 @@ Hai điều được canh:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 modal = pytest.importorskip("modal")
@@ -75,3 +78,158 @@ def test_gpu_functions_declare_a_gpu():
                         found[node.name] = ast.literal_eval(kw.value)
     assert set(found) == wanted, f"thiếu: {wanted - set(found)}"
     assert set(found.values()) == {"A10G"}
+
+
+# --------------------------------------------------------------------------- #
+# Cổng dữ liệu: ba nguyên nhân khác nhau, ba thông báo khác nhau
+# --------------------------------------------------------------------------- #
+
+HDR = "png\tlabel\tgenerator\tsplit\tdataset\tsource_tar\tmember\tsha256\twidth\theight\n"
+
+
+@pytest.fixture()
+def volume_gia(tmp_path: Path, monkeypatch):
+    """Trỏ `_check_data` vào một `data/` giả trong tmp_path."""
+    data = tmp_path / "data"
+    (data / "train" / "real").mkdir(parents=True)
+    (data / "train" / "adm").mkdir(parents=True)
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MANIFEST", str(data / "manifest.tsv"))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    return tmp_path
+
+
+def _run(**kw) -> dict:
+    return modal_app._check_data(**kw)
+
+
+def _write_ok(data: Path, n_per_class: int = 2) -> None:
+    """Manifest + data_card + PNG thật, để ca "mọi thứ ổn" chạy được."""
+    import hashlib
+
+    rows = [HDR]
+    for split in ("train", "test"):
+        for gen, label in (("real", 0), ("adm", 1)):
+            d = data / split / gen
+            d.mkdir(parents=True, exist_ok=True)
+            for i in range(n_per_class):
+                png = d / f"{i:016x}.png"
+                png.write_bytes(b"png" + bytes([i]))
+                rows.append(f"{split}/{gen}/{png.name}\t{label}\t{gen}\t{split}\tlsun\t"
+                            f"\tmember\t{hashlib.sha256(png.read_bytes()).hexdigest()}\t256\t256\n")
+    (data / "manifest.tsv").write_text("".join(rows), encoding="utf-8")
+    (data / "data_card.json").write_text(json.dumps({
+        "label": "R1+R2", "fake_source": "author", "dataset": "lsun_bedroom",
+        "license": "research-only", "comparable_to_paper": True,
+    }), encoding="utf-8")
+
+
+def test_missing_manifest_says_it_is_a_root_file_and_gives_the_command(volume_gia: Path):
+    """Không phải "manifest rỗng": file **không lên**. Đẩy từng thư mục con là
+    cách nó bị bỏ sót, nên thông báo phải nói đúng như vậy."""
+    with pytest.raises(RuntimeError) as exc:
+        _run(skip_sha=True)
+    msg = str(exc.value)
+    assert "manifest.tsv" in msg and "gốc" in msg
+    assert "modal volume put dire-zero" in msg
+    assert "manifest rỗng" not in msg          # ca khác, cách sửa khác
+
+
+def test_empty_manifest_is_a_different_message_from_a_missing_one(volume_gia: Path):
+    (volume_gia / "data" / "manifest.tsv").write_text(HDR, encoding="utf-8")
+    with pytest.raises(RuntimeError) as exc:
+        _run(skip_sha=True)
+    msg = str(exc.value)
+    assert "chỉ có dòng tiêu đề" in msg
+    assert "không cần đẩy lại ảnh" in msg
+
+
+def test_missing_data_card_is_reported_on_its_own(volume_gia: Path):
+    _write_ok(volume_gia / "data")
+    (volume_gia / "data" / "data_card.json").unlink()
+    with pytest.raises(RuntimeError) as exc:
+        _run(skip_sha=True)
+    assert "data_card.json" in str(exc.value)
+
+
+def test_a_healthy_volume_passes_and_counts_png_on_disk(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=2)
+    report = _run(count_png=True)
+    assert report["problems"] == []
+    assert report["n_rows"] == 8 and report["n_png_on_disk"] == 8
+    assert report["n_real"] == 4 and report["n_fake"] == 4
+    assert report["sha_scope"] == "full" and report["manifest_sha_ok"] == 8
+    assert report["warnings"] == []
+
+
+def test_counting_png_on_disk_is_off_by_default(volume_gia: Path):
+    """Một vòng `os.walk` qua 217 585 entry trên FUSE tốn hàng phút, và nó không
+    chặn bước nào — nên mặc định không đếm."""
+    _write_ok(volume_gia / "data", n_per_class=1)
+    assert _run()["n_png_on_disk"] is None
+
+
+def test_hashing_is_parallel_and_reports_how_long_it_took(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=3)
+    report = _run(workers=8)
+    assert report["manifest_sha_ok"] == 12 and report["sha_workers"] == 8
+    assert report["sha_checked_rows"] == 12
+    assert report["sha_seconds"] >= 0.0
+    # cùng kết quả với một luồng — song song không được đổi câu trả lời
+    assert _run(workers=1)["manifest_sha_ok"] == report["manifest_sha_ok"]
+
+
+def test_splits_filter_limits_the_work_and_says_so(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=2)
+    report = _run(splits="test")
+    assert report["filtered_splits"] == ["test"]
+    assert report["sha_checked_rows"] == 4          # chỉ 2 lớp × 2 ảnh của test
+    assert set(report["by_split_generator"]) == {"test/real", "test/adm"}
+
+
+def test_sample_is_deterministic_and_labelled_as_a_sample(volume_gia: Path):
+    """Mẫu phải nói rõ là mẫu — nếu không, báo cáo bị đọc thành "đã kiểm toàn bộ"."""
+    _write_ok(volume_gia / "data", n_per_class=5)   # 20 dòng
+    a, b = _run(sample=5), _run(sample=5)
+    assert a["sha_scope"] == "sample" and a["sha_checked_rows"] == 5
+    assert a["sha_checked_rows"] == b["sha_checked_rows"]
+    assert a["manifest_sha_ok"] == b["manifest_sha_ok"]
+
+    full = _run()
+    assert full["sha_scope"] == "full" and full["sha_checked_rows"] == 20
+
+
+def test_sample_larger_than_the_manifest_is_the_whole_manifest(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=1)   # 4 dòng
+    report = _run(sample=100)
+    assert report["sha_scope"] == "full" and report["sha_checked_rows"] == 4
+
+
+def test_extra_pngs_outside_the_manifest_warn_but_do_not_block(volume_gia: Path):
+    """`::gen` ghi `data/<split>/ours_adm` mà manifest không biết — bình thường."""
+    _write_ok(volume_gia / "data", n_per_class=1)
+    for i in range(3):
+        (volume_gia / "data" / "train" / "ours_adm").mkdir(parents=True, exist_ok=True)
+        (volume_gia / "data" / "train" / "ours_adm" / f"{i:016x}.png").write_bytes(b"x")
+    assert _run()["n_png_on_disk"] is None           # không đếm trừ khi được yêu cầu
+    report = _run(count_png=True)
+    assert report["problems"] == []
+    assert report["n_png_on_disk"] == report["n_rows"] + 3
+    assert any("ours_adm" in w for w in report["warnings"])
+
+
+def test_tampered_png_is_caught_by_sha(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=1)
+    victim = sorted((volume_gia / "data" / "train" / "real").glob("*.png"))[0]
+    victim.write_bytes(b"khac han")
+    with pytest.raises(RuntimeError) as exc:
+        _run()
+    assert "sha256" in str(exc.value)
+
+
+def test_skip_sha_skips_hashing_but_still_checks_structure(volume_gia: Path):
+    _write_ok(volume_gia / "data", n_per_class=1)
+    victim = sorted((volume_gia / "data" / "train" / "real").glob("*.png"))[0]
+    victim.write_bytes(b"khac han")
+    report = _run(skip_sha=True)
+    assert report["problems"] == [] and report["sha_scope"] == "none"

@@ -388,9 +388,16 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print("\nĐẩy lên Volume — **CHỈ SAU KHI** tải lại archive hỏng và chạy lại:")
     else:
         print("\nĐẩy lên Volume:")
-    print(f"  modal volume put dire-zero {out} data -r")
-    print("  modal volume put dire-zero " + str(manifest) + " data/manifest.tsv")
-    print("  modal volume put dire-zero " + str(cardpath) + " data/data_card.json")
+    # Ba điều dễ sai, đều đã làm hỏng một lần chạy thật:
+    #  * KHÔNG có `-r` — `put` đã đệ quy sẵn khi nguồn là thư mục, và một cờ lạ
+    #    làm cả lệnh dừng trước khi upload byte nào;
+    #  * không có `--force` thì lần chạy **thứ hai** bị từ chối (FileExistsError);
+    #  * `data` là thư mục đích ⇒ nội dung vào thẳng `data/`, không sinh thêm
+    #    `data/<tên-thư-mục-local>/`.
+    print(f"  modal volume put dire-zero {out} data            # lần đầu")
+    print(f"  modal volume put dire-zero {out} data --force    # chạy lại")
+    print("  (Windows: dùng F:/dire-zero-norm, đừng dùng /f/ — "
+          "MSYS_NO_PATHCONV=1 tắt đúng phép đổi /f/ → F:/)")
     print("\nRồi:  modal run -m dire_zero.modal_app::checkdata")
     if stats["partial_archives"]:
         print("\n[KHÔNG ĐẦY ĐỦ] có archive đọc dở ⇒ kế hoạch NFE/chi phí tính trên số ảnh"

@@ -342,6 +342,9 @@ def test_cli_ingest_end_to_end(tree: Path, tmp_path: Path, capsys):
     text = capsys.readouterr().out
     # Volume mới: `dire-zero`, gốc `data/` (bố cục cũ `dire-raw` + `zero/data` đã bị thay)
     assert "modal volume put dire-zero" in text
+    # Modal 1.x: `-r` không tồn tại (thư mục luôn đệ quy) và làm lệnh dừng ngay
+    assert " -r" not in text
+    assert "--force" in text        # chạy lại mà thiếu --force ⇒ FileExistsError
     assert "data" in text and "zero/data" not in text
     assert "checkdata" in text
     assert (out / "manifest.tsv").exists() and (out / "data_card.json").exists()
@@ -622,6 +625,12 @@ def test_estimate_with_limit_counts_images_and_stops_early(tree: Path):
     assert ds.BYTES_PER_PNG >= 256 * 256 * 3       # trần, không phải trung bình
 
 
+def _mk(path: Path, data: bytes = b"png") -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+    return path
+
+
 def test_manifest_paths_are_relative_and_survive_moving_the_tree(tree: Path, tmp_path: Path):
     """Có ổ dự phòng thì đường dẫn tuyệt đối trong manifest là lỗi chờ ngày nổ."""
     items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
@@ -640,6 +649,44 @@ def test_manifest_paths_are_relative_and_survive_moving_the_tree(tree: Path, tmp
     out.rename(moved)                                        # "đổi ổ" / đổi máy
     ok2, bad2 = ds.verify_manifest(moved / "manifest.tsv")
     assert ok2 == len(rows) and not bad2
+
+
+def test_verify_rows_parallel_gives_the_same_answer_as_one_thread(tree: Path, tmp_path: Path):
+    """Song song chỉ được đổi **thời gian**, không được đổi kết quả.
+
+    217 585 ảnh nhỏ trên FUSE tốn hơn 30 phút với một luồng (đã đụng timeout
+    1800 s thật), nên `checkdata` băm bằng 64 luồng — và bước này phải chứng minh
+    rằng làm vậy không đổi câu trả lời.
+    """
+    items = ds.select(ds.scan_tree(tree), dataset="lsun_bedroom", splits=("test",))
+    out = tmp_path / "norm"
+    made, _ = ds.ingest(items, out, size=32)
+    manifest = ds.write_manifest_tsv(out / "manifest.tsv", made, root=out)
+    rows = ds.read_manifest_tsv(manifest)
+    assert len(rows) >= 2
+
+    base = out
+    seq = ds.verify_rows(rows, base, workers=1)
+    par = ds.verify_rows(rows, base, workers=8)
+    assert seq == par and seq[0] == len(rows) and seq[1] == []
+
+    # và vẫn bắt được file bị sửa khi chạy song song
+    victim = base / rows[0]["png"]
+    victim.write_bytes(b"khong con dung")
+    ok, bad = ds.verify_rows(rows, base, workers=8)
+    assert ok == len(rows) - 1 and len(bad) == 1 and "sha256 lệch" in bad[0]
+
+
+def test_verify_rows_reports_progress_and_counts_missing_files(tmp_path: Path):
+    calls: list[tuple[int, int]] = []
+    rows = [
+        {"png": "a.png", "sha256": ds.sha256_file(_mk(tmp_path / "a.png"))},
+        {"png": "b.png", "sha256": "0" * 64},          # không tồn tại
+    ]
+    ok, bad = ds.verify_rows(rows, tmp_path, workers=2,
+                             progress=lambda d, t: calls.append((d, t)), progress_every=2)
+    assert ok == 1 and len(bad) == 1 and "b.png" in bad[0]
+    assert calls == [(2, 2)]
 
 
 def test_verify_manifest_still_accepts_old_absolute_rows(tree: Path, tmp_path: Path):

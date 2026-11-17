@@ -283,11 +283,79 @@ nguồn, đích, size, sha hai đầu, `layout_version: 1` và `deleted_anything
 Dọn volume cũ **không** nằm trong app: đó là việc tay, chỉ sau khi `::verify` xanh
 và đã có bản trên `dire-zero`. Không có cờ nào để migration xoá hộ.
 
+#### Ba cái bẫy của `modal volume put`
+
+Đã làm hỏng một lần chạy thật, nên ghi lại (kiểm từ source `modal/cli/volume.py`):
+
+| Bẫy | Sự thật |
+|---|---|
+| `-r` | **không tồn tại** ở Modal 1.x. `put` đã đệ quy sẵn khi nguồn là thư mục; cờ lạ làm lệnh dừng **trước khi upload byte nào** |
+| chạy lại | thiếu `--force` ⇒ `FileExistsError` → lệnh từ chối, kể cả khi chỉ một file đã có |
+| đích là thư mục | `put … <dir> data` đặt **nội dung** vào `data/`, không sinh `data/<tên-thư-mục-local>/` |
+
+#### Bẫy lớn nhất: `put` cả cây 200 nghìn file
+
+`modal volume put <vol> <thư mục> <đích>` **không** ghi dần. Trong
+`modal/volume.py` (1.6.x), mọi file được đăng ký trong bộ nhớ rồi ở cuối context
+manager mới gửi **một** request `VolumePutFiles`:
+
+```python
+async def __aexit__(self, exc_type, exc_val, exc_tb):
+    if not exc_val:                      # có exception ⇒ KHÔNG gửi gì
+        ... upload từng file ...
+        await self._client._stub.VolumePutFiles(request)
+```
+
+Đã xảy ra thật: 217 579/217 585 file rồi treo ⇒ **không file nào** vào FS, dù
+thanh tiến trình đã gần đầy (nó đếm byte đã gửi). Chạy lại dừng đúng cùng con số.
+Một file hỏng làm mất cả 22 GB.
+
+Dùng `tools/put_resume.py` thay thế:
+
+```bash
+python tools/put_resume.py --local F:/dire-zero-norm --remote data --dry-run
+python tools/put_resume.py --local F:/dire-zero-norm --remote data
+python tools/put_resume.py --local F:/dire-zero-norm --remote data --only train/pndm --chunk 1
+```
+
+Nó liệt kê Volume trước (chỉ metadata), chỉ đẩy file **thiếu hoặc khác kích
+thước**, mỗi lô 500 file là một lần ghi riêng, và đẩy `manifest.tsv` +
+`data_card.json` **sau cùng**. `--chunk 1` là chế độ khoanh vùng file cứng đầu:
+mỗi file một request, file hỏng chỉ mất chính nó.
+
+Hai file metadata nằm ở **gốc** cây local, nên đẩy thủ công từng thư mục con sẽ
+bỏ sót chúng — và `::checkdata` sau đó báo "thiếu manifest.tsv" (nay phân biệt
+được với "manifest rỗng", mỗi ca một cách sửa).
+
+Và một bẫy Windows: `MSYS_NO_PATHCONV=1` **tắt** đúng phép đổi `/f/…` → `F:/…`,
+nên khi đã đặt biến đó thì phải viết `F:/dire-zero-norm`, không viết `/f/…`.
+Đường dẫn `/f/…` chỉ đúng khi **để** MSYS đổi hộ (tức không đặt biến).
+
 Mặc định `apply` **không** bê cây dữ liệu (`data/`, `maps/`, `gen/`, `runs/`) —
 `--data` mới bê. Lý do: người gọi migration là để cứu checkpoint 2,5 GB, không
 phải để một lệnh tự động sửa cả cây dữ liệu; `plan` vẫn in sẵn `n_copy` của phần
 dữ liệu để ai muốn thì quyết định có căn cứ. Dữ liệu sinh từ máy local vẫn đi
 đường `modal volume put` quen thuộc (mục 4.4).
+
+#### `::checkdata` trên 200 nghìn file: timeout là bài toán độ trễ, không phải băng thông
+
+Lần chạy thật với `cpu=2`, **một luồng**, timeout 1800 s đã bị cắt giữa đường.
+22,5 GB không phải vấn đề (đọc tuần tự chỉ vài phút); vấn đề là **217 585 lần mở
+file** trên FUSE của Volume — mỗi lần vài ms ⇒ hơn 30 phút.
+
+Nay `checkdata` băm bằng **64 luồng** trên `cpu=8`, timeout 4 giờ, in tiến trình
+`file/s` + thời gian còn lại. Ba mức dùng:
+
+```bash
+modal run -m dire_zero.modal_app::checkdata --splits test   # vài giây, đủ để lặp nhanh
+modal run -m dire_zero.modal_app::checkdata --sample 2000   # mẫu cách đều, báo cáo ghi "sample"
+modal run -m dire_zero.modal_app::checkdata                 # toàn bộ, cần cho con số cuối
+```
+
+`--sample` **không** được đọc thành "đã kiểm toàn bộ": báo cáo ghi
+`sha_scope: "sample"` và `sha_checked_rows`. Đếm PNG trên đĩa nay mặc định
+**tắt** (`--count-png` mới bật) vì một vòng `os.walk` qua 217 585 entry cũng tốn
+hàng phút mà không chặn bước nào.
 
 ### 4.4 Trên Modal
 
