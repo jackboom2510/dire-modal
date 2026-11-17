@@ -301,6 +301,58 @@ in "không có gì mới — không gọi GPU" và trả về, không bật máy
 `::report` thêm `maps.by_split_generator`: tồn kho `.npy` **trên đĩa**, để một
 thư mục `maps/<split>/fake/` còn sót từ bản cũ lộ ra ngay thay vì lẫn vào tập train.
 
+### 3.9 Hai cổng của `::dire`: tiền **và** thời gian
+
+Lượt thật, 15 generator × 2 split, `--n 500 --steps 20`:
+
+```text
+[kế hoạch] 10100 ảnh (n ≤ 500 mỗi ô, 2 split, 15 generator: adm, dalle2, …)
+[kế hoạch] sẽ tính 9700, dùng lại 400 map đã có
+[tiền] 9700 ảnh × 40 NFE = 388000 NFE · 9.88 GPU-h · 10.87 USD @ A10G 1.10/h
+GateError: ước tính 10.87 USD > trần 5.00 USD.
+```
+
+Cổng tiền hoạt động đúng: nó dừng **trước** khi nạp checkpoint và trước NFE đầu
+tiên, nên lượt bị chặn tốn ~0 (chỉ vài giây CPU của container). Nhưng nâng
+`--max-usd 12` sẽ **không** làm lượt chạy thành công — và nay cổng **thời gian**
+chạy trước cổng tiền, vì khi cả hai cùng vượt thì lời khuyên "nâng `--max-usd`"
+là lời khuyên sai (nó chỉ làm hoá đơn của phần chạy dở đắt hơn):
+
+| | Số | Kết luận |
+|---|---|---|
+| Ước tính | 9,88 GPU-h | |
+| `timeout` của function | 6 h | bị kill ở giờ thứ 6 |
+| Ngân sách an toàn (75 %) | 4,5 h | phải chia nhỏ |
+| Số giây/ảnh ở `S=20` | 1,834 s | `2S × 0,0917` |
+| Tiền/ảnh | **0,00112 USD** | đọc dòng `sẽ tính N` rồi nhân |
+
+Ba con số cuối là công cụ duy nhất cần: `N × 0,00112 USD` và `N × 1,834 s`.
+`::dire` nay tự kiểm cả hai và, khi vượt thời gian, in **nhóm generator** cụ thể:
+
+```text
+ước tính 9.88 GPU-h > trần thời gian 4.50 h (timeout 6 h × 75%).
+Chạy theo nhóm dưới đây, mỗi nhóm một lần (map đã có được dùng lại nhờ --skip-existing):
+  --generator adm,dalle2,ddpm,diff-projectedgan,diff-stylegan,iddpm,if
+  --generator ldm,midjourney,ours_adm,pndm,projectedgan,sdv2,stylegan,vqdiffusion
+```
+
+Nhóm là greedy theo số ảnh, và `real` **không** vào nhóm nào: nó có trong mọi
+lệnh, nên với `--skip-existing` chỉ được tính đúng một lần (ở lệnh đầu).
+
+**Chia nhỏ không làm tăng tiền** — tổng NFE như cũ — nhưng làm ba điều:
+
+1. mỗi container nằm dưới timeout, nên `vol.commit()` cuối **chạy được**;
+2. hỏng ở nhóm thứ 5 thì 4 nhóm trước đã nằm trên Volume, lần sau dùng lại;
+3. mỗi lệnh tự in bảng tiền của riêng nó, không phải tin một con số 10,87 USD.
+
+`--generator` nhận danh sách (`adm,pndm`), và tên gõ sai là **lỗi**: `sdv1` trong
+khi cây chỉ có `sdv2` mà vẫn chạy thì sẽ trả tiền cho `real` rồi báo "xong" với 0
+map mới.
+
+> Cùng một bài học với 3.6: một con số "trông hợp lý" (10,87 USD) không nói gì về
+> việc lượt chạy có **kết thúc** được hay không. Trần tiền và trần thời gian là
+> hai câu hỏi khác nhau.
+
 > Bài học chung của 3.5–3.8: **ước lượng, thiết bị và tính "đã có hay chưa" đều
 > là thứ "trông đúng" khi chỉ đọc code.** Cái thứ nhất chỉ sai trên GPU, cái thứ
 > hai chỉ sai khi `--n` nhỏ hơn kích thước cây, cái thứ ba chỉ sai ở **lần chạy

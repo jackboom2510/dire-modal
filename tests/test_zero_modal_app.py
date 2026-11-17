@@ -447,3 +447,93 @@ def test_map_inventory_shows_what_is_actually_on_disk(tmp_path):
     assert inv["by_split_generator"] == {
         "test/ours_adm": 4, "test/real": 1, "train/fake": 3, "train/real": 2,
     }
+
+
+# ---------------------------------------------------------------------------
+# Hai cổng trước khi xin GPU: tiền **và** thời gian
+# ---------------------------------------------------------------------------
+SEC = 0.0917          # sec/step đo được trên A10G (bench.json)
+STEPS = 20
+
+
+def _h(n_images: int) -> float:
+    return n_images * 2 * STEPS * SEC / 3600
+
+
+def test_group_generators_fits_every_group_in_the_time_budget():
+    """15 generator × 1 000 ảnh = 7,6 GPU-h trong container timeout 6 h.
+
+    Ca thật (log của người dùng): `::dire --n 500 --steps 20` với 15 generator,
+    ước tính 9,88 GPU-h. Nâng `--max-usd` lên cũng **không** cứu được: container
+    bị kill ở giờ thứ 6 và `vol.commit()` cuối không chạy. Cổng thời gian phải
+    chia nhóm sao cho **mỗi** nhóm nằm dưới ngân sách, và không bỏ sót generator.
+    """
+    pending = {g: 1000 for g in ("adm", "dalle2", "ddpm", "diff-projectedgan", "diff-stylegan",
+                                 "iddpm", "if", "ldm", "midjourney", "pndm", "projectedgan",
+                                 "sdv2", "stylegan", "vqdiffusion", "ours_adm")}
+    pending["real"] = 1000
+    budget_h = 6 * 0.75                      # 4,5 h
+
+    assert sum(pending.values()) * 2 * STEPS * SEC / 3600 > budget_h   # 1 lượt thì vượt
+    groups = modal_app.group_generators(pending, SEC, STEPS, budget_h)
+
+    assert len(groups) >= 2
+    for g in groups:
+        assert sum(pending[x] for x in g) * 2 * STEPS * SEC / 3600 <= budget_h
+    flat = [x for g in groups for x in g]
+    assert sorted(flat) == sorted(g for g in pending if g != "real")
+    assert len(flat) == len(set(flat)), "một generator không được nằm hai nhóm"
+    assert "real" not in flat, "`real` nằm trong mọi lệnh, không thuộc nhóm nào"
+
+
+def test_group_generators_refuses_a_single_group_that_cannot_fit():
+    """Một generator tự nó vượt ngân sách ⇒ báo, kèm cách sửa; không chia bừa."""
+    from dire_zero.budget import GateError
+
+    with pytest.raises(GateError) as exc:
+        modal_app.group_generators({"adm": 20_000}, SEC, STEPS, 4.5)
+    msg = str(exc.value)
+    assert "adm" in msg and "--n" in msg
+
+
+def test_group_generators_ignores_empty_and_real():
+    assert modal_app.group_generators({"real": 500, "adm": 0}, SEC, STEPS, 4.5) == []
+    assert modal_app.group_generators({"adm": 10}, SEC, STEPS, 4.5) == [["adm"]]
+
+
+def test_select_generators_accepts_a_list_and_rejects_a_typo():
+    available = ["adm", "pndm", "sdv2"]
+    assert modal_app.select_generators(available, "auto") == available
+    assert modal_app.select_generators(available, "pndm") == ["pndm"]
+    assert modal_app.select_generators(available, "pndm, adm") == ["adm", "pndm"]
+    with pytest.raises(ValueError) as exc:
+        modal_app.select_generators(available, "sdv1")     # gõ nhầm: phải là lỗi
+    assert "sdv1" in str(exc.value) and "sdv2" in str(exc.value)
+
+
+def test_pending_by_generator_counts_only_missing_maps(tmp_path):
+    """Kế hoạch theo generator phải khớp thứ `compute_maps(skip_existing=True)` sẽ làm."""
+    maps = tmp_path / "maps"
+    (maps / "train" / "real").mkdir(parents=True)
+    (maps / "train" / "real" / "a.npy").write_bytes(b"x")
+    items = [
+        ("d/train/real/a.png", 0, "train", "real"),     # đã có
+        ("d/train/real/b.png", 0, "train", "real"),     # còn thiếu
+        ("d/train/adm/c.png", 1, "train", "adm"),
+    ]
+    assert modal_app._pending_by_generator(items, str(maps), skip_existing=True) == {"real": 1, "adm": 1}
+    # không có cờ ⇒ tính lại tất
+    assert modal_app._pending_by_generator(items, str(maps), skip_existing=False) == {"real": 2, "adm": 1}
+
+
+def test_time_gate_wins_over_the_money_gate(monkeypatch):
+    """Cả hai cùng vượt ⇒ phải báo **thời gian**, không báo "nâng --max-usd".
+
+    Lời khuyên sai tệ hơn không có lời khuyên: nâng trần tiền cho một lượt chắc
+    chắn bị kill ở giờ thứ 6 chỉ làm hoá đơn của phần chạy dở trở nên đắt hơn.
+    """
+    src = Path(modal_app.__file__).read_text(encoding="utf-8")
+    body = src[src.index("def dire("):]
+    body = body[: body.index("def _pending_by_generator(")]
+    assert body.index("budget_h = WORK_TIMEOUT_S") < body.index("require_estimate(est, max_usd)")
+    assert "Nâng `--max-usd` cũng **không** cứu được" in body
