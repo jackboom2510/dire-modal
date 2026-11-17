@@ -31,6 +31,10 @@ Hệ quả kỹ thuật: `matplotlib` **không** được vào `src/dire_zero` �
 canh đúng điều đó. Toàn bộ code vẽ nằm ở `tools/figures.py` (một file, một entry
 point), đọc `.npy`/`.json`/`.tsv` do `dire_zero` sinh ra.
 
+**Đã có (từ 2026-11-16):** `tools/figures.py` với 8 lệnh, `tests/test_figures_tool.py`
+(27 test), `tests/test_notebooks.py` (16 test) và 4 notebook trong `notebooks/`.
+Chạy `python tools/figures.py list` để xem lệnh và đầu vào từng hình.
+
 ## 2. Figure của paper — kiểm kê đủ 10 hình
 
 | # | Nội dung | Paper dùng gì | Mình có gì | Khả thi | Nhãn |
@@ -203,7 +207,7 @@ ngay "R1+R2 nghĩa là gì" mà không cần đọc chú thích.
 
 | Thứ | Quy ước | Vì sao |
 |---|---|---|
-| Code | `tools/figures.py <tên> --out figs/` — **file này chưa tồn tại**, việc đầu tiên của đợt 0 | một entry point; `src/dire_zero` giữ nguyên phụ thuộc tối thiểu |
+| Code | `python tools/figures.py <tên> --out figs/` — đã có | một entry point; `src/dire_zero` giữ nguyên phụ thuộc tối thiểu |
 | Định dạng | `.pdf` (vector) cho báo cáo, `.png` 300 dpi cho README/web | PDF nhúng chữ LaTeX; PNG để xem nhanh |
 | Kích thước | cột đơn 3,5 in; cột đôi 7,2 in; font ≥ 7 pt | Chữ nhỏ hơn 7 pt là không đọc được khi in |
 | Font | không đổi font mặc định; `mathtext` cho công thức | Tránh hình "đẹp" nhưng lệch font với bài |
@@ -225,6 +229,37 @@ Một hình chỉ được coi là xong khi có **đủ sáu** thứ:
 - [ ] caption nói rõ **cái gì là của tác giả** (nếu dùng `dire/`, `recons/`, checkpoint);
 - [ ] nếu có so với paper: số paper vẽ khác kiểu (nét đứt, xám) + ghi nguồn;
 - [ ] `figs/README.md` có một dòng: hình → lệnh → nhãn.
+
+## 7b. Đã có gì, chạy thế nào (cập nhật 2026-11-16)
+
+| Thứ | Trạng thái |
+|---|---|
+| `tools/figures.py` | **có** — 8 lệnh: `f2-concept`, `f3-pipeline`, `a1-provenance`, `f5-noise`, `f1-teaser`, `a6-audit`, `a2-scores`, `a3-roc` |
+| F2, F3, A1 | **chạy được ngay**, không cần dữ liệu (`01_hinh_schematic.ipynb`) |
+| F5, F1 | **có code**, cần map đã giải nén (`02_hinh_R0_tu_dire.ipynb`) |
+| A6 | **có code**, cần `manifest.tsv` từ `ingest` |
+| A2, A3 | **có code**, cần `scores.npy`/`labels.npy` từ một lần eval thật |
+| F4, F6–F10, A4, A5, A7, A8 | **chưa có code** — vẫn theo đợt 2 như bảng trên |
+
+```bash
+python tools/figures.py list                      # xem lệnh + đầu vào từng hình
+python tools/figures.py f3-pipeline --out figs    # hình vẽ, chạy ngay
+python tools/figures.py f5-noise --out figs --maps <maps> --label R0   # cần map
+jupyter lab notebooks/                            # hoặc đi theo notebook
+```
+
+Bốn luật đã được cài bằng test, không chỉ bằng lời:
+
+* notebook **không** được tự vẽ (`plt.`/`imshow(`/`savefig(`) — phải gọi `tools/figures.py`,
+  nếu không thì có hai bản hình lệch nhau (`tests/test_notebooks.py`);
+* mọi hình **phải** có sidecar với `kind`, `claim_label`, `sources`, `cmd`;
+  thiếu một khoá là `_save` ném lỗi (`tests/test_figures_tool.py`);
+* mã màu/đường dẫn cá nhân (`F:/…`) không được nằm trong notebook;
+* `figs/README.md` sinh từ sidecar, nên bảng không thể lệch hình.
+
+Stub matplotlib ở `tests/fixtures/mpl_stub/` để CI kiểm được đường vẽ mà không
+phải cài matplotlib — và stub **mô phỏng đúng** `subplots(1,1) → Axes` (không
+phải mảng), vì kiểu sai đó làm test xanh trên stub và đỏ trên máy thật.
 
 ## 8. Việc chưa làm được, và sẽ không giả vờ làm được
 

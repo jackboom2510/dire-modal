@@ -23,6 +23,11 @@ platforms/hf-spaces/gallery/*.png
 
 # Dữ liệu tải ở MÁY LOCAL (tools/local_download.sh) — không bao giờ commit
 data/
+
+# Figure sinh bởi tools/figures.py — PDF và sidecar JSON thì commit (nhỏ, là nguồn),
+# PNG 300 dpi thì không (sinh lại bằng một lệnh).
+figs/*.png
+figs/**/*.png
 *.BaiduPCS-Go-downloading
 
 # Video (tools/manim) — GIF nhỏ thì commit để nhúng README, MP4 thì không
