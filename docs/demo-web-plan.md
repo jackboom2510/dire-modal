@@ -51,14 +51,14 @@ chế độ dưới đây là ba cách có DIRE map, xếp theo chi phí.
 
 ## 3. Ba chế độ, chọn theo số đo chứ không theo cảm giác
 
-| | A — Gallery | B — Upload tự tính | C — GPU backend |
+| | A — Gallery | B — Upload tự tính (CPU) | C — GPU backend (Modal) |
 |---|---|---|---|
-| Đầu vào | mẫu có sẵn từ `dire/` | ảnh bạn upload | ảnh bạn upload |
+| Đầu vào | mẫu có sẵn | ảnh bạn upload | ảnh bạn upload |
 | DIRE map | tác giả (có sẵn) | mình tính trên CPU | mình tính trên A10G |
-| Thời gian | < 1 s | **chưa biết — phải đo** | ~5–15 s |
-| Chi phí | 0 ₫ | 0 ₫ | > 0 ₫ |
-| Nhãn | `R0` | `R1+R2` | `R1+R2` |
-| Trạng thái | **làm ngay** | chỉ bật nếu đo đạt | chỉ bật nếu bạn đồng ý trả tiền |
+| Thời gian (`S=5`) | < 1 s | **101 s** (đã đo) | **0,92 s** |
+| Chi phí | 0 ₫ | 0 ₫ | ~0,0003 USD/ảnh |
+| Nhãn | `R0` | `R1+R2` | `R1` (map tự tính) |
+| Trạng thái | **làm ngay** | có, **mặc định tắt** (quá ngưỡng) | **đã dựng**, cần secret mới bật |
 
 ### A. Gallery — chế độ chính, mặc định, làm trước
 
@@ -100,17 +100,21 @@ Nếu bật: `S = 5` mặc định (paper Table 4: `S=5` vẫn 100/100 trên ADM
 trên SD-v1), và `S` hiện **trên** kết quả. Không được im lặng dùng `S=20` rồi để
 người xem chờ 3 phút.
 
-### C. GPU backend — ngoài phạm vi mặc định
+### C. GPU backend — đã dựng, bật bằng secret
 
-Chỉ khi bạn chủ động trả tiền. Nếu làm, backend là Modal, và có ba ràng buộc kỹ
-thuật không được bỏ:
+Đã viết xong và kiểm bằng test, chưa deploy (cần tài khoản Modal): endpoint
+`POST /dire` trên A10G (`src/dire_zero/demo_api.py` + `demo_service.py`), Space gọi
+qua `demolib/remote.py`. Ba ràng buộc đã thành code, không còn là lời khuyên:
 
-- **Trình duyệt gọi URL tương đối**, không gọi `localhost`/`127.0.0.1` — trong
-  môi trường preview, `localhost` là máy của người xem, không phải nơi chạy model;
-- Modal phải cho phép origin của Space (`allow_concurrent_inputs`, CORS) và có
-  **token** trong header, không để endpoint mở;
-- giới hạn kích thước upload + rate limit, nếu không một người có thể đốt hết
+- **Trình duyệt không gọi Modal.** Nó gọi server của Space (cùng origin, URL tương
+  đối); Space giữ token trong `st.secrets` rồi gọi Modal. Nếu để trình duyệt cầm
+  token thì token không còn là bí mật — chỉ là chuỗi ai cũng đọc được trong DevTools;
+- **Endpoint có token** (`X-Demo-Token`); thiếu cấu hình ⇒ **503**, không mở;
+  CORS chỉ bật khi đặt `DEMO_ORIGINS` (mặc định đóng);
+- **giới hạn 10 MB + 6 ảnh/60 s** + `S ≤ 20`, nếu không một người có thể đốt hết
   credit trong một buổi chiều.
+
+Chi phí, cold start, và cách chạy buổi nói: `docs/demo-modal-plan.md`.
 
 ## 4. Màn hình: chữ nào bắt buộc phải có
 

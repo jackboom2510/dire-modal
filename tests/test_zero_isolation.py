@@ -25,10 +25,14 @@ PKG = ROOT / "src" / "dire_zero"
 FORBIDDEN_MODULES = ("guided_diffusion", "dire_core", "dire_modal", "dire_local")
 FORBIDDEN_STRINGS = ("/opt/dire", "ZhendongWang6", "compute_dire.py", "third_party/DIRE")
 ALLOWED_TOP = {
-    "__future__", "abc", "argparse", "collections", "concurrent", "dataclasses",
-    "datetime", "hashlib",
+    "__future__", "abc", "argparse", "base64", "binascii", "collections", "concurrent",
+    "dataclasses", "datetime", "hashlib", "hmac",
     "importlib", "io", "json", "math", "os", "pathlib", "random", "re", "shutil", "sys",
     "tarfile", "tempfile", "time", "typing", "zlib", "numpy", "PIL", "torch", "modal",
+    # tầng demo (`demo_service.build_app`) — chỉ để bọc engine thành HTTP, không
+    # kéo thêm gì vào phép tính. Import nằm *trong* hàm nên phần còn lại của
+    # package vẫn chạy được khi không cài fastapi.
+    "fastapi", "starlette",
 }
 
 BLOCK_START = "# CLEAN-ROOM-CHECK"
@@ -127,7 +131,7 @@ def test_package_basics_import_without_torch(monkeypatch):
 
 
 def test_only_expected_third_party_deps():
-    """Package tự chứa: ngoài stdlib chỉ numpy/torch/PIL/modal."""
+    """Package tự chứa: ngoài stdlib chỉ numpy/torch/PIL/modal (+ fastapi ở tầng demo)."""
     seen = set()
     for path in _sources():
         text, _ = _strip_checked_block(path.read_text(encoding="utf-8"))
