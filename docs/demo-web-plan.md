@@ -90,6 +90,12 @@ Ngưỡng quyết định, chốt trước khi đo để không tự thương l�
 | 15–45 s | bật nhưng **sau nút bấm**, hiện đồng hồ đếm và ước lượng thời gian |
 | > 45 s | **tắt** chế độ B; chỉ còn A, ghi rõ "cần GPU để chấm ảnh của bạn" |
 
+**Đã đo (2026-11-17), 2 vCPU Xeon 2,6 GHz, ADM 256² thật:** 10,1 s/forward fp32
+⇒ `S = 5` = **101 s**, `S = 20` = **404 s**. Rơi vào hàng cuối ⇒ chế độ B **tắt**
+theo đúng ngưỡng đã chốt ở trên. Vẫn có trang "Tính DIRE thật" nhưng **mặc định
+tắt**, phải tick xác nhận thời gian chờ. Chi tiết + ba cách thấy phép tính:
+`docs/demo-hf-spaces-plan.md` §13.
+
 Nếu bật: `S = 5` mặc định (paper Table 4: `S=5` vẫn 100/100 trên ADM, 87,5/99,8
 trên SD-v1), và `S` hiện **trên** kết quả. Không được im lặng dùng `S=20` rồi để
 người xem chờ 3 phút.
