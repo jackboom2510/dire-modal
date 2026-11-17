@@ -342,6 +342,9 @@ def test_cli_ingest_end_to_end(tree: Path, tmp_path: Path, capsys):
     text = capsys.readouterr().out
     # Volume mới: `dire-zero`, gốc `data/` (bố cục cũ `dire-raw` + `zero/data` đã bị thay)
     assert "modal volume put dire-zero" in text
+    # Modal 1.x: `-r` không tồn tại (thư mục luôn đệ quy) và làm lệnh dừng ngay
+    assert " -r" not in text
+    assert "--force" in text        # chạy lại mà thiếu --force ⇒ FileExistsError
     assert "data" in text and "zero/data" not in text
     assert "checkdata" in text
     assert (out / "manifest.tsv").exists() and (out / "data_card.json").exists()

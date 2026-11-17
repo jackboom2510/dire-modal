@@ -325,7 +325,8 @@ python -m dire_zero ingest --root F:/du-lieu \
         --dataset lsun_bedroom --license research-only \
         --splits train val test --fake-source author --limit 500
 # → ./data/dire-zero-norm (tự sang F:/dire-zero-norm nếu ổ hiện tại không đủ chỗ)
-modal volume put dire-zero ./data/dire-zero-norm data -r
+modal volume put dire-zero ./data/dire-zero-norm data          # lần đầu
+modal volume put dire-zero ./data/dire-zero-norm data --force   # chạy lại
 modal run -m dire_zero.modal_app::checkdata       # sha256 + hai lớp + tỉ lệ ≤5:1
 modal run -m dire_zero.modal_app::bench           # ĐO sec/step trước khi tin bảng giá
 modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20
