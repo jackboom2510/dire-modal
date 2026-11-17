@@ -23,7 +23,8 @@ from dire_zero import modal_app  # noqa: E402
 
 def test_app_name_and_image():
     assert modal_app.APP_NAME == "dire-zero"
-    assert modal_app.VOLUMES.keys() == {"/raw", "/ckpt"}
+    # Một volume, một gốc — bố cục cũ hai volume đã bị thay (xem dire_zero/volume.py).
+    assert modal_app.VOLUMES.keys() == {"/zero"}
 
 
 def test_documented_entrypoints_exist():
@@ -32,15 +33,25 @@ def test_documented_entrypoints_exist():
         assert hasattr(fn, "local") or callable(fn), name
 
 
-def test_paths_do_not_collide_with_the_old_scratch_path():
+def test_paths_come_from_the_single_layout_module():
+    """Đường dẫn phải lấy từ `volume.py`; sáu đường cũ cho cùng một checkpoint là
+    đúng lỗi mà module đó sinh ra để chấm dứt."""
+    from dire_zero import volume as V
+
     for value in (modal_app.CKPT, modal_app.DATA, modal_app.GEN, modal_app.MAPS, modal_app.OUT):
-        assert value.startswith(("/raw/zero", "/ckpt/zero")), value
+        assert value.startswith(V.MOUNT + "/"), value
+        # không còn trỏ vào volume cũ nào (mount cũ là /raw và /ckpt)
+        assert not value.startswith(("/raw", "/ckpt/")), value
         assert "/scratch" not in value
 
+    assert modal_app.CKPT == V.CKPT
+    assert modal_app.MANIFEST == V.MANIFEST
+    assert modal_app.OUT == V.RUNS
 
-def test_checkpoint_path_matches_the_scratch_gen_convention():
-    """Đường dẫn trên Volume khác đường cũ, nhưng tên file thì phải giữ nguyên
-    (`adm_lsun.pt`) để người dùng không phải tải lại 2,5 GB."""
+
+def test_checkpoint_keeps_its_filename_so_nothing_has_to_be_downloaded_again():
+    """Đổi thư mục được, đổi **tên file** thì không: 2,5 GB đã nằm trên Volume,
+    và `migrate` tìm theo tên. Đổi tên là buộc người dùng tải lại."""
     assert modal_app.CKPT.endswith("adm_lsun.pt")
 
 

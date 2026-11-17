@@ -210,7 +210,7 @@ Tắt dự phòng: `--no-out-fallback` (thiếu chỗ thì dừng). Đổi ứng
 #### `manifest.tsv` ghi đường dẫn **tương đối**
 
 Có ổ dự phòng nghĩa là cùng một bộ dữ liệu có thể nằm ở `F:/…` hôm nay, `./data/…`
-hôm sau, và `/raw/zero/data` trong container. Đường dẫn tuyệt đối làm
+hôm sau, và `/zero/data` trong container. Đường dẫn tuyệt đối làm
 `verify_manifest` chỉ đúng trên đúng một máy — và **hỏng im lặng**: nó báo "lệch
 sha256" trong khi ảnh vẫn tốt, chỉ là tìm sai chỗ. Nên cột `png` là
 `test/<gen>/<sha16>.png`, `verify_manifest` giải theo thư mục chứa manifest (hoặc
@@ -325,7 +325,7 @@ python -m dire_zero ingest --root F:/du-lieu \
         --dataset lsun_bedroom --license research-only \
         --splits train val test --fake-source author --limit 500
 # → ./data/dire-zero-norm (tự sang F:/dire-zero-norm nếu ổ hiện tại không đủ chỗ)
-modal volume put dire-raw ./data/dire-zero-norm zero/data -r
+modal volume put dire-zero ./data/dire-zero-norm data -r
 modal run -m dire_zero.modal_app::checkdata       # sha256 + hai lớp + tỉ lệ ≤5:1
 modal run -m dire_zero.modal_app::bench           # ĐO sec/step trước khi tin bảng giá
 modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20

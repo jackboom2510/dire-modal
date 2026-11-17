@@ -168,11 +168,68 @@ giả) ⇒ tối đa `R1+R2`; `--fake-source gen` (tự sinh) ⇒ `R1+R2+R3`;
 tái lập. Chi tiết, gồm đường R0 trên CPU ~$0 và bảng lệch giữa bản kê với
 inventory: [`docs/dataset-own.md`](dataset-own.md).
 
-### 4.3 Trên Modal
+### 4.3 Volume: **một** cái duy nhất (`dire-zero`)
+
+Đường cũ dùng hai volume (`dire-raw` ⇒ `/raw`, `dire-ckpt` ⇒ `/ckpt`) và dữ liệu liền
+lạc ở `/raw/zero/**`. Hậu quả không phải thẩm mỹ: cùng một checkpoint 2,5 GB đã
+nằm ở **sáu** đường khác nhau tuỳ lần chạy —
+
+```text
+/raw/checkpoints/lsun_adm.pth     /ckpt/pretrained/lsun_adm.pth
+/raw/ckpt/adm_lsun.pt             /raw/zero/ckpt/adm_lsun.pt
+zero/ckpt/adm_lsun.pt             ckpt/adm_lsun.pt
+```
+
+⇒ không ai biết bản nào là bản đang dùng. Từ nay bố cục do **một** module khai
+báo (`src/dire_zero/volume.py`) và mọi app đọc từ đó:
+
+```text
+dire-zero → /zero
+  ckpt/adm_lsun.pt   ckpt/detector.pth
+  data/<split>/<gen>/*.png   data/manifest.tsv   data/data_card.json
+  maps/<split>/<gen>/*.npy   gen/<split>/<gen>/*.png   runs/*.json
+  _migration/receipt.json
+```
+
+**Bê dữ liệu cũ sang, không tải lại 2,5 GB.** `dire_zero.migrate` là app riêng
+(image `debian_slim`, **không** torch ⇒ không chạm GPU, 0 đồng):
+
+```bash
+modal run -m dire_zero.migrate::survey          # liệt kê, 0 ghi
+modal run -m dire_zero.migrate::plan            # n_copy / n_conflict / GB
+modal run -m dire_zero.migrate::apply --confirm        # chỉ checkpoint
+modal run -m dire_zero.migrate::apply --confirm --data  # thêm cây dữ liệu
+modal run -m dire_zero.migrate::verify                  # sha hai đầu
+```
+
+Ba bất biến, mỗi cái đều có test:
+
+| Bất biến | Cách thực hiện |
+|---|---|
+| **không xoá** volume cũ | chỉ mở `/raw`, `/ckpt` để **đọc**; lệnh xoá duy nhất trong toàn file là `unlink` file tạm của chính nó (test bằng AST) |
+| **không ghi đè** đích đã có | đích tồn tại ⇒ `conflict`, `apply` dừng và báo, không tự ý thay |
+| **không để file cụt** | ghi `.migrating` rồi `os.replace` (nguyên tử trên cùng FS), sha kiểm lại sau khi đổi tên |
+
+`discover_ckpts` khớp theo **tên file** (`adm_lsun.pt`, `lsun_adm.pth`,
+`256x256_diffusion_uncond.pt`), không theo đường dẫn — vì đường dẫn chính là thứ
+đang sai. Nhiều bản cùng tên ⇒ lấy bản **lớn nhất**, các bản còn lại ghi vào
+`skipped` của biên lai để sau này còn truy được. `_migration/receipt.json` ghi
+nguồn, đích, size, sha hai đầu, `layout_version: 1` và `deleted_anything: false`.
+
+Dọn volume cũ **không** nằm trong app: đó là việc tay, chỉ sau khi `::verify` xanh
+và đã có bản trên `dire-zero`. Không có cờ nào để migration xoá hộ.
+
+Mặc định `apply` **không** bê cây dữ liệu (`data/`, `maps/`, `gen/`, `runs/`) —
+`--data` mới bê. Lý do: người gọi migration là để cứu checkpoint 2,5 GB, không
+phải để một lệnh tự động sửa cả cây dữ liệu; `plan` vẫn in sẵn `n_copy` của phần
+dữ liệu để ai muốn thì quyết định có căn cứ. Dữ liệu sinh từ máy local vẫn đi
+đường `modal volume put` quen thuộc (mục 4.4).
+
+### 4.4 Trên Modal
 
 ```bash
 # 0. đẩy checkpoint (2,5 GB) — dùng lại bản đã tải tay cho đường cũ
-modal volume put dire-raw "$DIRE_LOCAL_ROOT/data/raw/sources/ckpt/adm_lsun.pt" zero/ckpt/adm_lsun.pt
+modal volume put dire-zero "$DIRE_LOCAL_ROOT/data/raw/sources/ckpt/adm_lsun.pt" ckpt/adm_lsun.pt
 
 # 1. cổng nạp trọng số: strict=True + 1 ảnh + kiểm NaN/NFE
 modal run -m dire_zero.modal_app::selfcheck
@@ -198,7 +255,7 @@ bước rồi tính DIRE bằng 20 bước. Dùng chung một số cho cả hai 
 lệch giao thức — sai lệch này không làm chương trình hỏng, chỉ làm con số không
 so được với bài báo.
 
-### 4.4 Chi phí
+### 4.5 Chi phí
 
 `dire_zero` không tự đoán giá. Hai cổng cứng, cả hai đều **dừng** chương trình:
 

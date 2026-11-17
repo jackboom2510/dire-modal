@@ -16,16 +16,20 @@ Lệnh::
     modal run -m dire_zero.modal_app::train --epochs 40
     modal run -m dire_zero.modal_app::report
 
-Đường dẫn trên Volume (tách hẳn khỏi `/raw/scratch/**` của đường cũ, để không
-bao giờ trộn hai bộ số)::
+Đường dẫn trên Volume — **một volume, một gốc**, xem `dire_zero/volume.py`::
 
-    /raw/zero/ckpt/adm_lsun.pt      2,5 GB, tải tay
-    /raw/zero/real/*.png            ảnh thật LSUN (đã xuất PNG)
-    /raw/zero/gen/*.png             R3: ảnh mình sinh
-    /raw/zero/maps/real/*.npy       R1
-    /raw/zero/maps/fake/*.npy       R1
-    /ckpt/zero/detector.pth         R2
-    /ckpt/zero/{gen,dire,train,eval,bench}.json
+    dire-zero  →  /zero
+    /zero/ckpt/adm_lsun.pt          2,5 GB, đẩy tay (hoặc bê từ volume cũ sang)
+    /zero/ckpt/detector.pth         R2
+    /zero/data/<split>/<gen>/*.png  kết quả ingest (real + ảnh tác giả/mình sinh)
+    /zero/data/manifest.tsv
+    /zero/data/data_card.json
+    /zero/maps/<split>/<gen>/*.npy  DIRE map
+    /zero/gen/<split>/<gen>/*.png   R3: ảnh mình sinh
+    /zero/runs/*.json               gen/dire/train/eval/bench/report
+
+Volume cũ (`dire-raw` + `dire-ckpt`) **không bị sửa**. Chuyển dữ liệu sang bố cục
+này bằng `dire_zero.migrate` (chỉ đọc cũ, chỉ ghi mới, không xoá gì).
 """
 
 from __future__ import annotations
@@ -36,16 +40,20 @@ import time
 
 import modal
 
+from . import volume as V
+
 APP_NAME = "dire-zero"
-CKPT = "/raw/zero/ckpt/adm_lsun.pt"
+#: Đường dẫn lấy từ **một** nguồn duy nhất (`volume.py`) — trước đây cùng một
+#: checkpoint được nhắc bằng sáu đường khác nhau trong repo, và không lỗi nào báo.
+CKPT = V.CKPT
 #: Cây dữ liệu sau `python -m dire_zero ingest`: <split>/<generator>/*.png
 #: `real` là ảnh thật; mọi tên khác là ảnh sinh (adm, pndm, ldm, ours_adm, …).
-DATA = "/raw/zero/data"
-MANIFEST = "/raw/zero/data/manifest.tsv"
-DATA_CARD = "/raw/zero/data/data_card.json"
-GEN = "/raw/zero/gen"                 # chỉ dùng khi chưa có ảnh giả nào
-MAPS = "/raw/zero/maps"              # <split>/<generator>/*.npy
-OUT = "/ckpt/zero"
+DATA = V.DATA
+MANIFEST = V.MANIFEST
+DATA_CARD = V.DATA_CARD
+GEN = V.GEN                   # chỉ dùng khi chưa có ảnh giả nào
+MAPS = V.MAPS                 # <split>/<generator>/*.npy
+OUT = V.RUNS
 
 #: Image riêng: chỉ torch + numpy + pillow. **Không** clone repo tác giả.
 image = (
@@ -56,9 +64,10 @@ image = (
 
 app = modal.App(APP_NAME, image=image)
 
-vol_raw = modal.Volume.from_name("dire-raw", create_if_missing=True)
-vol_ckpt = modal.Volume.from_name("dire-ckpt", create_if_missing=True)
-VOLUMES = {"/raw": vol_raw, "/ckpt": vol_ckpt}
+#: Một volume duy nhất. Hai volume cũ nghĩa là hai lần commit, hai chỗ để quên
+#: commit, và lớp lỗi "file có trên Volume nhưng container khác không thấy".
+vol = modal.Volume.from_name(V.VOLUME_NAME, create_if_missing=True)
+VOLUMES = {V.MOUNT: vol}
 
 
 def _counter(ckpt: str = CKPT, device: str = "cuda", dtype: str = "auto"):
@@ -69,7 +78,7 @@ def _counter(ckpt: str = CKPT, device: str = "cuda", dtype: str = "auto"):
     if not os.path.exists(ckpt):
         raise FileNotFoundError(
             f"thiếu {ckpt}. Đẩy lên bằng:\n"
-            "  modal volume put dire-raw <256x256_diffusion_uncond.pt> zero/ckpt/adm_lsun.pt"
+            "  modal volume put dire-zero <256x256_diffusion_uncond.pt> ckpt/adm_lsun.pt"
         )
     dt = "float16" if (dtype == "auto" and device == "cuda") else ("float32" if dtype == "auto" else dtype)
     t0 = time.time()
@@ -226,7 +235,7 @@ def bench(n_warmup: int = 1, n_measure: int = 5, steps: int = 20) -> dict:
         "note": "một ảnh 256×256, batch 1, fp16; đây là số dùng cho mọi ước lượng tiền",
     }
     save_sec_per_step(f"{OUT}/bench.json", payload["sec_per_step"], source="modal bench", gpu=payload["gpu"], batch=1)
-    vol_ckpt.commit()
+    vol.commit()
     print(payload, flush=True)
     return payload
 
@@ -254,7 +263,7 @@ def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, m
         os.makedirs(target, exist_ok=True)
         for nm in names:
             shutil.move(f"{out_root}/{nm}", f"{target}/{nm}")
-    vol_raw.commit()
+    vol.commit()
     return {"n": n, "out": f"{DATA}/<split>/ours_adm", "fake_source": "gen",
             "gen_json": {k: out[k] for k in ("n", "steps", "nfe_total", "seconds")}}
 
@@ -305,7 +314,7 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
                     items.append((str(p), 1, split))
 
     out = compute_maps(f, items, MAPS, meta, limit=None)
-    vol_raw.commit()
+    vol.commit()
     return {"n": out["n"], "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"], "est": est.as_dict()}
 
 
@@ -343,7 +352,7 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224, see
         seed=seed,
         init="scratch",
     )
-    vol_ckpt.commit()
+    vol.commit()
     print({k: payload[k] for k in ("best_epoch", "best_val_ap", "threshold_from_val")}, flush=True)
     print("[test]", payload["test"], flush=True)
     return payload
@@ -382,7 +391,7 @@ def report() -> dict:
         ],
     }
     write_json(f"{OUT}/report.json", payload)
-    vol_ckpt.commit()
+    vol.commit()
     print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
     return payload
 
