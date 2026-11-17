@@ -185,9 +185,9 @@ báo (`src/dire_zero/volume.py`) và mọi app đọc từ đó:
 
 ```text
 dire-zero → /zero
-  ckpt/adm_lsun.pt   ckpt/detector.pth
+  ckpt/adm_lsun.pt   ckpt/detector.pth   ckpt/author/*.pth
   data/<split>/<gen>/*.png   data/manifest.tsv   data/data_card.json
-  maps/<split>/<gen>/*.npy   gen/<split>/<gen>/*.png   runs/*.json
+  maps/<split>/<gen>/*.npy   gen/<split>/<gen>/*.png   runs/*.json   runs/author/*.json
   _migration/receipt.json
 ```
 
@@ -209,6 +209,29 @@ Ba bất biến, mỗi cái đều có test:
 | **không xoá** volume cũ | chỉ mở `/raw`, `/ckpt` để **đọc**; lệnh xoá duy nhất trong toàn file là `unlink` file tạm của chính nó (test bằng AST) |
 | **không ghi đè** đích đã có | đích tồn tại ⇒ `conflict`, `apply` dừng và báo, không tự ý thay |
 | **không để file cụt** | ghi `.migrating` rồi `os.replace` (nguyên tử trên cùng FS), sha kiểm lại sau khi đổi tên |
+
+**Tên file không đủ để biết nó là gì.** Lần `survey` đầu tiên trên volume thật
+tìm ra ba "ứng viên checkpoint", và cả ba đều là `checkpoints/lsun_adm.pth` —
+**282.534.013 B**, tức 283 MB. Trọng số ADM 256² có 552,8 M tham số ⇒ ~2,2 GB.
+283 MB là ResNet-50 của tác giả (23,5 M tham số). Nếu migration chỉ khớp tên,
+`apply` sẽ bê nhầm file đó vào `ckpt/adm_lsun.pt`, ghi biên lai "sha khớp", rồi
+`selfcheck` nổ `Missing key(s) in state_dict` — hỏng **muộn** nhất có thể, sau
+khi mọi thứ trông như đã xong.
+
+Vì vậy có **sàn kích thước**: ứng viên ADM phải ≥ 1,5 GB. File cùng tên mà nhỏ
+hơn thì rơi vào `adm_rejected_by_size` của `survey`/`plan` với lý do rõ ràng, và
+**không** được coi là ADM. Nếu `survey` báo `KHÔNG có ứng viên ADM nào đủ lớn`
+thì trọng số ADM **chưa có trên Modal** — migration không thể tạo ra thứ không
+tồn tại; phải đẩy `256x256_diffusion_uncond.pt` (~2,2 GB) lên bằng
+`modal volume put dire-zero … ckpt/adm_lsun.pt`.
+
+Detector tác giả đi đường riêng: `checkpoints/*.pth` trong khoảng 100–400 MB ⇒
+`ckpt/author/<tên gốc>.pth` (giữ tên = tên generator: `lsun_adm`, `lsun_pndm`,
+`imagenet_adm`, …), và `results/repro_*` ⇒ `runs/author/`. Đây là đường **R0**
+— chấm lại trên map có sẵn, 0 đồng GPU — và nó **không bao giờ** ghi vào
+`ckpt/adm_lsun.pt` hay `ckpt/detector.pth`. Nạp bằng
+`dire_zero.detector.load_dire_detector`, hàm này đòi đúng 23.510.081 tham số và
+từ chối `fc` 1000 lớp.
 
 `discover_ckpts` khớp theo **tên file** (`adm_lsun.pt`, `lsun_adm.pth`,
 `256x256_diffusion_uncond.pt`), không theo đường dẫn — vì đường dẫn chính là thứ
