@@ -479,11 +479,11 @@ def test_group_generators_fits_every_group_in_the_time_budget():
 
     assert len(groups) >= 2
     for g in groups:
-        assert sum(pending[x] for x in g) * 2 * STEPS * SEC / 3600 <= budget_h
-    flat = [x for g in groups for x in g]
+        assert g["gpu_h"] <= budget_h, g          # đã gồm `real` của nhóm đầu
+    flat = [x for g in groups for x in g["generators"]]
     assert sorted(flat) == sorted(g for g in pending if g != "real")
     assert len(flat) == len(set(flat)), "một generator không được nằm hai nhóm"
-    assert "real" not in flat, "`real` nằm trong mọi lệnh, không thuộc nhóm nào"
+    assert all("real" not in g["generators"] for g in groups)
 
 
 def test_group_generators_refuses_a_single_group_that_cannot_fit():
@@ -497,8 +497,12 @@ def test_group_generators_refuses_a_single_group_that_cannot_fit():
 
 
 def test_group_generators_ignores_empty_and_real():
-    assert modal_app.group_generators({"real": 500, "adm": 0}, SEC, STEPS, 4.5) == []
-    assert modal_app.group_generators({"adm": 10}, SEC, STEPS, 4.5) == [["adm"]]
+    groups = modal_app.group_generators({"adm": 10}, SEC, STEPS, 4.5)
+    assert [g["generators"] for g in groups] == [["adm"]]
+    # `real` một mình, vừa ngân sách ⇒ một nhóm, không generator, có `real`
+    only_real = modal_app.group_generators({"real": 100}, SEC, STEPS, 4.5)
+    assert len(only_real) == 1 and only_real[0]["generators"] == []
+    assert only_real[0]["includes_real"] == 100
 
 
 def test_select_generators_accepts_a_list_and_rejects_a_typo():
@@ -537,3 +541,65 @@ def test_time_gate_wins_over_the_money_gate(monkeypatch):
     body = body[: body.index("def _pending_by_generator(")]
     assert body.index("budget_h = WORK_TIMEOUT_S") < body.index("require_estimate(est, max_usd)")
     assert "Nâng `--max-usd` cũng **không** cứu được" in body
+
+
+def test_the_suggested_command_actually_fits_the_budget():
+    """Đúng log thật: nhóm đầu của bản cũ vẫn bị chặn lại vì bỏ quên `real`.
+
+    `--generator adm,iddpm,dalle2,ddpm,diff-projectedgan,diff-stylegan` = 4 000 ảnh
+    = 4,08 h, "vừa dưới" trần 4,50 h — nhưng lệnh đó **còn** 600 ảnh `real` chưa
+    có map ⇒ 4,69 h ⇒ bị chặn y như trước. Bản gợi ý in ra mà không chạy được thì
+    tệ hơn không gợi ý.
+    """
+    pending = {"adm": 1000, "iddpm": 1000, "dalle2": 500, "ddpm": 500,
+               "diff-projectedgan": 500, "diff-stylegan": 500, "if": 500, "real": 600}
+    budget_h = 4.5
+    old_first = ["adm", "iddpm", "dalle2", "ddpm", "diff-projectedgan", "diff-stylegan"]
+    assert (sum(pending[g] for g in old_first) + pending["real"]) * 2 * STEPS * SEC / 3600 > budget_h
+
+    groups = modal_app.group_generators(pending, SEC, STEPS, budget_h)
+    for grp in groups:
+        n = grp["n_images"] + grp["includes_real"]
+        assert n * 2 * STEPS * SEC / 3600 <= budget_h
+    # `real` chỉ được tính **một** lần, ở lệnh đầu
+    assert sum(g["includes_real"] for g in groups) == pending["real"]
+    assert groups[0]["includes_real"] == pending["real"]
+    # và các nhóm phải cân bằng, không phải "nhét đầy nhóm đầu"
+    hours = [g["gpu_h"] for g in groups]
+    assert max(hours) - min(hours) < 0.35, hours
+
+
+def test_grouping_is_balanced_and_covers_everything():
+    """LPT: số nhóm = ceil(tổng/trần), độ lệch giữa các nhóm nhỏ."""
+    pending = {f"g{i}": 500 for i in range(9)}
+    pending["real"] = 500
+    groups = modal_app.group_generators(pending, SEC, STEPS, 1.5)
+    # ceil(10 000 ảnh / 2 940 ảnh) = 4, nhưng LPT chia 4 nhóm thì mỗi nhóm 3 000 ảnh
+    # = 1,53 h > 1,5 h ⇒ phải nới lên 5 nhóm. Không được trả về một nhóm vượt trần.
+    assert len(groups) == 5, [g["gpu_h"] for g in groups]
+    hours = [g["gpu_h"] for g in groups]
+    assert max(hours) <= 1.5 and max(hours) - min(hours) <= 0.6, hours
+    flat = [x for g in groups for x in g["generators"]]
+    assert sorted(flat) == [f"g{i}" for i in range(9)]
+
+
+def test_plan_commands_are_copy_paste_ready():
+    """Mỗi dòng phải đủ tham số, **gồm `--skip-existing`**, và nói đúng số ảnh của nhóm.
+
+    Thiếu `--skip-existing` thì nhóm thứ hai trả tiền lại cho `real` — đúng thứ
+    vừa được chia nhỏ để tránh.
+    """
+    pending = {"adm": 1000, "iddpm": 1000, "dalle2": 500, "ddpm": 500,
+               "diff-projectedgan": 500, "diff-stylegan": 500, "if": 500, "real": 600}
+    groups = modal_app.group_generators(pending, SEC, STEPS, 4.5)
+    cmds = modal_app.plan_commands(groups, n=500, steps=20, splits="train,test")
+
+    assert len(cmds) == len(groups)
+    for line, grp in zip(cmds, groups):
+        assert "modal run -m dire_zero.modal_app::dire" in line
+        assert "--n 500" in line and "--steps 20" in line and "--splits train,test" in line
+        assert "--skip-existing" in line, line
+        assert f"--generator {','.join(grp['generators'])}" in line
+        assert f"{grp['n_images'] + grp['includes_real']} ảnh" in line
+    # `real` chỉ được nhắc ở lệnh đầu
+    assert cmds[0].count("real") == 1 and all("real" not in c for c in cmds[1:])

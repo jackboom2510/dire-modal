@@ -34,6 +34,7 @@ này bằng `dire_zero.migrate` (chỉ đọc cũ, chỉ ghi mới, không xoá 
 
 from __future__ import annotations
 
+import math
 import os
 import sys
 import time
@@ -500,16 +501,16 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     budget_h = WORK_TIMEOUT_S / 3600 * SAFE_TIME_FRACTION
     if est.gpu_h > budget_h:
         groups = group_generators(pending, sec, steps, budget_h)
+        lines = plan_commands(groups, n=n, steps=steps, splits=splits)
         raise GateError(
             f"ước tính {est.gpu_h:.2f} GPU-h > trần thời gian {budget_h:.2f} h "
             f"(timeout {WORK_TIMEOUT_S / 3600:.0f} h × {SAFE_TIME_FRACTION:.0%}).\n"
             f"  {est.line()}\n"
             "Nâng `--max-usd` cũng **không** cứu được lượt này: container bị kill ở giờ thứ "
             f"{WORK_TIMEOUT_S / 3600:.0f} và `vol.commit()` cuối không chạy.\n"
-            "Chạy theo nhóm dưới đây, mỗi nhóm một lần (map đã có được dùng lại nhờ --skip-existing):\n"
-            + "\n".join(f"  --generator {','.join(g)}" for g in groups)
-            + f"\n(mỗi lệnh thêm `--n {n} --steps {steps} --skip-existing`; "
-              "nhóm sau tự dùng lại `real` của nhóm trước)"
+            f"Chạy {len(groups)} lệnh dưới đây, đúng thứ tự (mỗi lệnh đã tính cả `real`; "
+            "lệnh sau dùng lại map đã có nhờ --skip-existing):\n"
+            + "\n".join(lines)
         )
     require_estimate(est, max_usd)
 
@@ -560,35 +561,86 @@ def _pending_by_generator(items: Sequence[tuple], maps_root: str, skip_existing:
     return counts
 
 
-def group_generators(pending: dict, sec_per_step: float, steps: int,
-                     budget_h: float) -> list[list[str]]:
-    """Chia generator thành nhóm có tổng GPU-h ≤ ``budget_h`` (greedy, lớn trước).
+def _group_hours(n_images: int, sec_per_step: float, steps: int) -> float:
+    return n_images * 2 * steps * sec_per_step / 3600
 
-    Tách khỏi `dire` để test được mà không cần Volume. `real` không bao giờ vào
-    nhóm: nó nằm trong **mọi** lệnh, và với `--skip-existing` chỉ tính một lần.
+
+def group_generators(pending: dict, sec_per_step: float, steps: int,
+                     budget_h: float) -> list[dict]:
+    """Chia generator thành các nhóm **cân bằng**, mỗi nhóm ≤ ``budget_h`` GPU-h.
+
+    Hai lỗi của bản trước, cả hai đều làm người dùng bị chặn **lần thứ hai** với
+    đúng bản gợi ý vừa in ra:
+
+    1. `real` bị loại khỏi phép chia nhưng **có mặt trong mọi lệnh**. Nhóm đầu in
+       ra 4 000 ảnh (4,08 h), cộng 600 ảnh `real` chưa có map ⇒ lệnh thật là
+       4,69 h và bị chặn y như cũ. Nay `real` được tính vào **nhóm chạy đầu tiên**
+       (chỉ nhóm đó trả tiền cho nó; lệnh sau dùng lại map nhờ `--skip-existing`).
+    2. Chia kiểu "nhét đầy" (greedy) cho 4,08 h + 0,51 h — nhóm đầu vẫn sát trần
+       nên một lần chậm 10 % là bị kill. Nay chia **cân bằng** (LPT: việc lớn nhất
+       vào nhóm đang nhẹ nhất), số nhóm = `ceil(tổng / trần)`.
+
+    Trả về ``[{"generators": [...], "n_images": int, "includes_real": int, "gpu_h": float}, …]``
+    theo đúng thứ tự nên chạy.
     """
     from .budget import GateError  # noqa: PLC0415
 
-    groups: list[list[str]] = []
-    cur: list[str] = []
-    cur_h = 0.0
-    for gen, k in sorted(pending.items(), key=lambda kv: -kv[1]):
-        if gen == "real" or not k:
-            continue
-        h = k * 2 * steps * sec_per_step / 3600
+    items = [(g, k, _group_hours(k, sec_per_step, steps)) for g, k in pending.items() if k]
+    for g, k, h in items:
         if h > budget_h:
             raise GateError(
-                f"riêng generator {gen!r} đã ước tính {h:.2f} GPU-h > {budget_h:.2f} h — "
+                f"riêng generator {g!r} đã ước tính {h:.2f} GPU-h > {budget_h:.2f} h — "
                 f"giảm `--n` (hiện {k} ảnh) hoặc `--steps`"
             )
-        if cur and cur_h + h > budget_h:
-            groups.append(cur)
-            cur, cur_h = [], 0.0
-        cur.append(gen)
-        cur_h += h
-    if cur:
-        groups.append(cur)
+
+    total_h = sum(h for _g, _k, h in items)
+    n_real = pending.get("real", 0)
+    rest = [x for x in items if x[0] != "real"]
+
+    def pack(k: int) -> list[dict]:
+        groups = [{"generators": [], "n_images": 0, "includes_real": 0, "gpu_h": 0.0} for _ in range(k)]
+        groups[0]["includes_real"] = n_real
+        groups[0]["gpu_h"] = _group_hours(n_real, sec_per_step, steps)
+        # LPT: việc lớn nhất vào nhóm đang nhẹ nhất (nhóm 0 đã có `real` trong gpu_h)
+        for g, n_img, h in sorted(rest, key=lambda x: -x[2]):
+            target = min(groups, key=lambda grp: grp["gpu_h"])
+            target["generators"].append(g)
+            target["n_images"] += n_img
+            target["gpu_h"] += h
+        return groups
+
+    # LPT bảo đảm ≤ 4/3 OPT, **không** bảo đảm ≤ trần với `ceil(tổng/trần)` nhóm:
+    # 10 000 ảnh / trần 2 940 ảnh cho 4 nhóm vẫn ra 3 000 ảnh/nhóm. Nên tăng dần
+    # số nhóm cho tới khi **mọi** nhóm nằm dưới trần — dừng muộn nhất ở `k = số
+    # generator`, nơi mỗi nhóm một generator (đã kiểm từng cái ≤ trần ở trên).
+    groups = pack(max(1, math.ceil(round(total_h, 6) / budget_h)))
+    while any(grp["gpu_h"] > budget_h + 1e-9 for grp in groups) and len(groups) < len(items):
+        groups = pack(len(groups) + 1)
+
+    for grp in groups:
+        grp["generators"].sort()
+        grp["gpu_h"] = round(grp["gpu_h"], 2)
     return groups
+
+
+def plan_commands(groups: list[dict], n: int, steps: int, splits: str) -> list[str]:
+    """Lệnh copy–paste được, mỗi nhóm một dòng, kèm ước tính của **chính nhóm đó**.
+
+    In `--generator …` trơ trọi là chưa đủ: người dùng còn phải nhớ `--n`,
+    `--steps`, `--splits` và `--skip-existing`, và thiếu `--skip-existing` thì
+    nhóm thứ hai trả tiền lại cho `real` — đúng thứ vừa được chia nhỏ để tránh.
+    """
+    lines = []
+    for grp in groups:
+        cmd = (f"modal run -m dire_zero.modal_app::dire --n {n} --steps {steps} "
+               f"--splits {splits} --skip-existing --generator {','.join(grp['generators'])}")
+        n_images = grp["n_images"] + grp["includes_real"]
+        note = f"  # {n_images} ảnh"
+        if grp["includes_real"]:
+            note += f" (gồm {grp['includes_real']} real chưa có map)"
+        note += f" = {grp['gpu_h']:.2f} GPU-h ≈ {grp['gpu_h'] * 1.10:.2f} USD"
+        lines.append(f"  {cmd}{note}")
+    return lines
 
 
 def _items_to_map(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> list[tuple]:
