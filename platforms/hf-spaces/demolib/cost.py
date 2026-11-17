@@ -28,8 +28,13 @@ PRICES = {"A10G": 1.10, "A100-40GB": 2.50, "A100-80GB": 3.00, "L4": 0.80, "T4": 
 #: Hệ số dao động, chép từ `dire_zero.budget.SPREAD`.
 SPREAD = (0.8, 1.6)
 
-#: `sec/step` đo được trên A10G: 83,55 GPU-h / 3 280 000 NFE. Là **số đo**, không
-#: phải hằng số khoa học — mọi ô nhập trong UI cho sửa giá trị này.
+#: `sec/step` của ADM 256² trên A10G (fp16, batch 1), do `::bench` ghi vào
+#: `bench.json`. Là **số đo**, không phải hằng số khoa học — mọi ô nhập cho sửa.
+#:
+#: Kiểm chéo bằng FLOP, độc lập với lần đo đó: một lượt forward của ADM 256² là
+#: **829 GFLOP** (415 GMAC; 552,8 M tham số). 829 GFLOP / 0,0917 s = **9,0 TFLOPS**,
+#: tức **29 %** đỉnh fp16 của A10G (31,2 TFLOPS) — đúng mức một U-Net batch 1
+#: thường đạt. Nếu ai đó đo ra 0,3 s/step (2,8 TFLOPS, 9 %) thì mới đáng nghi.
 SEC_PER_STEP_MEASURED = 0.0917
 
 
