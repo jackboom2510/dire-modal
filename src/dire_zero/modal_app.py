@@ -37,6 +37,7 @@ from __future__ import annotations
 import os
 import sys
 import time
+from pathlib import Path
 
 import modal
 
@@ -148,7 +149,14 @@ def selfcheck() -> dict:
     return report
 
 
-def _check_data(skip_sha: bool = False) -> dict:
+def _check_data(
+    skip_sha: bool = False,
+    workers: int = 64,
+    splits: str = "",
+    sample: int = 0,
+    count_png: bool = False,
+    progress_every: int = 20000,
+) -> dict:
     """Thân của `checkdata`, tách riêng để test được mà không cần Modal.
 
     `modal.Function` không phải callable và không lộ hàm gốc, nên một entrypoint
@@ -172,21 +180,50 @@ def _check_data(skip_sha: bool = False) -> dict:
     import collections
     import json  # noqa: PLC0415
 
-    from .dataset import read_manifest_tsv, verify_manifest
+    from .dataset import read_manifest_tsv, verify_rows
 
     card = json.load(open(DATA_CARD, encoding="utf-8")) if os.path.exists(DATA_CARD) else {}
     label = card.get("label", "?")
     has_manifest = os.path.exists(MANIFEST)
-    ok, bad = verify_manifest(MANIFEST) if has_manifest and not skip_sha else (0, [])
-
     rows = read_manifest_tsv(MANIFEST) if has_manifest else []
 
-    # Đếm PNG thật trên đĩa: manifest có thể thiếu dòng, hoặc Volume có file
-    # không ai khai (ví dụ `::gen` ghi thêm `ours_adm` sau khi ingest).
-    n_png = 0
-    for split in os.listdir(DATA) if os.path.isdir(DATA) else []:
-        for dirpath, _dirnames, filenames in os.walk(os.path.join(DATA, split)):
-            n_png += sum(1 for f in filenames if f.endswith(".png"))
+    # Lọc split trước khi băm: kiểm `test` (vài nghìn ảnh) mất vài giây, còn kiểm
+    # cả 217 585 ảnh là việc của một lần chạy dài, không phải mỗi lần sửa code.
+    want = tuple(x.strip() for x in splits.split(",") if x.strip())
+    if want:
+        rows = [r for r in rows if r["split"] in want]
+
+    # `sample` băm một tập con **cách đều** (tất định, không ngẫu nhiên theo giờ):
+    # nhanh, nhưng báo cáo phải nói rõ là mẫu — không được để ai đọc thành "đã
+    # kiểm toàn bộ".
+    sampled = bool(sample) and len(rows) > sample
+    rows_to_hash = rows
+    if sampled:
+        step = len(rows) / float(sample)
+        rows_to_hash = [rows[int(i * step)] for i in range(sample)]
+
+    t0 = time.time()
+    if has_manifest and not skip_sha and rows_to_hash:
+        def _progress(done: int, total: int) -> None:
+            rate = done / max(time.time() - t0, 1e-9)
+            print(f"[băm] {done}/{total} · {rate:.0f} file/s · "
+                  f"còn ~{(total - done) / max(rate, 1e-9) / 60:.1f} phút", flush=True)
+
+        ok, bad = verify_rows(rows_to_hash, Path(MANIFEST).parent, workers=workers,
+                              progress=_progress, progress_every=progress_every)
+    else:
+        ok, bad = 0, []
+    sha_seconds = round(time.time() - t0, 1)
+
+    # Đếm PNG thật trên đĩa — mặc định TẮT: một vòng `os.walk` qua 217 585 entry
+    # trên FUSE cũng tốn hàng phút, và nó không phải thứ chặn bước nào.
+    n_png = None
+    if count_png:
+        n_png = 0
+        for split in os.listdir(DATA) if os.path.isdir(DATA) else []:
+            for _dirpath, _dirnames, filenames in os.walk(os.path.join(DATA, split)):
+                n_png += sum(1 for f in filenames if f.endswith(".png"))
+
     counts = collections.Counter((r["split"], r["generator"]) for r in rows)
     n_real = sum(1 for r in rows if r["label"] == 0)
     n_fake = sum(1 for r in rows if r["label"] == 1)
@@ -222,7 +259,7 @@ def _check_data(skip_sha: bool = False) -> dict:
     # Không phải lỗi: `::gen` ghi thêm `data/<split>/ours_adm` mà manifest (do
     # ingest tạo) không biết. Nhưng chênh lệch lớn thì phải nói ra.
     warnings = []
-    if rows and n_png != len(rows):
+    if n_png is not None and rows and n_png != len(rows):
         warnings.append(
             f"{n_png} PNG trên đĩa vs {len(rows)} dòng manifest — chênh "
             f"{n_png - len(rows):+d}. Bình thường nếu đã chạy `::gen` (ảnh `ours_adm` "
@@ -241,7 +278,12 @@ def _check_data(skip_sha: bool = False) -> dict:
         "by_split_generator": {f"{s}/{g}": n for (s, g), n in sorted(counts.items())},
         "n_png_on_disk": n_png,
         "manifest_sha_ok": ok,
-        "sha_checked": has_manifest and not skip_sha,
+        "sha_scope": ("sample" if sampled else "full") if (has_manifest and not skip_sha)
+        else "none",
+        "sha_checked_rows": len(rows_to_hash),
+        "sha_seconds": sha_seconds,
+        "sha_workers": workers,
+        "filtered_splits": list(want),
         "warnings": warnings,
         "problems": problems,
     }
@@ -251,10 +293,22 @@ def _check_data(skip_sha: bool = False) -> dict:
     return report
 
 
-@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
-def checkdata(skip_sha: bool = False) -> dict:
-    """Cổng dữ liệu — xem `_check_data` cho bốn thứ được kiểm."""
-    return _check_data(skip_sha)
+#: `cpu=8` và timeout 4 giờ, không phải 2 core/30 phút: 217 585 PNG nhỏ là bài
+#: toán **độ trễ mở file**, không phải băng thông. Lần chạy thật với `cpu=2`,
+#: một luồng, timeout 1800 s đã bị cắt trước khi băm xong.
+@app.function(volumes=VOLUMES, cpu=8, timeout=4 * 3600)
+def checkdata(skip_sha: bool = False, workers: int = 64, splits: str = "",
+              sample: int = 0, count_png: bool = False) -> dict:
+    """Cổng dữ liệu — xem `_check_data`.
+
+    Ví dụ::
+
+        modal run -m dire_zero.modal_app::checkdata --splits test   # vài giây
+        modal run -m dire_zero.modal_app::checkdata --sample 2000   # mẫu, có ghi rõ
+        modal run -m dire_zero.modal_app::checkdata                 # toàn bộ, 64 luồng
+    """
+    return _check_data(skip_sha, workers=workers, splits=splits, sample=sample,
+                       count_png=count_png)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
