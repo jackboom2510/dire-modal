@@ -31,7 +31,7 @@ def test_app_name_and_image():
 
 
 def test_documented_entrypoints_exist():
-    for name in ("selfcheck", "bench", "gen", "dire", "train", "report"):
+    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "train", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
 
@@ -384,3 +384,66 @@ def test_plan_images_caps_every_cell_by_n_and_not_the_whole_tree(tmp_path):
     # Một split, không có generator đó ⇒ 0 giả, không âm thầm đếm real của split khác
     n_real, n_fake = modal_app._plan_images(str(tmp_path), ["train"], ["pndm"], 2)
     assert (n_real, n_fake) == (2, 0)
+
+
+def test_items_carry_the_generator_not_a_single_fake_bucket(tmp_path):
+    """Map của hai generator khác nhau **không** được rơi vào cùng một thư mục.
+
+    Lỗi thật: `dire` dựng item 3 phần tử `(path, label, split)`, nên `_as_item` gán
+    `generator="fake"` cho mọi ảnh sinh. Hệ quả: `maps/<split>/ours_adm/` không
+    bao giờ được tạo, map `ours_adm` và `adm` ghi đè nhau (tên PNG sinh là
+    `seed.png`, trùng nhau), và `::train --generator ours_adm` báo "chưa có map".
+    """
+    for split in ("train", "test"):
+        for cls in ("real", "adm", "ours_adm"):
+            d = tmp_path / split / cls
+            d.mkdir(parents=True)
+            for i in range(3):
+                (d / f"{i:02d}.png").write_bytes(b"")
+
+    items = modal_app._items_to_map(str(tmp_path), ["train", "test"], ["adm", "ours_adm"], 2)
+    gens = [it[3] for it in items]
+    assert gens.count("real") == 4          # 2 mỗi split
+    assert gens.count("adm") == 4
+    assert gens.count("ours_adm") == 4
+    assert "fake" not in gens
+
+    # Và hai generator khác nhau phải ra hai đường dẫn khác nhau.
+    from dire_zero.pipeline import map_rel_path
+
+    a = map_rel_path((str(tmp_path / "train/adm/00.png"), 1, "train", "adm"))
+    b = map_rel_path((str(tmp_path / "train/ours_adm/00.png"), 1, "train", "ours_adm"))
+    assert a != b and a.as_posix().startswith("train/adm/")
+
+
+def test_count_existing_only_counts_non_empty_maps(tmp_path):
+    """`--skip-existing` phải đếm đúng cái *dùng lại được*, không đếm tên file rỗng."""
+    maps = tmp_path / "maps"
+    (maps / "train" / "real").mkdir(parents=True)
+    (maps / "train" / "real" / "a.npy").write_bytes(b"x")
+    (maps / "train" / "real" / "b.npy").write_bytes(b"")     # file rỗng = hỏng
+    items = [("d/a.png", 0, "train", "real"), ("d/b.png", 0, "train", "real"),
+             ("d/c.png", 0, "train", "real")]
+    assert modal_app._count_existing(items, str(maps)) == 1
+
+
+def test_map_inventory_shows_what_is_actually_on_disk(tmp_path):
+    """`report` đếm map trên đĩa, không tin lời khai của `dire.json`.
+
+    Cần cho đúng câu hỏi "đã có map chưa, có phải chạy lại không": một thư mục
+    `maps/<split>/fake/` còn sót từ bản cũ (mọi generator bị gộp vào `fake`) sẽ
+    hiện ở đây, và report phải nói ra thay vì để nó lẫn vào tập train.
+    """
+    for rel, n in (("train/real", 2), ("test/real", 1), ("train/fake", 3), ("test/ours_adm", 4)):
+        d = tmp_path / rel
+        d.mkdir(parents=True)
+        for i in range(n):
+            (d / f"{i}.npy").write_bytes(b"x")
+    (tmp_path / "dire-runs").mkdir()
+    (tmp_path / "dire-runs" / "x.json").write_text("{}")
+
+    inv = modal_app._map_inventory(str(tmp_path))
+    assert inv["total"] == 10
+    assert inv["by_split_generator"] == {
+        "test/ours_adm": 4, "test/real": 1, "train/fake": 3, "train/real": 2,
+    }

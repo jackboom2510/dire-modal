@@ -159,6 +159,81 @@ def generate(
     return payload
 
 
+def map_rel_path(item) -> Path:
+    """Đường dẫn **tương đối** của map cho một item: ``<split>/<generator>/<tên>.npy``.
+
+    Một hàm duy nhất cho cả ba chỗ cần biết "map này nằm ở đâu": lúc ghi
+    (`compute_maps`), lúc **đếm cái đã có** (`--skip-existing`), và lúc đối chiếu.
+    Ba bản sao của cùng một quy tắc đặt tên là ba cơ hội để chúng lệch nhau.
+    """
+    it = _as_item(item)
+    return Path(it["split"] or "all") / it["generator"] / (Path(it["path"]).stem + ".npy")
+
+
+def _index_run(index_path: Path, run: dict, items: list[dict]) -> dict:
+    """Gộp lần chạy vào **sổ** `dire.json` thay vì ghi đè nó.
+
+    Lỗi thật: chạy `::dire` lần hai (ví dụ để thêm map cho ảnh vừa sinh) ghi đè
+    `dire.json`, nên bản ghi của lần đầu — số ảnh, NFE, số giây — **biến mất**,
+    trong khi các `.npy` của lần đầu vẫn nằm đó. Kết quả là một cây map không còn
+    tài liệu nào giải thích, tức là đúng thứ mà nhãn `R1` phải tránh.
+
+    Giữ nguyên các khoá cũ ở cấp ngoài (`n`, `steps`, `nfe_total`, `seconds`,
+    `items`) để chỗ đọc cũ không hỏng; thêm `runs` (mỗi lần chạy một mục) và
+    `dire-runs/<created>.json` (bản đầy đủ, không sửa nữa). Nếu các lần chạy dùng
+    `steps` khác nhau thì `steps` ở cấp ngoài là **null** kèm `steps_mixed`, chứ
+    không lấy một giá trị bất kỳ làm đại diện.
+    """
+    old: dict = {}
+    if index_path.exists():
+        try:
+            old = json.loads(index_path.read_text(encoding="utf-8"))
+        except ValueError:
+            old = {}
+
+    runs = [dict(r) for r in (old.get("runs") or []) if isinstance(r, dict)]
+    if not runs and old.get("n"):
+        # `dire.json` của bản cũ: không có `runs`, nhưng số liệu vẫn là thật.
+        runs.append({k: old.get(k) for k in ("created", "steps", "n", "nfe_total", "seconds", "ckpt_sha256")})
+    runs.append(
+        {
+            k: run.get(k)
+            for k in ("created", "steps", "n", "n_new", "n_reused", "nfe_total", "seconds",
+                      "ckpt_sha256", "generators", "splits", "skip_existing")
+        }
+    )
+
+    by_path: dict[str, dict] = {}
+    for it in old.get("items") or []:
+        if isinstance(it, dict) and it.get("path"):
+            by_path[it["path"]] = it
+    for it in items:
+        by_path[it["path"]] = it
+
+    steps = sorted({r["steps"] for r in runs if r.get("steps") is not None})
+    merged = {
+        "n": len(by_path),
+        "n_new": sum(int(r.get("n_new") or r.get("n") or 0) for r in runs),
+        "n_reused": sum(int(r.get("n_reused") or 0) for r in runs),
+        "steps": steps[0] if len(steps) == 1 else None,
+        "steps_mixed": steps,
+        "nfe_total": sum(int(r.get("nfe_total") or 0) for r in runs),
+        "seconds": round(sum(float(r.get("seconds") or 0) for r in runs), 2),
+        "scale": run.get("scale"),
+        "ckpt_sha256": run.get("ckpt_sha256"),
+        "generators": sorted({it["generator"] for it in by_path.values()}),
+        "splits": sorted({str(it.get("split") or "") for it in by_path.values()}),
+        "runs": runs,
+        "items": sorted(by_path.values(), key=lambda d: d["path"]),
+    }
+    write_json(index_path, merged)
+    # số thứ tự trong tên: hai lần chạy trong cùng một giây (test, hoặc chạy lại
+    # ngay sau khi sửa) không được ghi đè bản ghi của nhau.
+    archive = index_path.parent / "dire-runs" / f"{run.get('created') or _now()}-{len(runs):03d}.json"
+    write_json(archive, {**run, "items": items})
+    return merged
+
+
 def compute_maps(
     f: ModelCounter,
     items: Sequence[tuple],
@@ -167,6 +242,7 @@ def compute_maps(
     limit: int | None = None,
     size: int = 256,
     progress: Callable[[int], None] | None = None,
+    skip_existing: bool = False,
 ) -> dict:
     """R1 — tính DIRE map cho ``items``; mỗi item là dict hoặc tuple.
 
@@ -179,6 +255,11 @@ def compute_maps(
     Lưu float16 chứ không uint8: thang ``[0, 2]`` chỉ có 256 mức trong uint8, và
     DIRE sống ở **biên độ nhỏ** — lượng tử hoá 8-bit làm mất đúng phần tín hiệu
     mà detector cần. Giá phải trả là gấp đôi dung lượng; đó là lựa chọn có ý thức.
+
+    ``skip_existing=True``: map nào đã có (file khác rỗng) thì **không tính lại**.
+    Không có cờ này, mỗi lần thêm một generator mới là mỗi lần trả tiền tính lại
+    toàn bộ ảnh `real` — chúng luôn nằm trong danh sách, và đường dẫn map của
+    chúng không đổi, nên lần chạy sau ghi đè đúng file vừa trả tiền để tạo.
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -188,9 +269,28 @@ def compute_maps(
     used = items[:limit] if limit else items
     t0 = time.time()
     made = []
+    reused = []
     skipped = 0
     for i, raw in enumerate(used, start=1):
         item = _as_item(raw)
+        rel = map_rel_path(item)
+        dst = out / rel
+        if skip_existing and dst.exists() and dst.stat().st_size > 0:
+            reused.append(
+                {
+                    "name": rel.name,
+                    "path": rel.as_posix(),
+                    "abs": str(dst),
+                    "label": int(item["label"]),
+                    "split": item["split"],
+                    "generator": item["generator"],
+                    "source": item["path"],
+                    "reused": True,
+                }
+            )
+            if progress and i % 50 == 0:
+                progress(i)
+            continue
         img = load_image(item["path"])
         if img.shape[-1] != size or img.shape[-2] != size:
             skipped += 1
@@ -205,7 +305,6 @@ def compute_maps(
         dm, _recon = dire_map(f, img.to(device), sched)
         # <split>/<generator>/<tên>.npy — nhãn và split đi cùng dữ liệu, không
         # suy lại từ tên file (tên PNG là sha, không mang thông tin)
-        rel = Path(item["split"] or "all") / item["generator"] / (Path(item["path"]).stem + ".npy")
         (out / rel).parent.mkdir(parents=True, exist_ok=True)
         import numpy as np  # noqa: PLC0415
 
@@ -227,14 +326,19 @@ def compute_maps(
 
     payload = meta.as_dict()
     payload.update(
-        n=len(made),
+        n=len(made) + len(reused),
+        n_new=len(made),
+        n_reused=len(reused),
         skipped=skipped,
         nfe_total=f.nfe,
         seconds=round(time.time() - t0, 2),
+        generators=sorted({it["generator"] for it in made + reused}),
+        splits=sorted({str(it["split"] or "") for it in made + reused}),
+        skip_existing=skip_existing,
         scale="[0, 2] float16, không nhân 4, không clip",
-        items=made,
+        items=made + reused,
     )
-    write_json(out / "dire.json", payload)
+    _index_run(out / "dire.json", payload, made + reused)
     return payload
 
 

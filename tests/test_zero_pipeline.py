@@ -315,3 +315,77 @@ def test_no_module_converts_a_device_tensor_without_cpu():
             if ".cpu()" not in seg or seg.index(".cpu()") > seg.index(".numpy()"):
                 bad.append(f"{py.relative_to(root.parent)}:{node.lineno} {node.name}()")
     assert not bad, "hàm chuyển tensor sang numpy mà thiếu `.cpu()` trước đó:\n" + "\n".join(bad)
+
+
+# ---------------------------------------------------------------------------
+# Tính thêm map về sau: không trả tiền hai lần cho cùng một ảnh
+# ---------------------------------------------------------------------------
+def test_skip_existing_reuses_maps_instead_of_paying_twice(tmp_run, monkeypatch):
+    """Chạy lại chỉ để thêm một generator mới **không** được tính lại ảnh `real`.
+
+    Tình huống thật: đã có map cho `ours_adm` lô 1; sinh thêm ảnh (lô 2) rồi
+    chạy `::dire --skip-existing`. Ảnh `real` nằm trong danh sách ở **mọi** lần
+    chạy, nên không có cờ này thì mỗi lần thêm generator là một lần trả tiền cho
+    toàn bộ `real` — rồi ghi đè đúng file vừa trả tiền để tạo.
+    """
+    tmp, gen, maps, _, f = tmp_run
+    items = [(str(tmp / "gen" / n), 1, "train" if n in gen["split"]["train"] else "test", "ours_adm")
+             for n in gen["names"]]
+
+    import dire_zero.pipeline as P
+
+    def boom(*a, **k):
+        raise AssertionError("cờ skip_existing mà vẫn gọi dire_map")
+
+    monkeypatch.setattr(P, "dire_map", boom)
+    again = compute_maps(f, items, tmp / "maps", RunMeta("a" * 64, steps=3), size=32,
+                         skip_existing=True)
+    assert again["n_new"] == 0 and again["n_reused"] == len(items)
+    assert again["nfe_total"] == 0               # không một lượt forward nào
+
+
+def test_without_the_flag_it_recomputes_everything(tmp_run):
+    tmp, gen, _, _, f = tmp_run
+    items = [(str(tmp / "gen" / n), 1, "train", "ours_adm") for n in gen["names"]]
+    out = compute_maps(f, items, tmp / "maps", RunMeta("a" * 64, steps=3), size=32)
+    assert out["n_new"] == len(items) and out["n_reused"] == 0
+    assert out["nfe_total"] == len(items) * 2 * 3
+
+
+def test_dire_json_is_a_ledger_not_a_rewrite(tmp_run):
+    """Lần chạy thứ hai ghi **thêm** vào sổ, không xoá dấu lần đầu.
+
+    Lỗi thật: `compute_maps` ghi đè `maps/dire.json` mỗi lần, nên bản ghi của lần
+    đầu (số ảnh, NFE, số giây) mất trong khi các `.npy` của lần đó vẫn còn — một
+    cây map không còn tài liệu nào giải thích. Nếu hai lần chạy khác `steps` thì
+    `steps` cấp ngoài phải là **null** kèm `steps_mixed`, không lấy bừa một giá trị.
+    """
+    tmp, gen, maps, _, f = tmp_run
+    index = json.loads((tmp / "maps" / "dire.json").read_text(encoding="utf-8"))
+    assert [r["steps"] for r in index["runs"]] == [3]
+    first_n = index["n"]
+
+    other = [(str(tmp / "gen" / gen["names"][0]), 1, "test", "adm")]
+    second = compute_maps(f, other, tmp / "maps", RunMeta("a" * 64, steps=5), size=32)
+
+    index = json.loads((tmp / "maps" / "dire.json").read_text(encoding="utf-8"))
+    assert [r["steps"] for r in index["runs"]] == [3, 5]
+    assert index["steps"] is None and index["steps_mixed"] == [3, 5]
+    assert index["nfe_total"] == maps["nfe_total"] + second["nfe_total"], "sổ phải cộng dồn NFE"
+    assert index["n"] >= first_n                       # không mất item của lần đầu
+    assert (tmp / "maps" / "dire-runs").is_dir()
+    assert len(list((tmp / "maps" / "dire-runs").glob("*.json"))) == 2
+    assert index["generators"] == ["adm", "ours_adm"]
+
+
+def test_reused_items_are_marked_so_they_cannot_masquerade_as_fresh(tmp_run):
+    """Item dùng lại mang cờ `reused`; `n_new`/`n_reused` nói rõ cái nào là mới."""
+    tmp, gen, _, _, f = tmp_run
+    items = [(str(tmp / "gen" / n), 1, "train", "ours_adm") for n in gen["names"][:3]] + [
+        (str(tmp / "gen" / gen["names"][3]), 1, "test", "adm")
+    ]
+    out = compute_maps(f, items, tmp / "maps", RunMeta("a" * 64, steps=3), size=32,
+                       skip_existing=True)
+    reused = [it for it in out["items"] if it.get("reused")]
+    assert len(reused) == 3 and out["n_new"] == 1 and out["n_reused"] == 3
+    assert out["n"] == 4

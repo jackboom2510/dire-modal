@@ -839,6 +839,7 @@ chưa từng được train.
 ```bash
 # 9a. Tính DIRE map cho một ít ảnh test (nếu chưa có)
 modal run -m dire_zero.modal_app::dire --splits test --generator adm --n 8 --max-usd 1
+#     đã có map thì thêm --skip-existing: chỉ tính cái còn thiếu, không trả tiền lại
 
 # 9b. Dựng gallery từ map + ảnh gốc — đường dẫn truyền tường minh
 python tools/make_gallery.py \
