@@ -329,8 +329,9 @@ def page_schedule() -> None:
         d.metric("USD", f"{e['usd']:.2f}")
         st.caption(
             "Cùng công thức với `dire_zero.budget.Estimate` — test khoá hai bên khớp. "
-            f"`{cost.SEC_PER_STEP_MEASURED}` s/step là số **đo** từ log cũ (83,55 GPU-h / "
-            "3 280 000 NFE), truyền vào chứ không phải hằng số."
+            f"`{cost.SEC_PER_STEP_MEASURED}` s/step do `::bench` đo (ADM 256², A10G, fp16, "
+            "batch 1). Kiểm chéo: 829 GFLOP mỗi lượt forward ÷ 0,0917 s = 9,0 TFLOPS = "
+            "29 % đỉnh fp16 của A10G — mức bình thường cho batch 1, không phải số bất thường."
         )
 
     st.markdown("### Phép đảo ngược, viết ra đúng như code chạy")
@@ -389,7 +390,9 @@ def page_paper() -> None:
 
     st.markdown("### Hạn chế phải nói ra")
     st.markdown(
-        "- `:dire` đang chạy **batch 1**; gộp 8 ảnh sẽ nhanh hơn 3–4× mà không đổi số.\n"
+        "- `:dire` chạy **batch 1** = 9,0 TFLOPS (29 % đỉnh A10G). Gộp 8 ảnh chỉ hứa "
+        "**1,5–2×** (trần tuyệt đối là 31,2/9,0 = 3,5×, không đạt được ở batch nhỏ), "
+        "không đổi kết quả số học.\n"
         "- Chưa có `--skip-existing`, nên mỗi generator mới phải tính lại cả ảnh `real`.\n"
         "- `:train` không có `--generator adm` thì gộp mọi generator ⇒ **không** so được Table 2.\n"
         "- Repo chưa có kết quả `R1+R2` nào trên 1 000 ảnh/ô; mọi con số trong bảng trên là của bài."
