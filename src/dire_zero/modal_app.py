@@ -426,14 +426,19 @@ def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, m
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
 def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
-         steps: int = 20, max_usd: float = 5.0) -> dict:
+         steps: int = 20, max_usd: float = 5.0, skip_existing: bool = False) -> dict:
     """R1 — DIRE map cho cả hai phía, cùng một lịch, **giữ split của người đóng gói**.
 
-    ``generator="auto"``: nếu đã có ảnh giả trong cây dữ liệu (tác giả hoặc tự
-    sinh) thì dùng; nếu chưa, đọc ảnh từ `gen/` (kết quả `::gen`).
+    ``generator="auto"``: dùng **mọi** thư mục generator đang có trong cây dữ liệu
+    (tác giả hoặc tự sinh). Ảnh `gen` sinh sau lần chạy trước thì chỉ cần chạy lại
+    với ``--skip-existing``: map đã có sẽ được **dùng lại**, không tính lại.
+
+    Vì sao phải có ``--skip-existing``: ảnh `real` luôn nằm trong danh sách, nên
+    mỗi lần thêm một generator là mỗi lần trả tiền cho toàn bộ `real` lần nữa —
+    rồi ghi đè đúng những file vừa trả tiền để tạo. Ước lượng tiền cũng tính theo
+    số ảnh **sẽ tính thật**, không theo số ảnh trong danh sách.
     """
     from .budget import Estimate, load_sec_per_step, require_estimate
-    from .data import list_images
     from .pipeline import RunMeta, compute_maps
 
     want = tuple(x.strip() for x in splits.split(",") if x.strip())
@@ -446,59 +451,90 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
             "Chạy `python -m dire_zero ingest` rồi đẩy lên, hoặc `::gen` để tự sinh ảnh giả."
         )
 
-    n_real, n_fake = _plan_images(DATA, want, gens, n)
-    if n_real + n_fake == 0:
+    items = _items_to_map(DATA, want, gens, n)
+    if not items:
         raise FileNotFoundError(
             f"không có ảnh nào để chạy: splits={list(want)} generators={gens}. "
             "Kiểm `::checkdata` trước."
         )
+    existing = _count_existing(items, MAPS) if skip_existing else 0
+    to_compute = len(items) - existing
     sec = load_sec_per_step(f"{OUT}/bench.json")
-    est = Estimate(n_images=n_real + n_fake, nfe_per_image=2 * steps, sec_per_step=sec)
+    print(f"[kế hoạch] {len(items)} ảnh (n ≤ {n} mỗi ô, {len(want)} split, "
+          f"{len(gens)} generator: {', '.join(gens)})", flush=True)
+    print(f"[kế hoạch] sẽ tính {to_compute}, dùng lại {existing} map đã có"
+          + ("" if skip_existing else "  (thiếu --skip-existing nên không bỏ qua map nào)"), flush=True)
+    if to_compute == 0:
+        print("[kế hoạch] không có gì mới — không gọi GPU", flush=True)
+        return {"n": 0, "n_reused": existing, "generators": gens, "splits": list(want),
+                "nfe_total": 0, "est": Estimate(0, 2 * steps, sec).as_dict(),
+                "note": "mọi map đã có; bỏ --skip-existing nếu muốn tính lại từ đầu"}
+
+    est = Estimate(n_images=to_compute, nfe_per_image=2 * steps, sec_per_step=sec)
     print("[tiền]", est.line(), flush=True)
-    print(f"[kế hoạch] real {n_real} + fake {n_fake} = {n_real + n_fake} ảnh "
-          f"(n ≤ {n} mỗi ô, {len(want)} split, {len(gens)} generator)", flush=True)
     require_estimate(est, max_usd)
 
     f, digest = _counter(dtype="float16")
     meta = RunMeta(digest, steps)
-
-    items: list[tuple[str, int, str]] = []
-    for split in want:
-        real_dir = f"{DATA}/{split}/real"
-        if not os.path.isdir(real_dir):
-            raise FileNotFoundError(f"thiếu {real_dir} — ingest chưa đẩy split này?")
-        for p in list_images(real_dir)[:n]:
-            items.append((str(p), 0, split))
-        for g in gens:
-            d = f"{DATA}/{split}/{g}"
-            if os.path.isdir(d):
-                for p in list_images(d)[:n]:
-                    items.append((str(p), 1, split))
-
-    out = compute_maps(f, items, MAPS, meta, limit=None)
+    out = compute_maps(f, items, MAPS, meta, limit=None, skip_existing=skip_existing)
     vol.commit()
-    return {"n": out["n"], "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"], "est": est.as_dict()}
+    return {"n": out["n"], "n_new": out["n_new"], "n_reused": out["n_reused"],
+            "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"],
+            "est": est.as_dict()}
 
 
-def _plan_images(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> tuple[int, int]:
-    """Đếm **đúng** số ảnh `::dire` sẽ chạy: cắt ``n`` theo từng (split, lớp).
+def _items_to_map(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> list[tuple]:
+    """Danh sách ``(path, label, split, generator)`` mà `::dire` sẽ chạy.
 
-    Bản trước đếm cả cây — 82 000 ảnh cho `train,test` — nên ước lượng cho
-    ``--n 200`` cao hơn thực tế ~100 lần (91,90 USD thay vì ~0,90 USD) và
-    ``--max-usd`` (mặc định 5) **chặn oan** một lượt chạy rẻ. Ước lượng sai theo
-    hướng nào cũng là lỗi: cao thì chặn oan, thấp thì để lọt.
+    Generator **phải** đi cùng item. Bản trước bỏ nó đi, nên `_as_item` gán mọi
+    ảnh giả thành generator `"fake"`: map của `ours_adm` và của `adm` rơi vào
+    cùng một thư mục, tên file trùng nhau (tên PNG sinh là `seed.png`) thì ghi
+    đè lên nhau, và `::train --generator ours_adm` không bao giờ tìm thấy gì.
     """
     from .data import list_images  # noqa: PLC0415
 
-    n_real = sum(
-        min(len(list_images(f"{root}/{s}/real")), n)
-        for s in want if os.path.isdir(f"{root}/{s}/real")
-    )
-    n_fake = sum(
-        min(len(list_images(f"{root}/{s}/{g}")), n)
-        for s in want for g in gens if os.path.isdir(f"{root}/{s}/{g}")
-    )
-    return n_real, n_fake
+    items: list[tuple] = []
+    for split in want:
+        real_dir = f"{root}/{split}/real"
+        if not os.path.isdir(real_dir):
+            raise FileNotFoundError(f"thiếu {real_dir} — ingest chưa đẩy split này?")
+        for p in list_images(real_dir)[:n]:
+            items.append((str(p), 0, split, "real"))
+        for g in gens:
+            d = f"{root}/{split}/{g}"
+            if os.path.isdir(d):
+                for p in list_images(d)[:n]:
+                    items.append((str(p), 1, split, g))
+    return items
+
+
+def _count_existing(items: Sequence[tuple], maps_root: str) -> int:
+    """Bao nhiêu item đã có map **khác rỗng** — con số dùng để ước lượng tiền."""
+    from .pipeline import map_rel_path  # noqa: PLC0415
+
+    n = 0
+    for it in items:
+        p = os.path.join(maps_root, map_rel_path(it).as_posix())
+        if os.path.exists(p) and os.path.getsize(p) > 0:
+            n += 1
+    return n
+
+
+def _plan_images(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> tuple[int, int]:
+    """Đếm **đúng** số ảnh `::dire` sẽ chạy — nay là một cách đọc của `_items_to_map`.
+
+    Giữ tên cũ vì `docs/from-zero-clean-room.md` §3 dẫn tới nó, nhưng **không**
+    còn phép đếm thứ hai: hai bản sao của quy tắc "ảnh nào được chọn" là hai cơ
+    hội để ước lượng tiền và vòng lặp thật lệch nhau. Lỗi cũ: đếm cả cây — 82 000
+    ảnh cho `train,test` — nên `--n 200` bị ước lượng 91,90 USD thay vì ~0,90 và
+    `--max-usd` chặn oan một lượt chạy rẻ.
+    """
+    splits = [s for s in want if os.path.isdir(f"{root}/{s}/real")]
+    if not splits:
+        return 0, 0
+    items = _items_to_map(root, splits, gens, n)
+    n_real = sum(1 for it in items if it[1] == 0)
+    return n_real, len(items) - n_real
 
 
 def _generators_in(root: str) -> list[str]:
@@ -511,6 +547,32 @@ def _generators_in(root: str) -> list[str]:
         if os.path.isdir(d):
             found.update(x for x in os.listdir(d) if os.path.isdir(os.path.join(d, x)) and x != "real")
     return sorted(found)
+
+
+@app.function(volumes=VOLUMES, timeout=1800)
+def relabel(apply: bool = False) -> dict:
+    """Sửa nhãn generator cho map cũ nằm ở `maps/<split>/fake/` (xem `maps_index`).
+
+    Chạy **không cần GPU**: đây là đổi tên file theo `source` đã ghi trong
+    `dire.json`, không phải tính lại map. Mặc định chỉ in kế hoạch.
+
+    ::
+
+        modal run -m dire_zero.modal_app::relabel              # xem trước
+        modal run -m dire_zero.modal_app::relabel --apply       # đổi tên thật
+    """
+    import json  # noqa: PLC0415
+
+    from .maps_index import apply as apply_fn, plan as plan_fn  # noqa: PLC0415
+
+    p = plan_fn(MAPS)
+    out = {"plan": {k: v for k, v in p.items() if k != "moves"}, "n_moves": p["n_moves"],
+           "apply": apply}
+    if apply and p["moves"]:
+        out["applied"] = apply_fn(p)["n_moves"]
+        vol.commit()
+    print(json.dumps(out, ensure_ascii=False, indent=2), flush=True)
+    return out
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
@@ -574,6 +636,21 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     return payload
 
 
+def _map_inventory(maps_root: str) -> dict:
+    """Đếm `.npy` theo ``<split>/<generator>`` — nguồn sự thật về map đã có."""
+    if not os.path.isdir(maps_root):
+        return {"total": 0, "by_split_generator": {}}
+    counts: dict[str, int] = {}
+    for dirpath, _dirnames, filenames in os.walk(maps_root):
+        rel = os.path.relpath(dirpath, maps_root).replace(os.sep, "/")
+        if rel == "." or rel.startswith("dire-runs"):
+            continue
+        n = sum(1 for f in filenames if f.endswith(".npy"))
+        if n:
+            counts[rel] = counts.get(rel, 0) + n
+    return {"total": sum(counts.values()), "by_split_generator": dict(sorted(counts.items()))}
+
+
 def _read_json(path: str) -> dict:
     import json  # noqa: PLC0415
 
@@ -591,12 +668,18 @@ def report() -> dict:
         p = f"{MAPS}/{name}.json" if name == "dire" else f"{OUT}/{name}.json"
         return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
 
+    dire_json = read("dire")
     payload = {
         "label": _read_json(DATA_CARD).get("label", "R1+R2+R3 (clean-room)"),
         "what_is_ours": ["DIRE map", "detector", "ảnh sinh"],
         "what_is_not": ["trọng số ADM (OpenAI)", "LSUN-Bedroom (dữ liệu thật)", "kiến trúc U-Net/ResNet"],
         "gen": {k: v for k, v in read("gen").items() if k in ("n", "steps", "nfe_total", "seconds")},
-        "dire": {k: v for k, v in read("dire").items() if k in ("n", "steps", "nfe_total", "seconds")},
+        "dire": {k: v for k, v in dire_json.items()
+                 if k in ("n", "steps", "steps_mixed", "nfe_total", "seconds", "n_new", "n_reused")},
+        # Tồn kho map **thực tế trên đĩa**, không phải điều `dire.json` tự khai:
+        # sau khi thêm generator, câu hỏi đúng là "map nào đã có", và một thư mục
+        # `fake/` còn sót từ bản cũ sẽ lộ ra ở đây chứ không lộ ở `dire.json`.
+        "maps": _map_inventory(MAPS),
         "data": _read_json(DATA_CARD),
         "train": {k: v for k, v in read("train").items() if k in ("test", "best_epoch", "threshold_from_val", "init")},
         "bench": read("bench"),

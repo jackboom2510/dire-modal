@@ -249,6 +249,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `bash tools/tree.sh` | Cây toàn bộ Volume (`modal volume ls` chỉ đọc 1 tầng nên không ra cây được) |
 | `bash tools/bench_storage.sh` | Đo Volume vs R2 (mount + S3 API) |
 | `bash tools/bench_baidu_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |
+| `python3 tools/relabel_maps.py --maps <vol>/maps [--apply]` | Sửa nhãn generator cho map cũ nằm ở `maps/<split>/fake/` — đổi tên theo `source` trong `dire.json`, **không** tính lại map (0 USD) |
 | `bash tools/measure_dire.sh` | Đo ảnh/giây của DIRE → số giờ GPU thật |
 | `bash tools/pack_shards.sh` | Pack WebDataset shards (chỉ cần nếu TRAIN — ngoài phạm vi) |
 | `bash tools/manim/render.sh --check` | Liệt kê 5 scene video giải thích DIRE (không render) |

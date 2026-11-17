@@ -79,7 +79,7 @@ phát triển, và nó là test duy nhất bắt được lỗi *ngữ nghĩa*: 
 **sau** phép tăng mẫu vẫn ra ảnh đúng hình dạng, vẫn hội tụ, nhưng tốn gấp 4 lần
 compute và lệch hẳn kết quả.
 
-## 3. Bảy lỗi tìm được khi viết lại
+## 3. Tám lỗi tìm được khi viết lại
 
 Viết lại từ công thức không chỉ để "sạch". Bảy lỗi dưới đây lộ ra vì phải suy
 nghĩ lại từng chỉ số — và phần lớn nằm trong **đường đang chạy** của repo, tức
@@ -210,11 +210,6 @@ trông hợp lý.
 
 Test canh: `test_plan_images_caps_every_cell_by_n_and_not_the_whole_tree`.
 
-> Bài học chung của 3.5–3.6: **ước lượng và thiết bị đều là thứ "trông đúng" khi
-> chỉ đọc code.** Một cái chỉ sai trên GPU, một cái chỉ sai khi có `--n` nhỏ hơn
-> kích thước cây. Cả hai đều phải chạy thật mới lộ.
-
-
 ### 3.7 `save_png` gọi `.numpy()` trên tensor CUDA — chết ở ảnh đầu tiên
 
 Lượt `::gen` đầu tiên:
@@ -254,6 +249,62 @@ sau, chỉ muộn hơn.
 > dtype (fp16), ở thiết bị (CUDA vs host), và ở chỗ nào *ghi ra đĩa*. Mọi hàm
 > `to_*`/`save_*` phải tự nói rõ nó trả tensor ở đâu, và mọi `.numpy()` phải có
 > `.cpu()` ngay trước — không có ngoại lệ "chắc là CPU rồi".
+
+### 3.8 Bốn lỗi nữa của `::dire`, lộ ra khi thêm ảnh sinh sau lần chạy đầu
+
+Câu hỏi đặt ra: *đã chạy `::dire` trước `::gen`; giờ có phải chạy lại để có map
+cho ảnh vừa sinh không?* Có — nhưng làm đúng thì không phải trả tiền hai lần.
+
+**a) Ảnh sinh ra sau thì không thể có map từ trước.** `::dire` chỉ thấy thư mục
+đang tồn tại lúc nó chạy; `::gen` đặt ảnh vào `data/<split>/ours_adm/` **sau** đó
+⇒ lần chạy đầu không có `ours_adm` trong danh sách. Không có cách nào "tính bù"
+từ map cũ: map là hàm của **ảnh**, không phải của tên thư mục.
+
+**b) Generator bị gộp thành `fake`.** `::dire` dựng item 3 phần tử
+`(path, label, split)`; `_as_item` thấy thiếu generator nên gán `"fake"`. Hệ quả:
+`maps/<split>/ours_adm/` không bao giờ được tạo, map của `adm` và `ours_adm` ghi
+đè nhau nếu tên file trùng (ảnh sinh tên là `seed.png`), và
+`::train --generator ours_adm` báo "chưa có map". Sửa: item mang generator
+(`_items_to_map`), một hàm duy nhất `map_rel_path()` quyết định đường dẫn.
+Test canh: `test_items_carry_the_generator_not_a_single_fake_bucket`.
+
+Map của lần chạy cũ thì **không phải tính lại**: `dire.json` của lần đó ghi
+`source` cho từng map (đường dẫn ảnh gốc, tức là có tên generator), nên sửa nhãn
+là đổi tên file:
+
+```bash
+python tools/relabel_maps.py --maps <volume>/maps            # xem trước, không đụng đĩa
+python tools/relabel_maps.py --maps <volume>/maps --apply    # đổi tên thật
+# hoặc trên Modal (volume đã mount ở /zero), không cần GPU:
+modal run -m dire_zero.modal_app::relabel --apply
+```
+
+Đích đã tồn tại ⇒ **không ghi đè**, báo xung đột; item không suy được generator
+⇒ để nguyên và báo. 0 USD thay vì ~1 USD cho 1 000 ảnh. Test:
+`tests/test_zero_maps_index.py`.
+
+**c) `dire.json` bị ghi đè ⇒ mất dấu lần chạy trước.** `compute_maps` ghi
+`maps/dire.json` mỗi lần, nên bản ghi của lần đầu (n, NFE, giây) biến mất trong
+khi các `.npy` của lần đó vẫn còn — một cây map không còn tài liệu giải thích.
+Sửa: `dire.json` thành **sổ** (`runs`, cộng dồn NFE, dedupe theo `path`) và mỗi
+lần chạy còn một bản đầy đủ ở `maps/dire-runs/<created>-NNN.json`. Hai lần chạy
+khác `steps` ⇒ `steps` cấp ngoài là `null` + `steps_mixed`, không lấy bừa một giá trị.
+
+**d) Không có `--skip-existing` ⇒ trả tiền lại cho ảnh `real`.** Ảnh `real` nằm
+trong danh sách **mọi** lần chạy, nên thêm một generator là một lần tính lại toàn
+bộ `real` rồi ghi đè đúng file vừa tạo. Với cây 500/500 mỗi split, đó là ~1 000
+ảnh × 3,67 s ≈ 1 giờ GPU và ~1 USD cho **zero** map mới. Nay: `--skip-existing`
+bỏ qua map đã có (file khác rỗng), `n_new`/`n_reused` nói rõ cái nào mới, và ước
+lượng tiền đếm theo số ảnh **sẽ tính thật**. Nếu không còn gì mới thì `::dire`
+in "không có gì mới — không gọi GPU" và trả về, không bật máy.
+
+`::report` thêm `maps.by_split_generator`: tồn kho `.npy` **trên đĩa**, để một
+thư mục `maps/<split>/fake/` còn sót từ bản cũ lộ ra ngay thay vì lẫn vào tập train.
+
+> Bài học chung của 3.5–3.8: **ước lượng, thiết bị và tính "đã có hay chưa" đều
+> là thứ "trông đúng" khi chỉ đọc code.** Cái thứ nhất chỉ sai trên GPU, cái thứ
+> hai chỉ sai khi `--n` nhỏ hơn kích thước cây, cái thứ ba chỉ sai ở **lần chạy
+> thứ hai** — và cả ba đều phải chạy thật mới lộ.
 
 ## 4. Chạy
 
@@ -493,6 +544,9 @@ modal run -m dire_zero.modal_app::gen --n 500 --steps 50 --seed-base 1000
 
 # 4. R1 — DIRE map (bài báo dùng 20 bước cho DIRE)
 modal run -m dire_zero.modal_app::dire --n 500 --steps 20
+
+# 4b. thêm map cho ảnh vừa sinh, KHÔNG tính lại ảnh real đã có map
+modal run -m dire_zero.modal_app::dire --n 500 --steps 20 --skip-existing
 
 # 5. R2 — train detector
 modal run -m dire_zero.modal_app::train --epochs 40

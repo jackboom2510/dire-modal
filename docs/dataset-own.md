@@ -330,6 +330,8 @@ modal volume put dire-zero ./data/dire-zero-norm data --force   # chạy lại
 modal run -m dire_zero.modal_app::checkdata       # sha256 + hai lớp + tỉ lệ ≤5:1
 modal run -m dire_zero.modal_app::bench           # ĐO sec/step trước khi tin bảng giá
 modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20
+# chạy thêm generator (hoặc ảnh sinh sau) mà không tính lại ảnh real đã có map:
+modal run -m dire_zero.modal_app::dire --splits train,val,test --steps 20 --skip-existing
 modal run -m dire_zero.modal_app::train --epochs 40
 modal run -m dire_zero.modal_app::report
 ```
