@@ -283,6 +283,20 @@ nguồn, đích, size, sha hai đầu, `layout_version: 1` và `deleted_anything
 Dọn volume cũ **không** nằm trong app: đó là việc tay, chỉ sau khi `::verify` xanh
 và đã có bản trên `dire-zero`. Không có cờ nào để migration xoá hộ.
 
+#### Ba cái bẫy của `modal volume put`
+
+Đã làm hỏng một lần chạy thật, nên ghi lại (kiểm từ source `modal/cli/volume.py`):
+
+| Bẫy | Sự thật |
+|---|---|
+| `-r` | **không tồn tại** ở Modal 1.x. `put` đã đệ quy sẵn khi nguồn là thư mục; cờ lạ làm lệnh dừng **trước khi upload byte nào** |
+| chạy lại | thiếu `--force` ⇒ `FileExistsError` → lệnh từ chối, kể cả khi chỉ một file đã có |
+| đích là thư mục | `put … <dir> data` đặt **nội dung** vào `data/`, không sinh `data/<tên-thư-mục-local>/` |
+
+Và một bẫy Windows: `MSYS_NO_PATHCONV=1` **tắt** đúng phép đổi `/f/…` → `F:/…`,
+nên khi đã đặt biến đó thì phải viết `F:/dire-zero-norm`, không viết `/f/…`.
+Đường dẫn `/f/…` chỉ đúng khi **để** MSYS đổi hộ (tức không đặt biến).
+
 Mặc định `apply` **không** bê cây dữ liệu (`data/`, `maps/`, `gen/`, `runs/`) —
 `--data` mới bê. Lý do: người gọi migration là để cứu checkpoint 2,5 GB, không
 phải để một lệnh tự động sửa cả cây dữ liệu; `plan` vẫn in sẵn `n_copy` của phần
