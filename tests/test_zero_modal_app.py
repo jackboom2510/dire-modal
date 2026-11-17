@@ -357,3 +357,30 @@ def test_skip_sha_skips_hashing_but_still_checks_structure(volume_gia: Path):
     victim.write_bytes(b"khac han")
     report = _run(skip_sha=True)
     assert report["problems"] == [] and report["sha_scope"] == "none"
+
+
+def test_plan_images_caps_every_cell_by_n_and_not_the_whole_tree(tmp_path):
+    """Ước lượng tiền phải đếm **đúng số ảnh sẽ chạy**.
+
+    Lỗi thật: với `train,test` + `--generator adm`, cây có 82 000 ảnh nên ước
+    lượng báo 91,90 USD, trong khi `--n 200` chỉ chạy 800 ảnh (~0,90 USD). Hệ quả
+    không chỉ là con số sai: `--max-usd` mặc định 5 **chặn oan** lượt chạy rẻ.
+    """
+    for split, n in (("train", 5), ("test", 3)):
+        for cls in ("real", "adm"):
+            d = tmp_path / split / cls
+            d.mkdir(parents=True)
+            for i in range(n):
+                (d / f"{i:02d}.png").write_bytes(b"")
+
+    n_real, n_fake = modal_app._plan_images(str(tmp_path), ["train", "test"], ["adm"], 2)
+    # train: min(5,2)=2 thật + 2 giả; test: min(3,2)=2 + 2
+    assert (n_real, n_fake) == (4, 4)
+
+    # Không cắt: đếm đủ cả cây
+    n_real, n_fake = modal_app._plan_images(str(tmp_path), ["train", "test"], ["adm"], 10_000)
+    assert (n_real, n_fake) == (8, 8)
+
+    # Một split, không có generator đó ⇒ 0 giả, không âm thầm đếm real của split khác
+    n_real, n_fake = modal_app._plan_images(str(tmp_path), ["train"], ["pndm"], 2)
+    assert (n_real, n_fake) == (2, 0)

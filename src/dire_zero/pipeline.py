@@ -152,7 +152,8 @@ def compute_maps(
     """
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    sched = Schedule(steps=meta.steps, device=str(next(f.model.parameters()).device))
+    device = next(f.model.parameters()).device
+    sched = Schedule(steps=meta.steps, device=str(device))
     f.reset()
     used = items[:limit] if limit else items
     t0 = time.time()
@@ -164,14 +165,22 @@ def compute_maps(
         if img.shape[-1] != size or img.shape[-2] != size:
             skipped += 1
             continue
-        dm, _recon = dire_map(f, img, sched)
+        # `.to(device)` là **bắt buộc**, không phải tối ưu: `load_image` trả tensor
+        # CPU, còn mô hình nằm trên GPU ở chế độ thật. Thiếu bước này, `timesteps`
+        # được tạo trên `x.device` (CPU) ⇒ `time_embedding` ra CPU ⇒ `time_mlp`
+        # (CUDA) chết ở `addmm` với "Expected all tensors to be on the same device".
+        # Test CPU không bắt được vì ở đó hai bên cùng CPU; `selfcheck` cũng không
+        # bắt được vì nó tự gọi `.cuda()` trước khi vào `dire_map`. Đặt **sau** kiểm
+        # kích thước để ảnh sai cỡ không bị chuyển lên GPU vô ích.
+        dm, _recon = dire_map(f, img.to(device), sched)
         # <split>/<generator>/<tên>.npy — nhãn và split đi cùng dữ liệu, không
         # suy lại từ tên file (tên PNG là sha, không mang thông tin)
         rel = Path(item["split"] or "all") / item["generator"] / (Path(item["path"]).stem + ".npy")
         (out / rel).parent.mkdir(parents=True, exist_ok=True)
         import numpy as np  # noqa: PLC0415
 
-        np.save(out / rel, dm.squeeze(0).to(torch.float16).numpy())
+        # `.cpu()` trước `.numpy()`: map nằm trên GPU, còn `np.save` cần bộ nhớ CPU.
+        np.save(out / rel, dm.squeeze(0).detach().to("cpu", torch.float16).numpy())
         made.append(
             {
                 "name": rel.name,

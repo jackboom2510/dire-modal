@@ -133,6 +133,12 @@ def dire_map(
 ) -> tuple[Tensor, Tensor]:
     """``(|x₀ − x̂₀|, x̂₀)``; assert NFE ``= 2·S`` trước khi trả."""
     sched = sched or Schedule(steps=20, device=str(x0_img.device))
+    # Ảnh và mô hình phải cùng thiết bị. `load_image` trả tensor CPU; nếu người gọi
+    # truyền `sched` của GPU mà quên `.to(device)`, lỗi sẽ nổ ở giữa `time_mlp` với
+    # thông báo khó đọc ("Expected all tensors to be on the same device") và không
+    # chỉ ra được chỗ sai. Chuẩn hoá ở đây để mọi đường gọi đều đúng.
+    if str(x0_img.device) != sched.device:
+        x0_img = x0_img.to(sched.device)
     before = f.nfe              # không reset: bộ đếm là của cả lô, reset ở đây là mất số
     x_top = invert(f, x0_img, sched, clip)
     recon = reconstruct(f, x_top, sched, clip)
