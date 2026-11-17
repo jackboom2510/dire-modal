@@ -340,6 +340,15 @@ def _check_data(
     return report
 
 
+#: Timeout của `dire`/`gen`/`train`. Dùng làm **cổng thời gian** trong `dire`, không
+#: chỉ để khai báo: một lượt ước tính 9,9 GPU-h trong container 6 giờ thì bị kill
+#: giữa lúc đang chạy, và `vol.commit()` ở cuối không bao giờ chạy.
+WORK_TIMEOUT_S = 6 * 3600
+
+#: Chỉ dùng tối đa 75 % timeout cho phép tính: nạp checkpoint (10,7 s), ghi
+#: `.npy`, và commit Volume đều nằm ngoài phần đã ước lượng.
+SAFE_TIME_FRACTION = 0.75
+
 #: `cpu=8` và timeout 4 giờ, không phải 2 core/30 phút: 217 585 PNG nhỏ là bài
 #: toán **độ trễ mở file**, không phải băng thông. Lần chạy thật với `cpu=2`,
 #: một luồng, timeout 1800 s đã bị cắt trước khi băm xong.
@@ -396,7 +405,7 @@ def bench(n_warmup: int = 1, n_measure: int = 5, steps: int = 20) -> dict:
     return payload
 
 
-@app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, max_usd: float = 5.0) -> dict:
     """R3 — sinh ảnh. Từ chối chạy nếu vượt trần tiền."""
     from .budget import Estimate, load_sec_per_step, require_estimate
@@ -424,27 +433,33 @@ def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, m
             "gen_json": {k: out[k] for k in ("n", "steps", "nfe_total", "seconds")}}
 
 
-@app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
          steps: int = 20, max_usd: float = 5.0, skip_existing: bool = False) -> dict:
     """R1 — DIRE map cho cả hai phía, cùng một lịch, **giữ split của người đóng gói**.
 
     ``generator="auto"``: dùng **mọi** thư mục generator đang có trong cây dữ liệu
-    (tác giả hoặc tự sinh). Ảnh `gen` sinh sau lần chạy trước thì chỉ cần chạy lại
-    với ``--skip-existing``: map đã có sẽ được **dùng lại**, không tính lại.
+    (tác giả hoặc tự sinh). Nhận danh sách: ``--generator adm,pndm``. Ảnh `gen`
+    sinh sau lần chạy trước thì chỉ cần chạy lại với ``--skip-existing``: map đã có
+    sẽ được **dùng lại**, không tính lại.
 
-    Vì sao phải có ``--skip-existing``: ảnh `real` luôn nằm trong danh sách, nên
-    mỗi lần thêm một generator là mỗi lần trả tiền cho toàn bộ `real` lần nữa —
-    rồi ghi đè đúng những file vừa trả tiền để tạo. Ước lượng tiền cũng tính theo
-    số ảnh **sẽ tính thật**, không theo số ảnh trong danh sách.
+    Hai cổng **trước** khi xin GPU, cả hai đều dừng chương trình:
+
+    * **tiền** (`--max-usd`): 10 100 ảnh ở `S=20` là 10,87 USD — vượt trần mặc định
+      5 USD thì dừng, chứ không tự "thương lượng" rồi chạy;
+    * **thời gian**: ước tính 9,88 GPU-h trong container có timeout 6 h thì dù có
+      nâng trần tiền, lượt chạy vẫn bị kill ở giờ thứ 6 và `vol.commit()` cuối
+      không bao giờ chạy. Cổng này in luôn **nhóm generator** gợi ý để chia nhỏ.
+
+    ``--skip-existing`` cần cho cả hai lý do trên: nó làm mỗi lượt chia nhỏ **cộng
+    dồn** thay vì trả tiền lại cho ảnh `real`, và làm lượt bị kill không mất phần
+    đã xong (map đã ghi thì lần sau dùng lại).
     """
-    from .budget import Estimate, load_sec_per_step, require_estimate
+    from .budget import Estimate, GateError, load_sec_per_step, require_estimate
     from .pipeline import RunMeta, compute_maps
 
     want = tuple(x.strip() for x in splits.split(",") if x.strip())
-    gens = _generators_in(DATA)
-    if generator != "auto":
-        gens = [g for g in gens if g == generator]
+    gens = select_generators(_generators_in(DATA), generator)
     if not gens:
         raise FileNotFoundError(
             f"không có thư mục generator nào trong {DATA} (có: {_generators_in(DATA)}).\n"
@@ -457,13 +472,18 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
             f"không có ảnh nào để chạy: splits={list(want)} generators={gens}. "
             "Kiểm `::checkdata` trước."
         )
-    existing = _count_existing(items, MAPS) if skip_existing else 0
-    to_compute = len(items) - existing
+    pending = _pending_by_generator(items, MAPS, skip_existing)
+    existing = len(items) - sum(pending.values())
+    to_compute = sum(pending.values())
     sec = load_sec_per_step(f"{OUT}/bench.json")
     print(f"[kế hoạch] {len(items)} ảnh (n ≤ {n} mỗi ô, {len(want)} split, "
           f"{len(gens)} generator: {', '.join(gens)})", flush=True)
     print(f"[kế hoạch] sẽ tính {to_compute}, dùng lại {existing} map đã có"
           + ("" if skip_existing else "  (thiếu --skip-existing nên không bỏ qua map nào)"), flush=True)
+    for g, k in sorted(pending.items(), key=lambda kv: -kv[1]):
+        if k:
+            one = Estimate(k, 2 * steps, sec)
+            print(f"  · {g:<18} {k:>5} ảnh  {one.gpu_h:6.2f} GPU-h  {one.usd:5.2f} USD", flush=True)
     if to_compute == 0:
         print("[kế hoạch] không có gì mới — không gọi GPU", flush=True)
         return {"n": 0, "n_reused": existing, "generators": gens, "splits": list(want),
@@ -472,6 +492,25 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
 
     est = Estimate(n_images=to_compute, nfe_per_image=2 * steps, sec_per_step=sec)
     print("[tiền]", est.line(), flush=True)
+
+    # Cổng **thời gian** đứng trước cổng tiền: khi cả hai cùng vượt, lời khuyên của
+    # cổng tiền ("nâng --max-usd") là lời khuyên **sai** — nâng trần tiền không làm
+    # container sống lâu hơn, nó chỉ làm hoá đơn của một lượt chạy chắc chắn bị kill
+    # trở nên đắt hơn.
+    budget_h = WORK_TIMEOUT_S / 3600 * SAFE_TIME_FRACTION
+    if est.gpu_h > budget_h:
+        groups = group_generators(pending, sec, steps, budget_h)
+        raise GateError(
+            f"ước tính {est.gpu_h:.2f} GPU-h > trần thời gian {budget_h:.2f} h "
+            f"(timeout {WORK_TIMEOUT_S / 3600:.0f} h × {SAFE_TIME_FRACTION:.0%}).\n"
+            f"  {est.line()}\n"
+            "Nâng `--max-usd` cũng **không** cứu được lượt này: container bị kill ở giờ thứ "
+            f"{WORK_TIMEOUT_S / 3600:.0f} và `vol.commit()` cuối không chạy.\n"
+            "Chạy theo nhóm dưới đây, mỗi nhóm một lần (map đã có được dùng lại nhờ --skip-existing):\n"
+            + "\n".join(f"  --generator {','.join(g)}" for g in groups)
+            + f"\n(mỗi lệnh thêm `--n {n} --steps {steps} --skip-existing`; "
+              "nhóm sau tự dùng lại `real` của nhóm trước)"
+        )
     require_estimate(est, max_usd)
 
     f, digest = _counter(dtype="float16")
@@ -481,6 +520,75 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     return {"n": out["n"], "n_new": out["n_new"], "n_reused": out["n_reused"],
             "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"],
             "est": est.as_dict()}
+
+
+def select_generators(available: Sequence[str], spec: str) -> list[str]:
+    """Lọc danh sách generator có thật theo ``--generator`` (``auto`` hoặc ``a,b``).
+
+    Tên không tồn tại là **lỗi**, không phải "bỏ qua": gõ `sdv1` trong khi cây chỉ
+    có `sdv2` mà vẫn chạy thì kết quả là một lượt GPU trả tiền cho `real` rồi báo
+    "xong" với 0 map mới.
+    """
+    spec = (spec or "auto").strip()
+    if spec == "auto":
+        return list(available)
+    picked = [x.strip() for x in spec.split(",") if x.strip()]
+    missing = [g for g in picked if g not in available]
+    if missing:
+        raise ValueError(f"không có generator {missing}. Có: {list(available)}")
+    return [g for g in available if g in picked]
+
+
+def _pending_by_generator(items: Sequence[tuple], maps_root: str, skip_existing: bool) -> dict:
+    """Số ảnh **sẽ tính** theo từng generator (0 nếu đã có map hoặc không bỏ qua).
+
+    Dùng cho hai việc: in kế hoạch để thấy generator nào tốn tiền, và chia nhóm
+    theo thời gian. `real` xuất hiện ở đây như mọi generator khác — nó cũng là ảnh
+    phải tính, chỉ là thường đã có map từ lần chạy trước.
+    """
+    from .pipeline import map_rel_path  # noqa: PLC0415
+
+    counts: dict[str, int] = {}
+    for it in items:
+        gen = it[3]
+        counts.setdefault(gen, 0)
+        if skip_existing:
+            p = os.path.join(maps_root, map_rel_path(it).as_posix())
+            if os.path.exists(p) and os.path.getsize(p) > 0:
+                continue
+        counts[gen] += 1
+    return counts
+
+
+def group_generators(pending: dict, sec_per_step: float, steps: int,
+                     budget_h: float) -> list[list[str]]:
+    """Chia generator thành nhóm có tổng GPU-h ≤ ``budget_h`` (greedy, lớn trước).
+
+    Tách khỏi `dire` để test được mà không cần Volume. `real` không bao giờ vào
+    nhóm: nó nằm trong **mọi** lệnh, và với `--skip-existing` chỉ tính một lần.
+    """
+    from .budget import GateError  # noqa: PLC0415
+
+    groups: list[list[str]] = []
+    cur: list[str] = []
+    cur_h = 0.0
+    for gen, k in sorted(pending.items(), key=lambda kv: -kv[1]):
+        if gen == "real" or not k:
+            continue
+        h = k * 2 * steps * sec_per_step / 3600
+        if h > budget_h:
+            raise GateError(
+                f"riêng generator {gen!r} đã ước tính {h:.2f} GPU-h > {budget_h:.2f} h — "
+                f"giảm `--n` (hiện {k} ảnh) hoặc `--steps`"
+            )
+        if cur and cur_h + h > budget_h:
+            groups.append(cur)
+            cur, cur_h = [], 0.0
+        cur.append(gen)
+        cur_h += h
+    if cur:
+        groups.append(cur)
+    return groups
 
 
 def _items_to_map(root: str, want: Sequence[str], gens: Sequence[str], n: int) -> list[tuple]:
@@ -575,7 +683,7 @@ def relabel(apply: bool = False) -> dict:
     return out
 
 
-@app.function(volumes=VOLUMES, gpu="A10G", timeout=6 * 3600)
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
           seed: int = 3407, generator: str = "auto") -> dict:
     """R2 — train detector trên map **của mình**.
