@@ -89,9 +89,20 @@ Chi tiết, số đo cold start, cổng kiểm và phương án rollback:
 | Biến | Ý nghĩa | Mặc định |
 |---|---|---|
 | `DIRE_GALLERY_DIR` | thư mục gallery, tuyệt đối hoặc tương đối với `app.py` | `gallery` |
-| `DIRE_CKPT` | đường dẫn checkpoint ADM (bật trang 3); cần thêm `torch==2.4.0` vào `requirements.txt` | `ckpt/adm_lsun.pt` |
+| `DIRE_CKPT` | đường dẫn checkpoint ADM (bật trang 3 **tại chỗ**); cần thêm `torch==2.4.0` vào `requirements.txt` | `ckpt/adm_lsun.pt` |
+| `DEMO_URL` | địa chỉ endpoint GPU trên Modal (`https://<ws>--dire-demo-api.modal.run`) — bật trang 3 **qua GPU** | *(trống = tắt)* |
+| `DEMO_TOKEN` | token của endpoint; **chỉ đặt trong Secrets**, không bao giờ gửi xuống trình duyệt | *(trống)* |
 
-Không có secret nào. Space không gọi mạng ngoài, không lưu ảnh người dùng.
+**Không có secret nào là bắt buộc.** Thiếu `DEMO_URL`/`DEMO_TOKEN` thì Space chạy
+y như trước: 6 trang, trang 3 mặc định tắt, 0 đồng, không gọi mạng ngoài.
+
+Đặt `DEMO_URL` + `DEMO_TOKEN` (Settings → Secrets) thì trang 3 gọi endpoint GPU:
+`S = 5` còn **0,92 s** thay vì 101 s. Trình duyệt **không** thấy token — nó gọi
+server của Space, server gọi Modal. Dựng endpoint: `docs/demo-modal-plan.md`
+(`modal secret create dire-demo …` rồi `modal deploy -m dire_zero.demo_api`).
+
+Ảnh người dùng vẫn không bị lưu ở đâu: Space chỉ chuyển bytes sang Modal, endpoint
+tính rồi trả PNG, không ghi đĩa.
 
 ## Nguồn & bản quyền
 

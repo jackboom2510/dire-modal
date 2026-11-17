@@ -19,6 +19,7 @@
 | Điểm detector lấy từ đâu? | `.json` của từng mẫu, chỉ hiện khi `gate == "passed"` và ngưỡng chọn trên `val` | để "chưa qua cổng" hiện thành chữ, không thành một con số |
 | Phép đo chạy thật trên Space | thí nghiệm khuếch tán 2 chiều có score chính xác | 61 ms/lượt, không cần GPU, và là chỗ giải thích *cơ chế* |
 | Tính DIRE thật trên CPU | **có, nhưng mặc định tắt** — `S=5` là **101 s**/ảnh | đo được 10,1 s/forward trên 2 vCPU; `demo-web-plan.md` §3 chốt > 45 s thì tắt (mục 13) |
+| Tính DIRE thật trên GPU | **có, qua Modal** — `S=5` là **0,92 s**, 0,0003 USD/ảnh | token ở server Space, không xuống trình duyệt; `docs/demo-modal-plan.md` |
 | Chi phí | **0 ₫** (hardware `cpu-basic`) | không có GPU, không gọi mạng ngoài |
 
 Ba con số quyết định kế hoạch này, **đo trên máy** (mục 4): cold start 0,57 s ·
@@ -259,19 +260,28 @@ không hứa gì về nó.
 RAM đỉnh 3,3 GB, và **mỗi lần bấm là 1,7 phút CPU của Space**. Trên gói free, một
 người bấm 10 lần là 17 phút — đủ để Space bị coi là treo.
 
+**Đường thứ ba, đã dựng xong:** nếu Space có `DEMO_URL` + `DEMO_TOKEN` trong
+Secrets thì trang 3 **không nạp ADM tại chỗ** nữa mà gọi endpoint GPU trên Modal
+(`demolib/remote.py`, token chỉ nằm ở server Space). `S = 5` còn **0,92 s**, vẫn
+thấy map + ảnh tái tạo, và câu nguồn gốc ghi rõ "Modal A10G". Không có secret ⇒
+hành vi y như mục 13.2 (mặc định tắt, hướng dẫn cách bật). Chi tiết và chi phí:
+`docs/demo-modal-plan.md`.
+
 ### 13.3 Ba cách để *thấy* phép tính, xếp theo thời gian chờ
 
 | Cách | Chờ bao lâu | Thấy được gì | Nhãn |
 |---|---|---|---|
 | Thí nghiệm 2 chiều (trang 4) | **0,06 s** | cùng hai vòng lặp, từng bước, trên mô hình có score chính xác | minh hoạ lý thuyết |
 | Gallery (trang 2) | 0 s | map của ADM trên ảnh LSUN, cạnh điểm detector | `R0` / `R1+R2` |
-| Tính tại chỗ (trang 3) | **101 s** (`S=5`) | ADM thật, `x̂₀` từng bước, map cuối | không áp dụng (chỉ tính map) |
-| Modal A10G (chế độ C) | ~1–5 s/ảnh | như trên, nhanh hơn 110× | `R1+R2` nếu map của mình |
+| Tính tại chỗ trên CPU (trang 3) | **101 s** (`S=5`) | ADM thật, `x̂₀` từng bước, map cuối | không áp dụng (chỉ tính map) |
+| **Modal A10G** (trang 3, có secret) | **0,92 s** (`S=5`) | như trên, nhanh hơn **110×**, 0,0003 USD/ảnh | `R1` (map tự tính) |
 
 Kết luận cho buổi nói: dùng **trang 4** để giải thích cơ chế (nó chạy 61 ms), dùng
 **trang 2** để nói về kết quả trên dữ liệu thật, và **một lần** bấm trang 3 để
-người xem thấy ADM thật đang chạy — rồi nói thẳng "đó là 1,7 phút của 2 vCPU, trên
-A10G là 0,9 giây".
+người xem thấy ADM thật đang chạy — rồi nói thẳng "cùng phép tính này, trên 2 vCPU
+là 101 giây, trên A10G là 0,92 giây". Nếu có endpoint Modal thì chính lần bấm đó
+chạy trên GPU (`docs/demo-modal-plan.md`); muốn khán giả thấy giá của CPU thì tắt
+secret `DEMO_URL` trước buổi nói.
 
 ### 13.4 Chỗ dễ tự lừa, và test chặn
 

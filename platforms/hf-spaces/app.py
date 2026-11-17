@@ -32,6 +32,7 @@ không có dòng nào của giao diện quyết định một con số.
 
 from __future__ import annotations
 
+import io
 import json
 import math
 import os
@@ -39,7 +40,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from demolib import charts, cost, live, provenance, toy2d
+from demolib import charts, cost, live, provenance, remote, toy2d
 
 HERE = Path(__file__).resolve().parent
 _raw_gallery = Path(os.environ.get("DIRE_GALLERY_DIR", "gallery"))
@@ -317,6 +318,11 @@ def page_live(samples: list[provenance.Sample]) -> None:
     st.caption("Số 2 vCPU: đo tại chỗ, " + live.MEASURED_CPU_NOTE +
                ". Số A10G: từ `::bench` (0,0917 s/step) × `2S`.")
 
+    r_url, r_tok = _remote_creds()
+    if remote.configured(r_url, r_tok):
+        _live_remote(samples, r_url, r_tok)
+        return
+
     stt = live.status()
     if not stt.available:
         st.warning("**Chế độ này đang tắt.** " + stt.reason, icon="⚠️")
@@ -332,24 +338,20 @@ def page_live(samples: list[provenance.Sample]) -> None:
             "Muốn thấy **quá trình** mà không chờ: sang trang *Thí nghiệm 2 chiều* — cùng "
             "hai vòng lặp, cùng phép đo, chạy 61 ms/lượt."
         )
+        st.markdown("---")
+        st.markdown("### Cách nhanh nhất: để GPU làm, Space chỉ hiện")
+        st.markdown(
+            "Đặt `DEMO_URL` và `DEMO_TOKEN` trong **Space → Settings → Secrets** để dùng "
+            "endpoint trên Modal (A10G, ~0,9 s cho `S=5` thay vì 101 s). Token nằm ở "
+            "server của Space, **không** xuống trình duyệt. Cách dựng endpoint, chi phí "
+            "và giới hạn: `docs/demo-modal-plan.md`."
+        )
         return
 
     st.success(f"Đã có torch {stt.torch} và checkpoint `{Path(stt.ckpt).name}`.", icon="✅")
 
     # Đầu vào: mẫu trong gallery nếu có, nếu không thì ảnh tổng hợp — và nói rõ.
-    if samples:
-        labels = [s.selector for s in samples]
-        pick = st.selectbox("Ảnh đầu vào (từ gallery)", labels, index=0)
-        src_path = samples[labels.index(pick)].orig
-        src_label = pick
-    else:
-        src_path = None
-        src_label = "ảnh tổng hợp (gradient + nhiễu), không phải ảnh LSUN"
-        st.info(
-            "Gallery rỗng nên dùng **ảnh tổng hợp** để minh hoạ phép tính. Số đo trên ảnh "
-            "tổng hợp không nói gì về ảnh thật hay ảnh sinh — nó chỉ chứng minh đường tính chạy.",
-            icon="ℹ️",
-        )
+    src_path, src_label = _pick_image(samples)
 
     c1, c2, c3 = st.columns(3)
     steps = c1.select_slider("S (số bước DDIM)", options=[1, 2, 5, 10, 20], value=5)
@@ -423,6 +425,86 @@ def page_live(samples: list[provenance.Sample]) -> None:
              for i, f in enumerate(out["frames"])],
             hide_index=True, width="stretch",
         )
+
+
+def _remote_creds() -> tuple[str, str]:
+    """`st.secrets` trước, biến môi trường sau — để chạy thử ở máy không cần Space."""
+    url = tok = ""
+    try:
+        url = str(st.secrets.get("DEMO_URL", "") or "")
+        tok = str(st.secrets.get("DEMO_TOKEN", "") or "")
+    except Exception:
+        pass
+    return url or os.environ.get("DEMO_URL", ""), tok or os.environ.get("DEMO_TOKEN", "")
+
+
+def _pick_image(samples: list[provenance.Sample]) -> tuple[Path | None, str]:
+    if samples:
+        labels = [s.selector for s in samples]
+        pick = st.selectbox("Ảnh đầu vào (từ gallery)", labels, index=0)
+        return samples[labels.index(pick)].orig, pick
+    st.info(
+        "Gallery rỗng nên dùng **ảnh tổng hợp** để minh hoạ phép tính. Số đo trên ảnh "
+        "tổng hợp không nói gì về ảnh thật hay ảnh sinh — nó chỉ chứng minh đường tính chạy.",
+        icon="ℹ️",
+    )
+    return None, "ảnh tổng hợp (gradient + nhiễu)"
+
+
+def _synthetic_png() -> bytes:
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.fromarray(_synthetic_image()).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _live_remote(samples: list[provenance.Sample], url: str, token: str) -> None:
+    """DIRE tính trên Modal — Space chỉ gửi ảnh và hiện kết quả."""
+    host = url.split("//")[-1].split("/")[0]
+    st.success(f"Đang dùng endpoint GPU: `{host}` — DIRE tính trên Modal (A10G).", icon="⚡")
+    h = remote.health(url)
+    if h is None:
+        st.caption("Không đọc được `/health` (endpoint đang ngủ?) — vẫn thử gọi được.")
+    else:
+        st.caption(f"engine: `{h.engine}` · S ∈ [{h.s_range[0]}, {h.s_range[1]}] · "
+                   f"tối đa {h.max_bytes / 1024 / 1024:.0f} MB/ảnh")
+
+    src_path, src_label = _pick_image(samples)
+    steps = st.select_slider("S (số bước DDIM)", options=[1, 2, 5, 10, 20], value=5,
+                             key="remote_S")
+    st.caption(
+        f"Ước tính: **{0.0917 * 2 * steps:.1f} s** GPU (đo: 0,0917 s/step) + ~0,3 s mạng. "
+        "Không cần tick chờ — đây là GPU, không phải CPU của Space."
+    )
+    if not st.button("Chạy DIRE trên Modal", type="primary"):
+        return
+
+    raw = src_path.read_bytes() if src_path else _synthetic_png()
+    with st.spinner(f"đang tính S={steps} trên A10G…"):
+        try:
+            res = remote.call(url, token, raw, steps, timeout=120.0)
+        except remote.RemoteError as e:
+            st.error(str(e))
+            return
+
+    st.markdown(f"`{res.line}`")
+    a, b, c = st.columns(3)
+    a.image(raw, caption="ảnh gốc", width="stretch")
+    b.image(res.recon_png, caption="x̂₀ sau khi đảo ngược rồi tái tạo", width="stretch")
+    c.image(res.map_png, caption="|x₀ − x̂₀| (DIRE), thang [0, 2], gamma 0,5", width="stretch")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("DIRE trung bình", f"{res.stats['mean']:.4f}")
+    m2.metric("DIRE p99", f"{res.stats.get('p99', float('nan')):.4f}")
+    m3.metric("DIRE lớn nhất", f"{res.stats['max']:.4f}")
+    m4.metric("giây (GPU)", f"{res.seconds:.2f}")
+    if res.resized:
+        st.caption("Ảnh vào không phải 256×256 nên đã được resize — ADM chỉ học ở 256².")
+    st.caption(
+        f"nguồn: `{src_label}` · {res.nfe} NFE · endpoint chỉ tính map, **không** chấm "
+        "ảnh: muốn có điểm phân loại phải có detector nhận map."
+    )
 
 
 @st.cache_resource(show_spinner="đang nạp ADM (552,8 M tham số, ~2,2 GB)…")
