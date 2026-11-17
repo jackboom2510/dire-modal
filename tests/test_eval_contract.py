@@ -820,8 +820,12 @@ def test_eval_one_never_raises_out_of_the_map():
 # đúng điều đó; phần số học và giao diện nằm ở `tests/test_hf_spaces_demo.py`.
 def test_hf_space_has_no_classifier_to_misload():
     src = (ROOT / "platforms/hf-spaces/app.py").read_text(encoding="utf-8")
-    for banned in ("num_classes", "fc.weight", "sigmoid", "softmax", "torch"):
+    for banned in ("num_classes", "fc.weight", "sigmoid", "softmax", "torchvision",
+                   "import torch"):
         assert banned not in src, f"app.py không được dựng lại đường chấm ảnh ({banned!r})"
+    # Có `torch` trong câu thông báo trạng thái là chuyện khác với *dùng* torch:
+    # phần tính toán nằm ở `demolib/live.py`, nơi có test parity với `dire_map`.
+    assert "live" in src
 
 
 def test_hf_space_has_no_image_preprocessing():

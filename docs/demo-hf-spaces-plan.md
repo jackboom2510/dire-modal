@@ -18,6 +18,7 @@
 | Có ô upload ảnh? | **Không** | đường "ảnh RGB → `P(fake)`" là lỗi bị ghi ở `demo-web-plan.md` §2, đã bỏ hẳn |
 | Điểm detector lấy từ đâu? | `.json` của từng mẫu, chỉ hiện khi `gate == "passed"` và ngưỡng chọn trên `val` | để "chưa qua cổng" hiện thành chữ, không thành một con số |
 | Phép đo chạy thật trên Space | thí nghiệm khuếch tán 2 chiều có score chính xác | 61 ms/lượt, không cần GPU, và là chỗ giải thích *cơ chế* |
+| Tính DIRE thật trên CPU | **có, nhưng mặc định tắt** — `S=5` là **101 s**/ảnh | đo được 10,1 s/forward trên 2 vCPU; `demo-web-plan.md` §3 chốt > 45 s thì tắt (mục 13) |
 | Chi phí | **0 ₫** (hardware `cpu-basic`) | không có GPU, không gọi mạng ngoài |
 
 Ba con số quyết định kế hoạch này, **đo trên máy** (mục 4): cold start 0,57 s ·
@@ -29,10 +30,10 @@ RAM 60 MB · toàn bộ 5 trang render dưới 1,5 s.
 |---|---|---|
 | Tab 1 | upload ảnh → `P(real)/P(fake)` bằng ResNet-50 học trên DIRE | **bỏ** |
 | Tab 2 | 3 panel từ `gallery/` + hướng dẫn nếu rỗng | giữ, thêm dòng nguồn gốc và cổng kiểm |
-| Nạp model | `hf_hub_download` + `torch.load` lúc khởi động | không có model |
+| Nạp model | `hf_hub_download` + `torch.load` lúc khởi động | không có model (trừ trang 3, mặc định tắt) |
 | Phụ thuộc | gradio, torch, torchvision, pillow, numpy | `streamlit` |
 | Kiểm bằng test | đọc mã nguồn (chuỗi) | đọc mã nguồn **và** chạy thật bằng `AppTest` |
-| Số đo trên Space | không có | 5 trang, 4 kịch bản gallery |
+| Số đo trên Space | không có | 6 trang · 4 kịch bản gallery · 1 phép đo CPU thật (mục 13) |
 
 Điều **không** đổi: không có đường nào trả xác suất từ ảnh RGB; gallery rỗng thì
 hiện lệnh, không hiện khung trống; mọi số kèm nguồn.
@@ -92,7 +93,7 @@ Thiết bị: container Linux, Python 3.11.2, `streamlit==1.67.0`, không GPU.
 | Trang 3 (thí nghiệm) | **1,33 s** lần đầu, ~0 s khi đã cache | 7 lượt quét `S`, `n = 200`/lớp |
 | `toy2d.run(S=20, n=200)` | **61 ms** | một lượt đo đầy đủ |
 | Tiến trình server khi rỗng | RSS **60 MB** | `ps` sau 2 request |
-| Bộ test demo | **47 test · 2,84 s** | `pytest tests/test_hf_spaces_demo.py` |
+| Bộ test demo | **68 test** (48 giao diện/số học + 11 chế độ tính thật + 9 gallery) | `pytest tests/test_hf_spaces_{demo,live}.py tests/test_make_gallery.py` |
 | Một mẫu gallery | **~150–250 KB** (orig 100–190 KB + diff 30–65 KB) | PNG 256², nén tối ưu |
 
 **Chưa đo (và không được nói như đã đo):** thời gian build image trên HF, cold
@@ -217,6 +218,71 @@ Space, không upload trực tiếp qua UI — lần build sau sẽ xoá sạch.
 | 4 | Đo `sec/ảnh` trên 2 vCPU cho `S = 5/10/20` | máy thật | D4, quyết định chế độ B |
 | 5 | Deploy Space thật, ghi cold start vào mục 4 | #1 | sau #1 |
 
+## 13. Tính DIRE thật trong demo — đo rồi mới quyết
+
+Câu hỏi đặt ra sau khi demo chạy: *DIRE có thật sự lâu vậy không, và không thể cho
+người xem thấy quá trình tính sao.* Trả lời bằng số đo, không bằng cảm giác.
+
+### 13.1 Số đo trên 2 vCPU (đúng cấu hình `cpu-basic`)
+
+Máy đo: Xeon 2,6 GHz, **2 vCPU**, 3,9 GB RAM, AVX-512, `torch==2.4.0`, fp32,
+batch 1, `torch.set_num_threads(2)`, kiến trúc ADM 256² **thật** (552,8 M tham số):
+
+| Phép đo | Kết quả |
+|---|---|
+| 1 lượt forward 256², fp32 | **10,1 s** |
+| 1 lượt forward 256², bf16 | 34,0 s (**chậm hơn 3,4×** — CPU không có AVX-512-BF16) |
+| 1 lượt forward, `channels_last` | 10,9 s (không lợi) |
+| 1 lượt forward ở 128² | 2,6 s (**không dùng được**: ADM chỉ học ở 256²) |
+| RSS đỉnh khi chạy ADM fp32 | **3,3 GB** (Space có 16 GB — đủ) |
+| DIRE `S = 1` (2 forward) | **20 s** |
+| DIRE `S = 5` (10 forward) | **101 s** |
+| DIRE `S = 20` (40 forward) | **404 s** |
+| Cùng phép tính trên A10G (`::bench`) | 0,18 / 0,92 / 3,7 s ⇒ **CPU chậm ~110×** |
+
+`torch.compile` **chưa đo được** ở máy đó (thiếu `Python.h` để inductor biên dịch);
+không hứa gì về nó.
+
+### 13.2 Quyết định: bật, nhưng mặc định tắt, và nói rõ giá
+
+`demo-web-plan.md` §3 đã chốt trước khi đo: p95 > 45 s thì **tắt** chế độ tự tính.
+Đo được **101 s** cho `S = 5` ⇒ vượt ngưỡng 2,2 lần. Nên:
+
+* **mặc định tắt** trên Space (`demolib.live.status()` trả lý do + cách bật);
+* bật được bằng `DIRE_CKPT` + `torch` trong `requirements.txt`, và khi bật thì
+  trang **3 · Tính DIRE thật** hiện từng bước: ở mỗi mốc `t`, `x̂₀`, `ε̂`, thời
+  gian từng bước, và `|x₀ − x̂₀|` lớn lên/nhỏ đi — quá trình thật, không phải thanh
+  chạy giả;
+* chặn cứng `S ≤ 20`, và `S > 5` phải tick "tôi chấp nhận chờ ~N giây".
+
+Đổi lại khi bật: `requirements.txt` thêm torch (~800 MB, build lâu hơn ~2–4 phút),
+RAM đỉnh 3,3 GB, và **mỗi lần bấm là 1,7 phút CPU của Space**. Trên gói free, một
+người bấm 10 lần là 17 phút — đủ để Space bị coi là treo.
+
+### 13.3 Ba cách để *thấy* phép tính, xếp theo thời gian chờ
+
+| Cách | Chờ bao lâu | Thấy được gì | Nhãn |
+|---|---|---|---|
+| Thí nghiệm 2 chiều (trang 4) | **0,06 s** | cùng hai vòng lặp, từng bước, trên mô hình có score chính xác | minh hoạ lý thuyết |
+| Gallery (trang 2) | 0 s | map của ADM trên ảnh LSUN, cạnh điểm detector | `R0` / `R1+R2` |
+| Tính tại chỗ (trang 3) | **101 s** (`S=5`) | ADM thật, `x̂₀` từng bước, map cuối | không áp dụng (chỉ tính map) |
+| Modal A10G (chế độ C) | ~1–5 s/ảnh | như trên, nhanh hơn 110× | `R1+R2` nếu map của mình |
+
+Kết luận cho buổi nói: dùng **trang 4** để giải thích cơ chế (nó chạy 61 ms), dùng
+**trang 2** để nói về kết quả trên dữ liệu thật, và **một lần** bấm trang 3 để
+người xem thấy ADM thật đang chạy — rồi nói thẳng "đó là 1,7 phút của 2 vCPU, trên
+A10G là 0,9 giây".
+
+### 13.4 Chỗ dễ tự lừa, và test chặn
+
+| Cái bẫy | Vì sao nguy hiểm | Chặn bằng |
+|---|---|---|
+| chạy 128² cho nhanh 4× | ADM chỉ học ở 256² ⇒ map đẹp nhưng vô nghĩa | `live` luôn resize về 256; test `test_wrong_size_image_is_resized...` |
+| viết lại vòng lặp rồi lệch số | demo sẽ "chứng minh" một phép tính khác bài báo | `test_stepwise_loop_matches_dire_zero`: map **bằng nhau** với `dire_map` |
+| bật mặc định cho "tiện" | người xem đầu tiên chờ 101 s và bỏ đi | `test_live_page_is_off_by_default_and_says_why` |
+| bf16 cho "nhanh" | trên CPU này **chậm hơn 3,4×** | ghi trong `MEASURED_CPU_NOTE` |
+| đường UI chưa từng bấm thử | `run_steps` đúng mà trang vẫn trắng | `test_live_page_computes_and_renders_when_enabled`: bấm nút thật, đòi ảnh + dòng nguồn gốc |
+
 ## 12. Định nghĩa "xong" cho lần deploy này
 
 - [x] app Streamlit chạy được, 5 trang, không traceback (`AppTest`)
@@ -230,3 +296,4 @@ Space, không upload trực tiếp qua UI — lần build sau sẽ xoá sạch.
 - [ ] gallery có mẫu thật (chờ `::dire` xong) — **điều kiện để trang 2 có nội dung**
 - [ ] cold start đo trên Space thật, ghi vào mục 4
 - [ ] cổng 2 chạy xong trước khi bật `--scores`
+- [x] chế độ tính DIRE tại chỗ: có, **mặc định tắt**, số đo 10,1 s/forward và lý do (mục 13)

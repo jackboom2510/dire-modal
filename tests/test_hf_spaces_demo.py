@@ -120,9 +120,20 @@ def test_app_has_no_upload_path(app_source: str) -> None:
     assert "P(fake)" in app_source  # vẫn có, nhưng chỉ trong trang gallery
 
 
-def test_app_has_no_model_inference(app_source: str) -> None:
-    for banned in ("sigmoid", "softmax", "torch", "torchvision", "hf_hub_download"):
+def test_app_has_no_model_inference_of_its_own(app_source: str) -> None:
+    """`app.py` không được tự chạy mô hình; nếu có tính toán thì phải qua `demolib.live`.
+
+    Quy tắc này đổi một lần, có chủ ý: trước đây cấm mọi thứ liên quan tới torch,
+    vì app chỉ hiện map có sẵn. Nay có thêm trang **tính DIRE thật** — nhưng nó
+    gọi `live.run_steps`, và chỉ sau khi `live.status()` nói đã sẵn sàng. Cái bị
+    cấm vẫn là cái cũ: tự dựng một bộ phân loại trong giao diện.
+    """
+    for banned in ("import torch", "torchvision", "sigmoid", "softmax", "num_classes"):
         assert banned not in app_source, f"app.py không được chứa {banned!r}"
+    # Đường tính tại chỗ phải đi qua module có test parity, không viết lại vòng lặp.
+    assert "live.status()" in app_source
+    assert "live.run_steps(" in app_source
+    assert "import live" in app_source or "import charts, cost, live" in app_source
 
 
 def test_app_never_claims_paper_accuracy(app_source: str) -> None:
@@ -282,7 +293,7 @@ def test_every_page_renders_without_exception(tmp_path: Path, monkeypatch) -> No
     at = _app_test(tmp_path, monkeypatch)
     assert not at.exception, at.exception
     options = list(at.radio[0].options)
-    assert len(options) == 5
+    assert len(options) == 6
     for opt in options:
         at.radio[0].set_value(opt).run()
         assert not at.exception, (opt, at.exception)
@@ -326,3 +337,22 @@ def test_empty_gallery_shows_the_command_not_blank_panels(tmp_path: Path, monkey
     assert at.image == [] or len(at.image) == 0
     text = " ".join(m.value for m in at.markdown)
     assert "make_gallery.py" in text
+
+
+def test_live_page_is_off_by_default_and_says_why(tmp_path: Path, monkeypatch) -> None:
+    """Chế độ tính tại chỗ phải **tắt** mặc định, và phải giải thích bằng số đo.
+
+    Bật nó là 101 s cho `S = 5` trên 2 vCPU. Một trang im lặng bật chế độ đó sẽ
+    khiến người xem tưởng Space treo — và đó là lần duy nhất họ thử.
+    """
+    store = tmp_path / "gallery"
+    store.mkdir()
+    monkeypatch.delenv("DIRE_CKPT", raising=False)
+    at = _app_test(store, monkeypatch)
+    at.radio[0].set_value("3 · Tính DIRE thật").run()
+    assert not at.exception, at.exception
+    text = " ".join(w.value for w in at.warning)
+    assert "đang tắt" in text
+    body = " ".join(m.value for m in at.markdown) + " ".join(c.value for c in at.caption)
+    assert "101 s" in body or "101" in body, "phải nêu con số đo được, không nói chung chung"
+    assert "45 s" in body, "phải nêu ngưỡng đã chốt trong demo-web-plan §3"

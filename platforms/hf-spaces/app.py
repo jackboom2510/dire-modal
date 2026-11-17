@@ -39,7 +39,7 @@ from pathlib import Path
 
 import streamlit as st
 
-from demolib import charts, cost, provenance, toy2d
+from demolib import charts, cost, live, provenance, toy2d
 
 HERE = Path(__file__).resolve().parent
 _raw_gallery = Path(os.environ.get("DIRE_GALLERY_DIR", "gallery"))
@@ -298,6 +298,149 @@ def page_toy() -> None:
     )
 
 
+
+def page_live(samples: list[provenance.Sample]) -> None:
+    st.title("Tính DIRE thật — chậm, và nói rõ chậm bao nhiêu")
+    st.markdown(
+        "Trang này chạy **đúng hai vòng lặp** của DIRE (đảo ngược DDIM rồi tái tạo) "
+        "trên ADM, ngay trong tiến trình này — không gọi mạng, không dùng map tính sẵn. "
+        "Cái giá là thời gian, và nó được đo chứ không phỏng đoán:"
+    )
+    st.table([
+        {"Việc": "1 lượt forward ADM 256²", "Trên 2 vCPU": f"{live.MEASURED_CPU_FORWARD_SEC:.1f} s",
+         "Trên A10G": "0,09 s"},
+        {"Việc": "DIRE với `S = 1`", "Trên 2 vCPU": f"{live.estimate_seconds(1):.0f} s", "Trên A10G": "0,2 s"},
+        {"Việc": "DIRE với `S = 5`", "Trên 2 vCPU": f"{live.estimate_seconds(5):.0f} s", "Trên A10G": "0,9 s"},
+        {"Việc": "DIRE với `S = 20` (cấu hình của bài)", "Trên 2 vCPU": f"{live.estimate_seconds(20):.0f} s",
+         "Trên A10G": "3,7 s"},
+    ])
+    st.caption("Số 2 vCPU: đo tại chỗ, " + live.MEASURED_CPU_NOTE +
+               ". Số A10G: từ `::bench` (0,0917 s/step) × `2S`.")
+
+    stt = live.status()
+    if not stt.available:
+        st.warning("**Chế độ này đang tắt.** " + stt.reason, icon="⚠️")
+        st.markdown("Để bật (chỉ nên bật khi có người thật sự ngồi xem):")
+        for h in stt.hints:
+            st.markdown(f"- `{h}`")
+        st.markdown(
+            "Vì sao mặc định tắt: `docs/demo-web-plan.md` §3 chốt ngưỡng — p95 > 45 s "
+            "thì tắt chế độ tự tính. Đo được **101 s** cho `S = 5`, tức vượt ngưỡng 2,2 lần. "
+            "Bật lên thì mỗi người xem bấm một lần là 1,7 phút CPU của Space."
+        )
+        st.markdown(
+            "Muốn thấy **quá trình** mà không chờ: sang trang *Thí nghiệm 2 chiều* — cùng "
+            "hai vòng lặp, cùng phép đo, chạy 61 ms/lượt."
+        )
+        return
+
+    st.success(f"Đã có torch {stt.torch} và checkpoint `{Path(stt.ckpt).name}`.", icon="✅")
+
+    # Đầu vào: mẫu trong gallery nếu có, nếu không thì ảnh tổng hợp — và nói rõ.
+    if samples:
+        labels = [s.selector for s in samples]
+        pick = st.selectbox("Ảnh đầu vào (từ gallery)", labels, index=0)
+        src_path = samples[labels.index(pick)].orig
+        src_label = pick
+    else:
+        src_path = None
+        src_label = "ảnh tổng hợp (gradient + nhiễu), không phải ảnh LSUN"
+        st.info(
+            "Gallery rỗng nên dùng **ảnh tổng hợp** để minh hoạ phép tính. Số đo trên ảnh "
+            "tổng hợp không nói gì về ảnh thật hay ảnh sinh — nó chỉ chứng minh đường tính chạy.",
+            icon="ℹ️",
+        )
+
+    c1, c2, c3 = st.columns(3)
+    steps = c1.select_slider("S (số bước DDIM)", options=[1, 2, 5, 10, 20], value=5)
+    long_ok = c2.checkbox(
+        f"Tôi chấp nhận chờ ~{live.estimate_seconds(steps):.0f} s",
+        value=steps <= 5,
+        help="mỗi bước là 2 lượt forward; đây là thời gian CPU thật, không phải thanh chạy giả",
+    )
+    go = c3.button("Chạy DIRE thật", type="primary", disabled=not long_ok)
+
+    if go:
+        model = _live_model()
+        img = src_path if src_path else _synthetic_image()
+        bar = st.progress(0.0, text="đang chạy…")
+        grid = st.empty()
+        log = st.empty()
+        frames: list[dict] = []
+        total = 2 * steps
+
+        def on_frame(d: dict) -> None:
+            frames.append(d)
+            k = len(frames)
+            bar.progress(k / total, text=f"{d['phase']} · t={d['t']} · {k}/{total} bước")
+            grid.image(d["x0_png"], caption=f"x̂₀ tại t={d['t']} ({d['phase']})", width=220)
+            log.dataframe(
+                [{"bước": i + 1, "pha": f["phase"], "t": f["t"], "giây": f["sec"],
+                  "rms(ε̂)": f["eps_rms"], "|x₀−x̂₀| TB": f["map_mean"]}
+                 for i, f in enumerate(frames)],
+                hide_index=True, width="stretch",
+            )
+
+        try:
+            out = live.run_steps(model, img, steps=steps, on_frame=on_frame)
+        except Exception as e:  # pragma: no cover - chỉ khi checkpoint hỏng
+            st.error(f"Không chạy được: {type(e).__name__}: {e}")
+            return
+        bar.progress(1.0, text="xong")
+        st.session_state["live_out"] = out
+        st.session_state["live_steps"] = steps
+        st.session_state["live_src"] = src_label
+
+    out = st.session_state.get("live_out")
+    if not out:
+        return
+
+    steps_done = st.session_state.get("live_steps", steps)
+    line = (f"DIRE: tính tại chỗ, ADM (256x256_diffusion_uncond) · detector: không có "
+            f"(trang này chỉ tính map) · nhãn: không áp dụng · S={steps_done} · "
+            f"{out['nfe']} NFE · {out['seconds']:.1f} s")
+    st.markdown(f"`{line}`")
+    a, b, c = st.columns(3)
+    a.image(str(src_path) if src_path else _synthetic_image(), caption="ảnh gốc", width="stretch")
+    b.image(out["recon_png"], caption="x̂₀ sau khi đảo ngược rồi tái tạo", width="stretch")
+    c.image(out["map_png"], caption="|x₀ − x̂₀| (DIRE), thang [0, 2], gamma 0,5", width="stretch")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("DIRE trung bình", f"{out['map_values']['mean']:.4f}")
+    m2.metric("DIRE p99", f"{out['map_values']['p99']:.4f}")
+    m3.metric("DIRE lớn nhất", f"{out['map_values']['max']:.4f}")
+    m4.metric("giây / forward", f"{sum(out['timings']) / max(1, len(out['timings'])):.2f}")
+
+    st.caption(
+        "Đọc kết quả cho đúng: đây là **một** ảnh, nên con số DIRE của nó không phải "
+        "một ngưỡng phân loại. Muốn kết luận thật hay sinh cần phân bố của cả hai lớp "
+        "(trang Gallery), và cần detector nhận map — không phải ảnh."
+    )
+    with st.expander("Từng bước của phép tính"):
+        st.dataframe(
+            [{"bước": i + 1, "pha": f["phase"], "t": f["t"], "giây": f["sec"],
+              "rms(ε̂)": f["eps_rms"], "|x₀−x̂₀| TB": f["map_mean"]}
+             for i, f in enumerate(out["frames"])],
+            hide_index=True, width="stretch",
+        )
+
+
+@st.cache_resource(show_spinner="đang nạp ADM (552,8 M tham số, ~2,2 GB)…")
+def _live_model():
+    model, digest = live.load_checkpoint()
+    return model
+
+
+def _synthetic_image():
+    """Ảnh 256² tổng hợp, tất định — để minh hoạ phép tính khi gallery rỗng."""
+    import numpy as np
+
+    yy, xx = np.mgrid[0:256, 0:256]
+    base = np.stack([xx, yy, (xx + yy) // 2], axis=-1).astype("float32") / 255.0
+    noise = np.random.default_rng(3407).normal(0, 0.05, base.shape)
+    return np.clip((base + noise) * 255, 0, 255).astype("uint8")
+
+
 def page_schedule() -> None:
     st.title("Lịch nhiễu, NFE và tiền")
     st.markdown(
@@ -428,8 +571,8 @@ def main() -> None:
         st.caption("ICCV 2023 · Wang et al. · bản viết lại from scratch")
         page = st.radio(
             "Trang",
-            ["1 · Demo này là gì", "2 · Gallery (chế độ A)", "3 · Thí nghiệm 2 chiều",
-             "4 · Lịch & chi phí", "5 · Bảng 2 & tái lập"],
+            ["1 · Demo này là gì", "2 · Gallery (chế độ A)", "3 · Tính DIRE thật",
+             "4 · Thí nghiệm 2 chiều", "5 · Lịch & chi phí", "6 · Bảng 2 & tái lập"],
             label_visibility="collapsed",
         )
         st.divider()
@@ -443,8 +586,10 @@ def main() -> None:
     elif page.startswith("2"):
         page_gallery(samples, problems)
     elif page.startswith("3"):
-        page_toy()
+        page_live(samples)
     elif page.startswith("4"):
+        page_toy()
+    elif page.startswith("5"):
         page_schedule()
     else:
         page_paper()
