@@ -73,17 +73,12 @@ def _maps(tmp_path: Path, gens: dict[str, int], n_real: int = 3, split: str = "t
     return root
 
 
-def test_train_rejects_a_generator_that_has_no_maps(tmp_path: Path, monkeypatch):
-    import ast
-    from pathlib import Path as P
-
-    src = P(modal_app.__file__).read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "train")
-    body = ast.unparse(fn)
-    # Lời nhắn phải chỉ đúng lệnh cần chạy trước, không chỉ "không tìm thấy".
-    assert "::dire --generator" in body
-    assert 'generator: str=' in body and "'auto'" in body
+def test_train_rejects_a_generator_that_has_no_maps():
+    """Lời nhắn phải chỉ đúng lệnh cần chạy trước, không chỉ "không tìm thấy"."""
+    with pytest.raises(ValueError) as exc:
+        modal_app._train_targets("midjourney", ["adm", "pndm"])
+    msg = str(exc.value)
+    assert "midjourney" in msg and "::dire --generator midjourney" in msg
 
 
 def test_collect_maps_labels_come_from_directory_names(tmp_path: Path):
@@ -603,3 +598,63 @@ def test_plan_commands_are_copy_paste_ready():
         assert f"{grp['n_images'] + grp['includes_real']} ảnh" in line
     # `real` chỉ được nhắc ở lệnh đầu
     assert cmds[0].count("real") == 1 and all("real" not in c for c in cmds[1:])
+
+
+# ---------------------------------------------------------------------------
+# Sau `::dire`: mỗi dòng của Table 2 là một detector **riêng**
+# ---------------------------------------------------------------------------
+def test_train_targets_resolve_all_and_reject_a_missing_generator():
+    avail = ["adm", "dalle2", "pndm"]
+    assert modal_app._train_targets("auto", avail) == [None]      # gộp: bài toán khác
+    assert modal_app._train_targets("all", avail) == avail
+    assert modal_app._train_targets("pndm", avail) == ["pndm"]
+    assert modal_app._train_targets("pndm, adm", avail) == ["pndm", "adm"]
+    with pytest.raises(ValueError) as exc:
+        modal_app._train_targets("midjourney", avail)
+    assert "midjourney" in str(exc.value) and "pndm" in str(exc.value)
+
+
+def test_train_tags_are_unique_and_filesystem_safe():
+    tags = [modal_app._train_tag(g) for g in ("adm", "diff-projectedgan", "ours_adm", None)]
+    assert len(tags) == len(set(tags))
+    for t in tags:
+        assert all(c.isalnum() or c in "-._" for c in t), t
+    # `auto` (gộp) không được trùng với một generator tên là "auto"
+    assert modal_app._train_tag(None) == "auto"
+    assert modal_app._train_tag("auto") != "auto"
+
+
+def test_train_ledger_keeps_every_generator(tmp_path):
+    """15 dòng của Table 2 phải cùng tồn tại — bản trước ghi đè, còn đúng 1 dòng.
+
+    Lỗi thật: `train` ghi `runs/train.json` + `runs/detector.pth` cho **mọi**
+    generator, nên chạy lần lượt 15 lệnh thì dòng cuối là dòng duy nhất còn lại,
+    và `::report` đọc đúng một con số mà không nói 14 dòng kia đã mất.
+    """
+    def res(acc: float, **kw) -> dict:
+        return {"best_epoch": 7, "best_val_ap": 0.9, "threshold_from_val": 0.5,
+                "seconds": 12.0,
+                "test": {"acc": acc, "ap": 0.95, "auc": 0.96, "n": 200,
+                         "n_real": 100, "n_fake": 100, "acc_ci95": [acc - 0.02, acc + 0.02]}, **kw}
+
+    out = str(tmp_path)
+    modal_app._write_train_ledger(out, {"gen-adm": res(0.91), "gen-pndm": res(0.77)})
+    led = modal_app._write_train_ledger(out, {"gen-sdv2": res(0.83)})
+
+    index = json.loads((tmp_path / "train.json").read_text(encoding="utf-8"))
+    assert sorted(index["by_generator"]) == ["gen-adm", "gen-pndm", "gen-sdv2"]
+    assert index["by_generator"]["gen-pndm"]["acc"] == 0.77
+    assert len(index["runs"]) == 3
+    assert index["latest"] == "gen-sdv2"
+    # khoá cũ ở cấp ngoài trỏ tới lượt gần nhất (chỗ đọc cũ không hỏng)
+    assert index["threshold_from_val"] == 0.5
+    assert led["n"] == 3
+
+
+def test_train_writes_each_generator_to_its_own_directory():
+    """Thư mục riêng, không chỉ file json riêng: `detector.pth` cũng phải tách."""
+    src = Path(modal_app.__file__).read_text(encoding="utf-8")
+    body = src[src.index("def train(epochs"):]
+    body = body[: body.index("def _train_targets(")]
+    assert 'f"{OUT}/train/{tag}"' in body
+    assert '"runs/train.json"' not in body
