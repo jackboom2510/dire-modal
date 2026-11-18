@@ -645,11 +645,12 @@ Thứ tự này là thứ tự phụ thuộc dữ liệu, không phải thứ t�
 
 | # | Việc | Lệnh | Ra cái gì | Chặn bởi |
 |---|---|---|---|---|
-| 0 | **Kiểm tồn kho map** | `::report` | `maps.by_split_generator` | — |
+| 0 | **Kiểm tồn kho map** | `::maps --n 500` | `by_split_generator`, số map thiếu, lệnh chạy tiếp | — |
 | 1 | **Train từng generator** | `::train --generator all` | `runs/train/<gen>/detector.pth` + `train.json` mỗi cái | 0 phải đủ generator |
-| 2 | **Gom bảng** | `::report` | `train_by_generator` — mỗi dòng một detector | 1 |
-| 3 | **Gallery + demo** | `tools/make_gallery.py` rồi Space | trang 2 có mẫu thật | 1 (cần `detector.pth` để có điểm) |
-| 4 | **So với bài báo** | chưa có `::author_eval` (R0) | cột "bài báo" | cần checkpoint tác giả |
+| 2 | **Chấm điểm từng ảnh** | `::evaluate --generator all` | `runs/eval/<gen>/{eval.json,scores.json}` | 1 |
+| 3 | **Gom bảng** | `::report` | `train_by_generator` + `eval_by_generator` | 1, 2 |
+| 4 | **Gallery + demo** | `tools/make_gallery.py --scores …` rồi Space | trang 2 có mẫu thật **và** có `p_fake` | 2 |
+| 5 | **So với bài báo** | chưa có `::author_eval` (R0) | cột "bài báo" | cần checkpoint tác giả |
 
 **Bước 0 — trước khi train, xem mình có gì.** `::dire` chạy theo nhóm nên rất dễ
 kết thúc với 12 generator thay vì 15 mà không biết:
@@ -660,6 +661,35 @@ kết thúc với 12 generator thay vì 15 mà không biết:
 
 Thiếu ô nào thì chạy bù đúng ô đó (`--generator <tên> --skip-existing`), đừng train
 rồi mới phát hiện.
+
+**Bước 2 — `::evaluate`: bước dễ bị bỏ quên nhất.** `::train` chỉ ghi *số tổng hợp*
+(`acc`, `ap`, `auc`) vào `train.json`; nó **không** ghi điểm của từng ảnh. Nhưng
+`tools/make_gallery.py --scores` cần đúng một bảng `{tên mẫu: p_fake}`, và
+`platforms/hf-spaces/demolib/provenance.py` từ chối hiện điểm nếu thiếu `gate`/`threshold`.
+Không chạy bước này thì gallery vẫn dựng được, chỉ là mọi mẫu hiện "chưa có điểm" —
+trang 2 mất đúng phần muốn khoe.
+
+```bash
+modal run -m dire_zero.modal_app::evaluate --generator all      # hoặc --generator adm
+```
+
+Ghi `runs/eval/<tag>/eval.json` (metric, có `acc_ci95`) và `scores.json` (điểm từng ảnh,
+khoá `f"{generator}_{stem}"` — khớp đúng khoá `make_gallery` sinh ra). Ngưỡng trong
+`train.json` là **logit**; `::evaluate` đổi sang xác suất bằng sigmoid rồi mới ghi, vì
+`make_gallery --threshold` chỉ nhận `[0, 1]`. Đổi thang không đổi ACC/AP/AUC (hàm đơn
+điệu tăng) nhưng đổi cách đọc — trộn hai thang là hiện điểm sai mà không có lỗi nào báo.
+
+`gate` chỉ `passed` khi ngưỡng thật sự đến từ `val` với ≥ 20 mẫu; không đạt thì
+`gate: failed` và `provenance` **từ chối** hiện điểm. Đó là hành vi đúng: ngưỡng chọn
+trên test là tự khen mình.
+
+```bash
+# nối vào gallery, dùng đúng ngưỡng mà ::evaluate đã ghi
+modal volume get dire-zero runs/eval/gen-adm /tmp/eval
+python tools/make_gallery.py --maps maps/test --orig data/test \
+  --scores /tmp/eval/scores.json --gate passed \
+  --threshold "$(python -c 'import json;print(json.load(open("/tmp/eval/eval.json"))["threshold_prob"])')"
+```
 
 ### 4.4.2 Mất mạng giữa lúc `::dire` đang chạy — chuyện gì xảy ra, kiểm thế nào
 
