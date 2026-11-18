@@ -733,7 +733,7 @@ def test_maps_inventory_counts_what_is_missing(tmp_path, monkeypatch):
     monkeypatch.setattr(modal_app, "DATA", str(data))
     monkeypatch.setattr(modal_app, "MAPS", str(maps))
 
-    out = modal_app.maps.local(n=0)
+    out = modal_app.maps.local(n=0, steps=20)
     cells = {c["cell"]: c for c in out["cells"]}
     assert set(cells) == {"train/real", "train/adm", "test/real", "test/adm"}
     assert cells["train/real"]["missing"] == 0
@@ -759,7 +759,7 @@ def test_maps_honours_n_and_flags_a_leftover_fake_dir(tmp_path, monkeypatch):
 
     monkeypatch.setattr(modal_app, "DATA", str(data))
     monkeypatch.setattr(modal_app, "MAPS", str(maps))
-    out = modal_app.maps.local(n=5)
+    out = modal_app.maps.local(n=5, steps=20)
     cells = {c["cell"]: c for c in out["cells"]}
     assert cells["train/real"]["wanted"] == 5 and cells["train/real"]["missing"] == 0
     assert cells["train/real"]["extra"] == 0          # 5 map có, cần 5
@@ -784,6 +784,125 @@ def test_maps_verify_catches_a_truncated_npy(tmp_path, monkeypatch):
 
     monkeypatch.setattr(modal_app, "DATA", str(data))
     monkeypatch.setattr(modal_app, "MAPS", str(maps))
-    out = modal_app.maps.local(verify=5)
+    out = modal_app.maps.local(n=0, verify=5, steps=20)
     assert any("broken.npy" in b for b in out["bad_files"]), out["bad_files"]
     assert out["ready_for_train"] is False
+
+
+# ---------------------------------------------------------------------------
+# `::maps` sau khi chạy thật: ba lỗi lộ ra từ log
+# ---------------------------------------------------------------------------
+def _tree(tmp_path, spec: dict) -> tuple[Path, Path]:
+    """``{(split, gen): (n_ảnh, n_map)}`` → cây data/ + maps/."""
+    data, maps = tmp_path / "data", tmp_path / "maps"
+    for (split, gen), (n_img, n_map) in spec.items():
+        (data / split / gen).mkdir(parents=True, exist_ok=True)
+        for i in range(n_img):
+            (data / split / gen / f"{i}.png").write_bytes(b"png")
+        (maps / split / gen).mkdir(parents=True, exist_ok=True)
+        for i in range(n_map):
+            (maps / split / gen / f"{i}.npy").write_bytes(b"x" * 300)
+    return data, maps
+
+
+def test_maps_never_suggests_generator_real(tmp_path, monkeypatch):
+    """`--generator real` là lệnh **không chạy được**: `real` không nằm trong danh
+    sách generator (nó có mặt trong mọi lệnh). Gợi ý sai tệ hơn không gợi ý."""
+    data, maps = _tree(tmp_path, {("test", "real"): (100, 40), ("test", "adm"): (100, 100)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+
+    out = modal_app.maps.local(n=100, steps=20)
+    text = " ".join(out["problems"]) + " ".join(out["plan"]["commands"])
+    assert "--generator real" not in text, "chuỗi trông như cờ sẽ bị copy nguyên văn"
+    assert "--skip-existing" in text
+
+    # và điều ngược lại: lệnh gợi ý cho `real` phải chạy được thật
+    assert modal_app.select_generators(["adm", "pndm"], "adm") == ["adm"]
+    with pytest.raises(ValueError):
+        modal_app.select_generators(["adm", "pndm"], "real")
+
+
+def test_maps_defaults_to_dires_n_and_says_so(tmp_path, monkeypatch):
+    """`--n` mặc định phải là `n` của `::dire` (2 000), không phải cả cây.
+
+    Log thật: chạy `::maps` không `--n` trên cây 40 000 ảnh/ô ⇒ "thiếu 212 583
+    map". Đúng về số học, vô dụng về quyết định: không ai định tính map cho 212 583
+    ảnh, và con số đó không nói phải chạy lệnh gì.
+    """
+    data, maps = _tree(tmp_path, {("train", "real"): (40000, 500), ("train", "adm"): (40000, 500)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+
+    out = modal_app.maps.local(steps=20)          # không truyền n
+    cells = {c["cell"]: c for c in out["cells"]}
+    assert out["n"] == 2000
+    assert cells["train/real"]["wanted"] == 2000 and cells["train/real"]["missing"] == 1500
+
+    out_all = modal_app.maps.local(n=0, steps=20)
+    assert {c["cell"]: c for c in out_all["cells"]}["train/real"]["wanted"] == 40000
+
+
+def test_maps_prints_a_runnable_command_when_work_fits_one_run(tmp_path, monkeypatch):
+    """Thiếu ít ⇒ **một** lệnh, đủ tham số, và `real` được nhắc là có sẵn trong đó."""
+    data, maps = _tree(tmp_path, {("test", "real"): (100, 100), ("test", "adm"): (100, 20)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "bench.json").write_text(json.dumps({"sec_per_step": 0.0917}))
+
+    out = modal_app.maps.local(n=100, steps=20)
+    assert out["plan"]["gpu_h"] is not None
+    cmds = out["plan"]["commands"]
+    assert len(cmds) == 1, cmds
+    assert "--generator adm" in cmds[0] and "--n 100" in cmds[0] and "--skip-existing" in cmds[0]
+    assert "real" not in cmds[0].split("--generator")[1]
+    # 80 ảnh × 40 NFE × 0,0917 s = 293 s = 0,081 h
+    assert abs(out["plan"]["gpu_h"] - 0.081) < 0.01
+
+
+def test_maps_splits_into_balanced_commands_when_over_the_time_budget(tmp_path, monkeypatch):
+    data, maps = _tree(tmp_path, {("test", "real"): (100, 0),
+                                  ("test", "adm"): (2500, 0),
+                                  ("test", "pndm"): (2500, 0),
+                                  ("test", "if"): (2500, 0)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "bench.json").write_text(json.dumps({"sec_per_step": 0.0917}))
+
+    out = modal_app.maps.local(n=0, steps=20)
+    assert out["plan"]["gpu_h"] > 4.5                  # 7 600 ảnh ⇒ ~7,7 h
+    cmds = out["plan"]["commands"]
+    assert len(cmds) >= 3, cmds
+    flat = [c.split("--generator")[1].split("#")[0].strip() for c in cmds]
+    gens = [g for line in flat for g in line.split(",")]
+    assert sorted(gens) == ["adm", "if", "pndm"]        # không bỏ sót, không lặp
+    assert sum(1 for c in cmds if "real chưa có map" in c) == 1
+
+
+def test_maps_without_bench_does_not_invent_a_price(tmp_path, monkeypatch):
+    data, maps = _tree(tmp_path, {("test", "real"): (50, 0), ("test", "adm"): (50, 0)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "chưa-có"))
+
+    out = modal_app.maps.local(n=50, steps=20)
+    assert out["plan"]["gpu_h"] is None and out["plan"]["usd"] is None
+    assert "::bench" in out["plan"]["note"]
+
+
+def test_maps_warns_about_a_class_imbalance(tmp_path, monkeypatch):
+    """`test/midjourney` 100 ảnh vs `test/real` 1 000 ⇒ 10:1: phải nói trước khi train."""
+    data, maps = _tree(tmp_path, {("test", "real"): (1000, 1000), ("test", "midjourney"): (100, 100)})
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+
+    out = modal_app.maps.local(n=0, steps=20)
+    assert any("midjourney" in w and "10.0:1" in w for w in out["warnings"]), out["warnings"]
+    assert out["total_missing"] == 0

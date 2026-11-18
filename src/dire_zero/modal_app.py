@@ -778,8 +778,9 @@ def relabel(apply: bool = False) -> dict:
 
 
 @app.function(volumes=VOLUMES, cpu=2, timeout=1800)
-def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
-    """Kiểm **tồn kho** DIRE map: đã đủ chưa, còn thiếu ô nào — không cần GPU.
+def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
+         steps: int = 20) -> dict:
+    """Kiểm **tồn kho** DIRE map và in **lệnh chạy tiếp** — không cần GPU.
 
     Dùng đúng vào lúc cần: một lượt `::dire` bị dừng giữa đường (mất mạng, hết
     timeout, `--detach` bị kill). Câu hỏi khi đó không phải "app còn sống không"
@@ -787,15 +788,17 @@ def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
 
     ::
 
-        modal run -m dire_zero.modal_app::maps                 # bảng tồn kho
-        modal run -m dire_zero.modal_app::maps --verify 20      # + đọc thử 20 file
-        modal run -m dire_zero.modal_app::maps --generator adm  # chỉ một generator
+        modal run -m dire_zero.modal_app::maps --n 500          # cùng --n với lệnh định chạy
+        modal run -m dire_zero.modal_app::maps --n 500 --verify 20
+        modal run -m dire_zero.modal_app::maps --n 0            # tính cả cây (40 000 ảnh/ô)
 
-    Cột ``thiếu`` = số ảnh **có** trong `data/<split>/<gen>` trừ số `.npy` đã có.
-    Với ``--n`` > 0 thì "đủ" được hiểu là ``min(số ảnh, n)``, đúng như `::dire`
-    cắt theo từng ô. ``verify`` đọc thử ngẫu nhiên từng ấy file bằng ``np.load``:
-    file ghi dở do bị kill **vẫn tồn tại với kích thước khác 0**, nên đếm file là
-    chưa đủ.
+    ``--n`` PHẢI là ``n`` của `::dire` mà bạn định chạy — mặc định 2 000 chỉ là mặc
+    định của `::dire`. Đếm cả cây rồi báo "thiếu 212 583 map" là con số đúng nhưng
+    vô dụng: không ai định tính map cho 212 583 ảnh, và nó không cho biết phải chạy
+    lệnh gì tiếp.
+
+    ``verify`` đọc thử ngẫu nhiên từng ấy file bằng ``np.load``: file ghi dở do bị
+    kill **vẫn tồn tại với kích thước khác 0**, nên đếm file là chưa đủ.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -833,12 +836,21 @@ def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
     index = json.load(open(index_path, encoding="utf-8")) if os.path.exists(index_path) else {}
     runs = index.get("runs") or []
 
-    problems: list[str] = []
+    # Thiếu map, gộp theo generator trên mọi split. `real` phải nằm trong đây: nó
+    # có trong **mọi** lệnh `::dire`, nên nếu bỏ ra khỏi phép tính thì lệnh gợi ý
+    # vẫn bị chặn — đúng cái bẫy đã xảy ra ở phần chia nhóm (§3.9).
+    pending: dict[str, int] = {}
     for c in cells:
         if c["missing"]:
-            problems.append(f"{c['cell']}: thiếu {c['missing']} map "
-                            f"({c['maps']}/{c['wanted']}) — chạy `::dire --generator "
-                            f"{c['cell'].split('/')[-1]} --skip-existing`")
+            pending[c["cell"].split("/")[-1]] = pending.get(c["cell"].split("/")[-1], 0) + c["missing"]
+
+    problems: list[str] = []
+    for c in cells:
+        if c["missing"] and c["cell"].split("/")[-1] == "real":
+            # Không in `--generator real`: `real` không phải generator hợp lệ, và một
+            # chuỗi trông như cờ để copy là đủ để có người copy nó.
+            problems.append(f"{c['cell']}: thiếu {c['missing']} map — chạy bất kỳ lệnh "
+                            "`::dire` nào với `--skip-existing` (ảnh `real` luôn được đưa vào)")
     # `fake/` chỉ nằm trong `maps/`, không có ảnh tương ứng trong `data/` ⇒ không
     # xuất hiện như một ô. Nó vẫn phải bị báo: map ở đó bị `collect_maps` đọc thành
     # một generator tên `fake`, tức là một lớp giả **không có thật** trong dữ liệu.
@@ -847,6 +859,21 @@ def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
             if os.path.isdir(os.path.join(MAPS, split, "fake")):
                 problems.append(f"{split}/fake: còn thư mục `fake/` từ bản cũ — "
                                 "chạy `::relabel --apply` trước khi train")
+
+    # Mất cân bằng lớp: `test/midjourney` chỉ có 100 ảnh trong khi `test/real` có
+    # 1 000 ⇒ bài toán `real vs midjourney` là 10:1. Recall của nó sẽ thấp vì **ít
+    # mẫu**, không phải vì DIRE kém; báo ở đây để quyết trước khi train.
+    warnings: list[str] = []
+    for split in sorted({c["cell"].split("/")[0] for c in cells}):
+        by = {c["cell"].split("/")[-1]: c["wanted"] for c in cells if c["cell"].startswith(split + "/")}
+        real = by.get("real", 0)
+        for gen, k in sorted(by.items()):
+            if gen == "real" or not k or not real:
+                continue
+            ratio = max(real, k) / max(min(real, k), 1)
+            if ratio > MAX_IMBALANCE:
+                warnings.append(f"{split}: `real` {real} vs `{gen}` {k} = {ratio:.1f}:1 > "
+                                f"{MAX_IMBALANCE:.0f}:1 — recall của dòng này phản ánh số mẫu")
 
     bad_files: list[str] = []
     if verify:
@@ -863,34 +890,97 @@ def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
                 except Exception as e:  # noqa: BLE001 - chẩn đoán, in ra nguyên nhân
                     bad_files.append(f"{c['cell']}/{name}: {type(e).__name__}: {e}")
 
+    # Ước lượng phần còn thiếu + lệnh chạy tiếp, cùng một công thức với cổng của
+    # `::dire`. Nếu chỉ in "thiếu 3 500 map" thì người đọc vẫn phải tự chia nhóm.
+    splits = sorted({c["cell"].split("/")[0] for c in cells})
+    plan = _plan_remaining(pending, splits, n, steps)
+    total_missing = sum(c["missing"] for c in cells)
     has_fake = any(not c["cell"].endswith("/real") and c["maps"] for c in cells)
-    ready = bool(cells) and not problems and not bad_files and has_fake
+    ready = bool(cells) and not problems and not bad_files and has_fake and total_missing == 0
     payload = {
+        "n": n,
         "cells": cells,
         "total_maps": sum(c["maps"] for c in cells),
-        "total_missing": sum(c["missing"] for c in cells),
+        "total_missing": total_missing,
         "ready_for_train": ready,
         "problems": problems,
+        "warnings": warnings,
         "bad_files": bad_files,
+        "plan": plan,
         "dire_runs": [
             {k: r.get(k) for k in ("created", "steps", "n", "n_new", "seconds", "skip_existing")}
             for r in runs[-5:]
         ],
         "steps_mixed": index.get("steps_mixed"),
     }
+
     print(f"{'ô':<28}{'ảnh':>7}{'cần':>7}{'map':>7}{'thiếu':>7}  %", flush=True)
     for c in cells:
         print(f"{c['cell']:<28}{c['images']:>7}{c['wanted']:>7}{c['maps']:>7}{c['missing']:>7}"
               f"  {c['pct']:5.1f}", flush=True)
-    print(f"\ntổng: {payload['total_maps']} map · thiếu {payload['total_missing']} · "
-          f"train được: {'CÓ' if ready else 'CHƯA'}", flush=True)
+    line = f"\ntổng: {payload['total_maps']} map · thiếu {total_missing}"
+    if plan.get("gpu_h") is not None:
+        line += (f" · ~{plan['gpu_h']:.2f} GPU-h ≈ {plan['usd']:.2f} USD "
+                 f"(S={steps}, dùng lại {payload['total_maps']} map đã có)")
+    print(line + f" · train được: {'CÓ' if ready else 'CHƯA'}", flush=True)
+    for w in warnings:
+        print(f"  ~ {w}", flush=True)
     for p in problems:
         print(f"  ! {p}", flush=True)
     for b in bad_files:
         print(f"  ! file hỏng: {b}", flush=True)
+    if plan.get("commands"):
+        print(f"\nchạy tiếp ({len(plan['commands'])} lệnh, mỗi lệnh đã có --skip-existing):", flush=True)
+        for cmd in plan["commands"]:
+            print(cmd, flush=True)
+    if plan.get("note"):
+        print(f"\n{plan['note']}", flush=True)
     if runs:
         print(f"\nlần chạy gần nhất: {runs[-1].get('created')} · {runs[-1].get('n_new')} map mới", flush=True)
     return payload
+
+
+def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int) -> dict:
+    """Ước lượng phần còn thiếu + lệnh chạy tiếp, dùng **cùng** công thức với `::dire`.
+
+    Trả ``{"gpu_h", "usd", "commands", "groups", "note"}``. Không có `bench.json`
+    thì không ước lượng (``gpu_h = None``) — đoán `sec_per_step` là cách chắc chắn
+    nhất để mọi con số tiền sau đó sai.
+    """
+    from .budget import Estimate, load_sec_per_step  # noqa: PLC0415
+
+    todo = {g: k for g, k in pending.items() if k}
+    if not todo:
+        return {"gpu_h": None, "usd": None, "commands": [],
+                "note": "không thiếu map nào — không có gì để chạy"}
+    try:
+        sec = load_sec_per_step(f"{OUT}/bench.json")
+    except Exception:  # noqa: BLE001 - thiếu bench.json là trạng thái hợp lệ
+        return {"gpu_h": None, "usd": None, "commands": [],
+                "groups": [],
+                "note": (f"cần {sum(todo.values())} map nữa, nhưng chưa có `{OUT}/bench.json` "
+                         "nên không ước lượng được tiền/thời gian — chạy `::bench` trước")}
+
+    est = Estimate(sum(todo.values()), 2 * steps, sec)
+    budget_h = WORK_TIMEOUT_S / 3600 * SAFE_TIME_FRACTION
+    split_arg = ",".join(splits) if splits else "train,test"
+    if est.gpu_h <= budget_h:
+        groups = [{"generators": sorted(g for g in todo if g != "real"),
+                   "n_images": sum(k for g, k in todo.items() if g != "real"),
+                   "includes_real": todo.get("real", 0), "gpu_h": round(est.gpu_h, 2)}]
+        note = (f"một lệnh là đủ ({est.gpu_h:.2f} h ≤ trần {budget_h:.2f} h). "
+                "Nhớ `--skip-existing` để không tính lại map đã có.")
+        if not groups[0]["generators"]:
+            note = ("chỉ còn thiếu map của `real` — mọi lệnh `::dire` đều mang nó, "
+                    "chạy bất kỳ generator nào với `--skip-existing` là đủ")
+            groups = []
+    else:
+        groups = group_generators(todo, sec, steps, budget_h)
+        note = (f"ước tính {est.gpu_h:.2f} h > trần {budget_h:.2f} h ⇒ chia {len(groups)} lệnh; "
+                "mỗi lệnh dùng lại map đã có nhờ `--skip-existing`.")
+    commands = plan_commands(groups, n=n, steps=steps, splits=split_arg) if groups else []
+    return {"gpu_h": round(est.gpu_h, 2), "usd": round(est.usd, 2),
+            "commands": commands, "groups": groups, "note": note}
 
 
 def _cell_generators(data_root: str) -> list[str]:
