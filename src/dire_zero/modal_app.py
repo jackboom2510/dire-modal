@@ -346,6 +346,12 @@ def _check_data(
 #: giữa lúc đang chạy, và `vol.commit()` ở cuối không bao giờ chạy.
 WORK_TIMEOUT_S = 6 * 3600
 
+#: Bao nhiêu ảnh thì `commit()` Volume một lần trong `::dire`.
+#: Volume v1 **không** tự ghi: thay đổi chỉ bền sau `commit()`. Trước đây chỉ có
+#: `commit()` ở cuối, nên một lượt bị kill (mất mạng, hết timeout, `--detach` bị
+#: dừng) làm mất **toàn bộ** map đã tính — đã trả tiền cho từng giây GPU.
+COMMIT_EVERY = 200
+
 #: Chỉ dùng tối đa 75 % timeout cho phép tính: nạp checkpoint (10,7 s), ghi
 #: `.npy`, và commit Volume đều nằm ngoài phần đã ước lượng.
 SAFE_TIME_FRACTION = 0.75
@@ -516,11 +522,47 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
 
     f, digest = _counter(dtype="float16")
     meta = RunMeta(digest, steps)
-    out = compute_maps(f, items, MAPS, meta, limit=None, skip_existing=skip_existing)
+    out = _compute_with_commits(f, items, meta, skip_existing, compute_maps)
     vol.commit()
     return {"n": out["n"], "n_new": out["n_new"], "n_reused": out["n_reused"],
             "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"],
             "est": est.as_dict()}
+
+
+def _compute_with_commits(f, items, meta, skip_existing: bool, compute_maps,
+                          every: int | None = None) -> dict:
+    """Chạy `compute_maps` và **ghi bền** Volume trên đường đi.
+
+    Volume v1 không tự ghi: thay đổi chỉ bền sau `commit()`. Bản trước chỉ commit ở
+    cuối, nên một lượt bị dừng giữa đường (mất mạng, `--detach` bị kill, hết
+    timeout) mất **toàn bộ** map đã tính — đã trả tiền cho từng giây GPU rồi mất.
+
+    Hai lớp:
+
+    1. **định kỳ** mỗi ``every`` ảnh (mặc định `COMMIT_EVERY`): kill cứng (OOM,
+       timeout) mất tối đa chừng ấy ảnh;
+    2. **trong `except`**: exception mềm (lỗi mạng, `KeyboardInterrupt`) commit
+       phần đã xong trước khi ném tiếp.
+
+    ``every`` tách ra để test được mà không phải chạy 200 ảnh.
+    """
+    every = every or COMMIT_EVERY
+
+    def checkpoint_progress(i: int) -> None:
+        if i % every:
+            return
+        vol.commit()
+        print(f"[bền] {i} ảnh đã commit lên Volume "
+              f"(mất mạng từ đây chỉ mất ≤ {every} ảnh)", flush=True)
+
+    try:
+        out = compute_maps(f, items, MAPS, meta, limit=None, skip_existing=skip_existing,
+                           progress=checkpoint_progress)
+    except BaseException:
+        vol.commit()
+        print("[bền] commit phần đã xong trước khi thoát do lỗi", flush=True)
+        raise
+    return out
 
 
 def select_generators(available: Sequence[str], spec: str) -> list[str]:
@@ -733,6 +775,132 @@ def relabel(apply: bool = False) -> dict:
         vol.commit()
     print(json.dumps(out, ensure_ascii=False, indent=2), flush=True)
     return out
+
+
+@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
+def maps(n: int = 0, verify: int = 0, generator: str = "auto") -> dict:
+    """Kiểm **tồn kho** DIRE map: đã đủ chưa, còn thiếu ô nào — không cần GPU.
+
+    Dùng đúng vào lúc cần: một lượt `::dire` bị dừng giữa đường (mất mạng, hết
+    timeout, `--detach` bị kill). Câu hỏi khi đó không phải "app còn sống không"
+    (nó chết rồi, không nối lại được) mà "đã kịp ghi bao nhiêu, chạy tiếp từ đâu".
+
+    ::
+
+        modal run -m dire_zero.modal_app::maps                 # bảng tồn kho
+        modal run -m dire_zero.modal_app::maps --verify 20      # + đọc thử 20 file
+        modal run -m dire_zero.modal_app::maps --generator adm  # chỉ một generator
+
+    Cột ``thiếu`` = số ảnh **có** trong `data/<split>/<gen>` trừ số `.npy` đã có.
+    Với ``--n`` > 0 thì "đủ" được hiểu là ``min(số ảnh, n)``, đúng như `::dire`
+    cắt theo từng ô. ``verify`` đọc thử ngẫu nhiên từng ấy file bằng ``np.load``:
+    file ghi dở do bị kill **vẫn tồn tại với kích thước khác 0**, nên đếm file là
+    chưa đủ.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from .data import list_images  # noqa: PLC0415
+
+    data_gens = _cell_generators(DATA)
+    gens = select_generators(data_gens, generator) if data_gens else []
+    cells: list[dict] = []
+    for split in sorted(os.listdir(DATA)) if os.path.isdir(DATA) else []:
+        sdir = os.path.join(DATA, split)
+        if not os.path.isdir(sdir):
+            continue
+        for gen in sorted(os.listdir(sdir)):
+            gdir = os.path.join(sdir, gen)
+            if not os.path.isdir(gdir) or (gens and gen != "real" and gen not in gens):
+                continue
+            imgs = list_images(gdir)
+            want = min(len(imgs), n) if n else len(imgs)
+            mdir = os.path.join(MAPS, split, gen)
+            have = sorted(p for p in os.listdir(mdir) if p.endswith(".npy")) if os.path.isdir(mdir) else []
+            nonempty = [p for p in have if os.path.getsize(os.path.join(mdir, p)) > 0]
+            cells.append({
+                "cell": f"{split}/{gen}",
+                "images": len(imgs),
+                "wanted": want,
+                "maps": len(nonempty),
+                "missing": max(0, want - len(nonempty)),
+                "extra": max(0, len(nonempty) - want),
+                "pct": round(100 * min(len(nonempty), want) / want, 1) if want else 0.0,
+            })
+
+    import json  # noqa: PLC0415
+
+    index_path = os.path.join(MAPS, "dire.json")
+    index = json.load(open(index_path, encoding="utf-8")) if os.path.exists(index_path) else {}
+    runs = index.get("runs") or []
+
+    problems: list[str] = []
+    for c in cells:
+        if c["missing"]:
+            problems.append(f"{c['cell']}: thiếu {c['missing']} map "
+                            f"({c['maps']}/{c['wanted']}) — chạy `::dire --generator "
+                            f"{c['cell'].split('/')[-1]} --skip-existing`")
+    # `fake/` chỉ nằm trong `maps/`, không có ảnh tương ứng trong `data/` ⇒ không
+    # xuất hiện như một ô. Nó vẫn phải bị báo: map ở đó bị `collect_maps` đọc thành
+    # một generator tên `fake`, tức là một lớp giả **không có thật** trong dữ liệu.
+    if os.path.isdir(MAPS):
+        for split in sorted(os.listdir(MAPS)):
+            if os.path.isdir(os.path.join(MAPS, split, "fake")):
+                problems.append(f"{split}/fake: còn thư mục `fake/` từ bản cũ — "
+                                "chạy `::relabel --apply` trước khi train")
+
+    bad_files: list[str] = []
+    if verify:
+        rng = np.random.default_rng(0)
+        for c in cells:
+            mdir = os.path.join(MAPS, *c["cell"].split("/"))
+            files = [p for p in os.listdir(mdir) if p.endswith(".npy")] if os.path.isdir(mdir) else []
+            for name in rng.choice(files, size=min(verify, len(files)), replace=False) if files else []:
+                path = os.path.join(mdir, str(name))
+                try:
+                    arr = np.load(path)
+                    if arr.ndim != 3 or arr.shape[0] != 3:
+                        bad_files.append(f"{c['cell']}/{name}: shape {arr.shape}")
+                except Exception as e:  # noqa: BLE001 - chẩn đoán, in ra nguyên nhân
+                    bad_files.append(f"{c['cell']}/{name}: {type(e).__name__}: {e}")
+
+    has_fake = any(not c["cell"].endswith("/real") and c["maps"] for c in cells)
+    ready = bool(cells) and not problems and not bad_files and has_fake
+    payload = {
+        "cells": cells,
+        "total_maps": sum(c["maps"] for c in cells),
+        "total_missing": sum(c["missing"] for c in cells),
+        "ready_for_train": ready,
+        "problems": problems,
+        "bad_files": bad_files,
+        "dire_runs": [
+            {k: r.get(k) for k in ("created", "steps", "n", "n_new", "seconds", "skip_existing")}
+            for r in runs[-5:]
+        ],
+        "steps_mixed": index.get("steps_mixed"),
+    }
+    print(f"{'ô':<28}{'ảnh':>7}{'cần':>7}{'map':>7}{'thiếu':>7}  %", flush=True)
+    for c in cells:
+        print(f"{c['cell']:<28}{c['images']:>7}{c['wanted']:>7}{c['maps']:>7}{c['missing']:>7}"
+              f"  {c['pct']:5.1f}", flush=True)
+    print(f"\ntổng: {payload['total_maps']} map · thiếu {payload['total_missing']} · "
+          f"train được: {'CÓ' if ready else 'CHƯA'}", flush=True)
+    for p in problems:
+        print(f"  ! {p}", flush=True)
+    for b in bad_files:
+        print(f"  ! file hỏng: {b}", flush=True)
+    if runs:
+        print(f"\nlần chạy gần nhất: {runs[-1].get('created')} · {runs[-1].get('n_new')} map mới", flush=True)
+    return payload
+
+
+def _cell_generators(data_root: str) -> list[str]:
+    """Generator có trong **dữ liệu ảnh** (`data/`), không phải trong `maps/`.
+
+    Khác `_generators_in(MAPS)`: câu hỏi "đã đủ map chưa" phải đếm theo ảnh đang
+    có, nếu không thì một generator chưa có map nào sẽ **không hiện** trong bảng —
+    đúng thứ cần thấy.
+    """
+    return _generators_in(data_root)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
