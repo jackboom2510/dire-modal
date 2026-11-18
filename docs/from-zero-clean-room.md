@@ -691,6 +691,74 @@ python tools/make_gallery.py --maps maps/test --orig data/test \
   --threshold "$(python -c 'import json;print(json.load(open("/tmp/eval/eval.json"))["threshold_prob"])')"
 ```
 
+### 4.4.3 `acc = 0,500` nghĩa là gì — và vì sao nó không phải kết quả
+
+Đọc bảng train mà thấy một dòng `acc` đúng **0,500**, `AUC` dưới 0,5: đó không phải
+"DIRE không hoạt động trên generator này". Đó là **bộ phân loại hằng số** — nó
+đoán mọi ảnh cùng một lớp, và `0,500` chỉ là hệ quả của việc test cân bằng 500/500.
+
+Nguyên nhân thường gặp: **tập `train` chỉ có một lớp**. Cây DiffusionForensics chỉ
+có `test` cho phần lớn generator (`dalle2`, `ddpm`, `diff-*`, `if`, `ldm`,
+`midjourney`, `projectedgan`, `sdv2`, `vqdiffusion`), nên nếu train theo split của
+tác giả thì tập `train` của những generator đó chỉ còn ảnh `real` — mô hình học
+đúng một câu: "mọi thứ đều thật".
+
+Từ bản này `::train` **từ chối** train trên tập một lớp, và bỏ qua generator đó
+thay vì chạy tiếp:
+
+```text
+[bỏ qua] gen-ddpm: tập `train` chỉ có real (0 real + 0 fake) …
+  generator này không có map ở split `train`. Chạy `::dire --splits train` cho nó,
+  hoặc dùng `--split-mode hash` (chia lại theo hash — KHÔNG phải split của tác giả)
+```
+
+Hai đường đi, chọn theo câu hỏi bạn đang trả lời:
+
+| Đường | Làm gì | Được gì | Mất gì |
+|---|---|---|---|
+| `--splits train` cho generator đó | cần **ảnh** ở `data/train/<gen>` | split đúng giao thức bài báo | dữ liệu hiện **không có** ảnh đó cho 10 generator |
+| `--split-mode hash` | chia lại 500 map đang có theo hash 85/15 | train được ngay, không rò rỉ | không so trực tiếp với Table 2; `train.json` ghi `split_mode: "hash"` |
+
+```bash
+modal run -m dire_zero.modal_app::train --generator all --split-mode hash
+```
+
+`::report` tự gắn cảnh báo cho mọi dòng còn dấu hiệu này, và cho mọi dòng cũ còn
+nằm trong bảng trong khi lượt train mới nhất đã bỏ qua generator đó.
+
+### 4.4.4 Dựng gallery: **trên Modal**, đừng tải 800 MB về máy
+
+`tools/make_gallery.py` chạy ở máy local cần hai thư mục **có thật**: map và ảnh
+gốc. Cả hai nằm trên Volume, nên lệnh local kiểu `--maps maps/test` chỉ trả về
+
+```text
+--maps không phải thư mục: maps\test
+```
+
+Trên Windows điều này còn khó thấy hơn: `maps\test` là đường dẫn tương đối, được
+tra từ thư mục đang đứng, và thư mục đó là repo — nơi không có map nào.
+
+Cách rẻ nhất là dựng **ngay trên Volume** rồi chỉ tải gallery (~13 MB thay vì ~800 MB):
+
+```bash
+modal run -m dire_zero.modal_app::gallery --n 8 --steps 20
+modal volume get dire-zero gallery ./platforms/hf-spaces/gallery
+```
+
+Muốn kèm `p_fake` thì `::evaluate` phải chạy trước; `::gallery --with-scores` chỉ
+lấy điểm của detector **còn khớp** `detector.pth` hiện tại (so bằng sha256) và có
+`gate = passed`. Nếu không, nó in lý do bỏ qua chứ không ghép điểm của mô hình cũ
+vào ảnh của mô hình mới.
+
+Đường local vẫn dùng được khi bạn đã tải dữ liệu:
+
+```bash
+modal volume get dire-zero maps ./vol/maps
+modal volume get dire-zero data/test ./vol/data/test
+python tools/make_gallery.py --maps ./vol/maps/test --orig ./vol/data/test \
+    --out platforms/hf-spaces/gallery --n 8 --steps 20 --label R1+R2
+```
+
 ### 4.4.2 Mất mạng giữa lúc `::dire` đang chạy — chuyện gì xảy ra, kiểm thế nào
 
 ```text

@@ -152,3 +152,40 @@ def test_display_scale_is_declared_not_implied(tmp_path: Path) -> None:
     meta = json.loads(next(out.glob("*.json")).read_text(encoding="utf-8"))
     assert meta["display"]["authoritative"] == ".npy"
     assert meta["display"]["png_is_display_only"] is True
+
+
+def test_missing_maps_dir_says_where_the_volume_is(tmp_path, capsys):
+    """`--maps không phải thư mục: maps\test` là câu **không sửa được** gì.
+
+    Ở máy Windows, map nằm trên Volume Modal chứ không nằm trong repo, nên lỗi
+    thật là "chưa tải về" — thông báo phải nói ra đường dẫn đang được tra từ đâu
+    và lệnh tải (hoặc lệnh dựng thẳng trên Modal).
+    """
+    with pytest.raises(SystemExit) as exc:
+        make_gallery.main(["--maps", str(tmp_path / "maps" / "test"),
+                           "--orig", str(tmp_path), "--out", str(tmp_path / "g")])
+    msg = str(exc.value)
+    assert "không phải thư mục" in msg
+    assert "đang tra từ" in msg
+    assert "modal volume get dire-zero maps" in msg
+    assert "::gallery" in msg                   # đường không phải tải 800 MB
+
+
+def test_scores_that_match_no_sample_is_an_error_not_a_silent_no_op(tmp_path):
+    """Gallery dựng ra vẫn đẹp, mọi mẫu "chưa có điểm" — và không ai biết vì sao.
+
+    Khoá phải đúng `f"{prefix}{cls}_{stem}"`; lệch (ví dụ dùng `gen-adm/000.npy`)
+    là lỗi im lặng nguy hiểm nhất của tool này.
+    """
+    maps, orig = _fake_tree(tmp_path / "src")
+    out = tmp_path / "g"
+    scores = tmp_path / "scores.json"
+    scores.write_text(json.dumps({"samples": {"gen-adm/000.npy": {"p_fake": 0.9}}}),
+                      encoding="utf-8")
+
+    with pytest.raises(SystemExit) as exc:
+        make_gallery.main(["--maps", str(maps), "--orig", str(orig), "--out", str(out),
+                           "--n", "1", "--scores", str(scores)])
+    msg = str(exc.value)
+    assert "KHÔNG khớp mẫu nào" in msg
+    assert "adm_" in msg                        # nói luôn khoá đúng là gì

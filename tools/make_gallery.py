@@ -101,19 +101,60 @@ def copy_orig(src: Path, dst: Path) -> None:
         im.save(dst, optimize=True)
 
 
+def _hint_dir(kind: str, path: Path) -> str:
+    """Thông báo cho thư mục không tồn tại — phải nói **đường dẫn được tra từ đâu**.
+
+    `--maps không phải thư mục: maps\test` không cho người dùng biết cái gì sai:
+    đường dẫn tương đối được tra từ thư mục hiện tại (khác với nơi họ tưởng), hoặc
+    map chưa được tải từ Volume xuống. Cả hai đều là lỗi phổ biến, và cả hai đều
+    sửa được trong một dòng — nếu thông báo chịu nói ra.
+    """
+    absolute = path.resolve()
+    if kind == "maps":
+        why = (
+            "DIRE map nằm trên Volume Modal, không nằm trong repo. Tải về đúng thư mục:\n"
+            "    modal volume get dire-zero maps ./vol/maps\n"
+            "  rồi trỏ `--maps ./vol/maps/test` (mỗi lớp là một thư mục con).\n"
+            "  Hoặc dựng thẳng trên Modal, khỏi tải 800 MB:\n"
+            "    modal run -m dire_zero.modal_app::gallery --n 8 --steps 20\n"
+            "    modal volume get dire-zero gallery ./platforms/hf-spaces/gallery"
+        )
+    else:
+        why = (
+            "Ảnh gốc nằm trên Volume Modal. Tải về:\n"
+            "    modal volume get dire-zero data/test ./vol/data/test\n"
+            "  rồi trỏ `--orig ./vol/data/test`."
+        )
+    return (
+        f"--{kind} không phải thư mục: {path}\n"
+        f"  (đang tra từ {Path.cwd()}; đường dẫn tuyệt đối sẽ là {absolute})\n"
+        f"  {why}"
+    )
+
+
 def build(args) -> list[dict]:
     maps_root, orig_root, out = Path(args.maps), Path(args.orig), Path(args.out)
     if not maps_root.is_dir():
-        raise SystemExit(f"--maps không phải thư mục: {maps_root}")
+        raise SystemExit(_hint_dir("maps", maps_root))
     if not orig_root.is_dir():
-        raise SystemExit(f"--orig không phải thư mục: {orig_root}")
+        raise SystemExit(_hint_dir("orig", orig_root))
     # `--dry-run` không ghi gì nên không cần `--force` để xem thử trên gallery có sẵn.
     if not args.dry_run and out.exists() and any(out.glob("*.json")) and not args.force:
         raise SystemExit(f"{out} đã có gallery; dùng --force để ghi đè")
 
     scores = {}
     if args.scores:
-        raw = json.loads(Path(args.scores).read_text(encoding="utf-8"))
+        sp = Path(args.scores)
+        if not sp.is_file():
+            raise SystemExit(
+                f"--scores không phải tệp: {sp}\n"
+                f"  (đang tra từ {Path.cwd()})\n"
+                "  `scores.json` do `::evaluate` sinh ra trên Volume:\n"
+                "    modal volume get dire-zero runs/eval/gen-adm ./tmp/eval\n"
+                "  rồi trỏ `--scores ./tmp/eval/scores.json`. Bỏ `--scores` thì gallery "
+                "vẫn hợp lệ — chỉ là mọi mẫu hiện \"chưa có điểm\"."
+            )
+        raw = json.loads(sp.read_text(encoding="utf-8"))
         scores = raw.get("samples", raw) if isinstance(raw, dict) else {}
         if not isinstance(scores, dict):
             raise SystemExit("--scores phải là object {tên mẫu: {...}}")
@@ -177,6 +218,23 @@ def build(args) -> list[dict]:
             if not args.dry_run:
                 (out / f"{name}.json").write_text(
                     json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+    # `--scores` được đưa vào nhưng **không khớp tên mẫu nào** là lỗi im lặng nguy
+    # hiểm: gallery dựng ra vẫn đẹp, mọi mẫu hiện "chưa có điểm", và người dựng
+    # tưởng detector chưa qua cổng. Tên khoá phải là `f"{prefix}{cls}_{stem}"` —
+    # đúng thứ `::evaluate` ghi.
+    if scores and written:
+        matched = sum(1 for r in written if "detector" in r)
+        if matched == 0:
+            sample = sorted(scores)[:3]
+            raise SystemExit(
+                f"--scores có {len(scores)} khoá nhưng KHÔNG khớp mẫu nào "
+                f"({len(written)} mẫu).\n"
+                f"  khoá cần dạng `<lớp>_<stem>` (ví dụ `adm_000123`), đang có: {sample}\n"
+                "  `--prefix` phải rỗng nếu khoá không có tiền tố.\n"
+                "  Bỏ `--scores` nếu chỉ muốn gallery không kèm điểm."
+            )
+        print(f"[gallery] {matched}/{len(written)} mẫu có điểm từ {args.scores}")
 
     return written + [{"_skipped": skipped}] if skipped else written
 

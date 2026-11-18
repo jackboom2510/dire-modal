@@ -46,10 +46,32 @@ def tmp_run(tmp_path: Path):
         for n in gen["names"]
     ]
     maps = compute_maps(f, items, tmp_path / "maps", meta, size=32)
+
+    # Ảnh **thật** cho tập train: thiếu chúng thì `train` chỉ thấy một lớp và
+    # (đúng như phải thế) từ chối chạy — xem `pipeline.SplitError`. Fixture cũ chỉ
+    # có ảnh sinh, nên test "train chạy được" thực chất đang train trên một lớp.
+    import numpy as np
+    from PIL import Image
+
+    real_dir = tmp_path / "real"
+    real_dir.mkdir(parents=True, exist_ok=True)
+    n_real = len(gen["names"])
+    n_train = len(gen["split"]["train"])
+    real_items = []
+    for i in range(n_real):
+        png = real_dir / f"real_{i:02d}.png"
+        rng = np.random.default_rng(i)
+        Image.fromarray((rng.random((32, 32, 3)) * 255).astype("uint8")).save(png)
+        real_items.append((str(png), 0, "train" if i < n_train else "test", "real"))
+    # Ghi vào gốc riêng: `dire.json` là sổ ghi **một** lượt chạy cho mỗi lần gọi,
+    # và có test khoá đúng điều đó (`test_dire_json_is_a_ledger_not_a_rewrite`).
+    real_maps = compute_maps(f, real_items, tmp_path / "maps-real", meta, size=32)
+
     rows = [
-        {"name": x["name"], "path": str(tmp_path / "maps" / x["path"]),
+        {"name": x["name"],
+         "path": str((tmp_path / "maps" if x in maps["items"] else tmp_path / "maps-real") / x["path"]),
          "label": x["label"], "split": x["split"], "generator": x["generator"]}
-        for x in maps["items"]
+        for x in maps["items"] + real_maps["items"]
     ]
     return tmp_path, gen, maps, rows, f
 
@@ -413,3 +435,68 @@ def test_train_label_comes_from_the_caller_not_a_constant(tmp_path, tmp_run):
         label="R1+R2",
     )
     assert out["label"] == "R1+R2"
+
+
+# ---------------------------------------------------------------------------
+# Chặn "kết quả" giả: train trên tập một lớp
+# ---------------------------------------------------------------------------
+def test_train_refuses_a_single_class_train_split(tmp_path):
+    """`acc = 0,500` tuyệt đối không phải kết quả — nó là hàm hằng số.
+
+    Đây là lỗi đọc được từ log thật: 5 generator chỉ có map ở `test` (dalle2,
+    ddpm, diff-projectedgan, diff-stylegan, if) cho ra `acc = 0,5` với `AUC
+    0,21–0,45`, và bảng vẫn in chúng như những dòng Table 2. Nguyên nhân: tập
+    `train` của chúng chỉ còn ảnh `real`, nên mô hình học "mọi thứ đều thật".
+    """
+    from dire_zero.detector import ResNet, ResNetDetector
+    from dire_zero.pipeline import SplitError, train
+
+    maps = tmp_path / "maps"
+    rows = []
+    for i in range(12):                       # chỉ có `real` ở train, fake ở test
+        for split, label in (("train", 0), ("test", 0), ("test", 1)):
+            d = maps / split / ("real" if label == 0 else "adm")
+            d.mkdir(parents=True, exist_ok=True)
+            p = d / f"{i}_{split}_{label}.npy"
+            p.write_bytes(b"x")
+            rows.append({"name": p.name, "path": str(p), "label": label,
+                         "split": split, "generator": "real" if label == 0 else "adm"})
+
+    with pytest.raises(SplitError) as exc:
+        train(lambda: ResNetDetector(ResNet(blocks=(1, 1))), rows, tmp_path / "out",
+              epochs=1, bs=4, crop=28, device="cpu")
+    msg = str(exc.value)
+    assert "train" in msg and "0,5" in msg
+    assert "split-mode hash" in msg             # có đường thoát, không chỉ từ chối
+
+
+def test_hash_split_mode_accepts_test_only_generators_and_says_so(tmp_path):
+    """`--split-mode hash` chia lại mọi map: dùng được, nhưng phải khai ra.
+
+    Cây DiffusionForensics chỉ có `test` cho phần lớn generator, nên nếu không có
+    chế độ này thì 10/15 dòng của Table 2 **không tồn tại** — không phải vì DIRE
+    kém, mà vì không có ảnh để train. Chế độ này mua lại các dòng đó bằng một
+    tuyên bố trung thực: `split_mode: hash`, không so trực tiếp với bài báo.
+    """
+    from dire_zero.detector import ResNet, ResNetDetector
+    from dire_zero.pipeline import train
+
+    import numpy as np
+
+    maps = tmp_path / "maps"
+    rows = []
+    for label, gen in ((0, "real"), (1, "adm")):
+        for i in range(40):
+            d = maps / "test" / gen
+            d.mkdir(parents=True, exist_ok=True)
+            p = d / f"{label}_{i}.npy"
+            np.save(p, np.zeros((1, 32, 32), dtype="float16"))
+            rows.append({"name": p.name, "path": str(p), "label": label,
+                         "split": "test", "generator": gen})
+
+    out = train(lambda: ResNetDetector(ResNet(blocks=(1, 1))), rows, tmp_path / "out",
+                epochs=1, bs=4, crop=28, device="cpu", split_mode="hash", patience=99)
+    assert out["split_mode"] == "hash"
+    assert out["split"]["mode"] == "hash"
+    assert out["split"]["n_train"] and out["split"]["n_test"]
+    assert "HASH" in out["honesty"]

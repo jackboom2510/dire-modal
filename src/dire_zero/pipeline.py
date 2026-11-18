@@ -360,14 +360,54 @@ def _as_item(raw) -> dict:
     return d
 
 
-def _split_maps(items: list[dict], seed: int = 3407, frac_train: float = 0.8) -> dict[str, list[dict]]:
-    """Ưu tiên split **đã ghi** trong `dire.json`; chỉ chia theo hash khi không có."""
-    labelled = [it for it in items if it.get("split") in ("train", "val", "test")]
-    if labelled and len(labelled) == len(items):
-        return {k: [it for it in items if it["split"] == k] for k in ("train", "val", "test")}
+class SplitError(ValueError):
+    """Không chia được tập train/val/test có đủ hai lớp — dừng, không train.
+
+    Lý do phải dừng thay vì "train đại": một lượt train trên tập chỉ có **một lớp**
+    học ra hàm hằng số, và mọi con số phía sau trở thành vô nghĩa nhưng vẫn trông
+    hợp lệ. Đã xảy ra thật: 5 generator chỉ có map ở `test` cho ra `acc = 0,500`
+    tuyệt đối với `AUC 0,21–0,45` (tệ hơn ngẫu nhiên), và bảng vẫn in chúng như
+    những dòng Table 2.
+    """
+
+
+def _split_maps(items: list[dict], seed: int = 3407, frac_train: float = 0.8,
+                mode: str = "author") -> dict[str, list[dict]]:
+    """Chia tập theo split **đã ghi** (`author`) hoặc chia lại toàn bộ theo hash (`hash`).
+
+    ``author`` — ưu tiên split của người đóng gói dữ liệu; đúng giao thức của bài
+    báo. Nhưng cây DiffusionForensics chỉ có `test` cho phần lớn generator, nên với
+    những generator đó tập `train` **rỗng** (chỉ còn `real`) — xem `SplitError`.
+
+    ``hash`` — chia lại mọi map đang có theo hash tên tệp. Không rò rỉ (một tên chỉ
+    thuộc một tập), nhưng **không phải** split của tác giả, nên kết quả không so
+    trực tiếp với Table 2. `train.json` ghi `split_mode: "hash"` để không ai quên.
+    """
+    if mode not in ("author", "hash"):
+        raise ValueError(f"split_mode phải là 'author' hoặc 'hash', không phải {mode!r}")
+    if mode == "author":
+        labelled = [it for it in items if it.get("split") in ("train", "val", "test")]
+        if labelled and len(labelled) == len(items):
+            return {k: [it for it in items if it["split"] == k] for k in ("train", "val", "test")}
     names = [it["name"] for it in items]
     idx = data_mod.split_indices(names, seed=seed, frac_train=frac_train)
     return {"train": [items[i] for i in idx["train"]], "val": [], "test": [items[i] for i in idx["test"]]}
+
+
+def _class_counts(rows: Sequence[dict]) -> tuple[int, int]:
+    real = sum(1 for r in rows if not int(r.get("label", 0)))
+    return real, len(rows) - real
+
+
+def _require_two_classes(name: str, rows: Sequence[dict], hint: str) -> None:
+    real, fake = _class_counts(rows)
+    if real and fake:
+        return
+    raise SplitError(
+        f"tập `{name}` chỉ có {'real' if real else 'fake'} ({real} real + {fake} fake) — "
+        "train trên một lớp chỉ học ra hàm hằng số, ACC sẽ đúng bằng 0,5 và AUC quanh 0,5.\n"
+        f"  {hint}"
+    )
 
 
 def _batch(maps: list[Path], labels: list[int], bs: int, crop: int, train: bool, gen: torch.Generator):
@@ -425,6 +465,8 @@ def train(
     max_minutes: float | None = None,
     extra: dict | None = None,
     label: str = "R1+R2",
+    split_mode: str = "author",
+    strict_split: bool = True,
 ) -> dict:
     """R2 — train detector. Ngưỡng chọn trên **val**, test chấm **một lần** (G6).
 
@@ -435,7 +477,7 @@ def train(
     torch.manual_seed(seed)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    parts = _split_maps(maps, split_seed)
+    parts = _split_maps(maps, split_seed, mode=split_mode)
     tr, te = parts["train"], parts["test"]
     if parts["val"]:
         va = parts["val"]                       # split của người đóng gói: dùng nguyên
@@ -444,6 +486,25 @@ def train(
         inner = data_mod.split_indices([m["name"] for m in pool], seed=split_seed + 1, frac_train=0.85)
         tr = [pool[i] for i in inner["train"]]
         va = [pool[i] for i in inner["test"]]
+
+    # Cổng **trước khi** tiêu GPU: cả ba tập phải có đủ hai lớp. Không có cổng này,
+    # tập một lớp cho ra `acc = 0,5` và một dòng bảng trông như kết quả.
+    val_single_class = False
+    if strict_split:
+        hint = (
+            'generator này không có map ở split `train`. Chạy `::dire --splits train` '
+            'cho nó, hoặc dùng `--split-mode hash` (chia lại theo hash — KHÔNG phải '
+            'split của tác giả, và `train.json` sẽ ghi đúng như vậy).'
+        )
+        # `train` và `test` **bắt buộc** hai lớp: thiếu một lớp ở train thì mô hình
+        # học ra hằng số; thiếu một lớp ở test thì ACC/AP/AUC vô nghĩa.
+        # `val` chỉ dùng để chọn mô hình và ngưỡng: một lớp ở val không làm hỏng
+        # phép đo, chỉ làm mất khả năng chọn — nên ghi lại và đi tiếp, chứ không
+        # chặn (bộ dữ liệu nhỏ chia theo hash rất dễ rơi vào cảnh này).
+        _require_two_classes("train", tr, hint)
+        _require_two_classes("test", te, hint)
+        va_real, va_fake = _class_counts(va)
+        val_single_class = bool(va) and not (va_real and va_fake)
 
     model = model_factory().to(device)
     opt = torch.optim.Adam(model.parameters(), lr=lr)
@@ -501,6 +562,10 @@ def train(
     # Ngưỡng chọn trên **val** (G6) theo balanced accuracy — không theo ACC thường,
     # và không bao giờ nhìn test. Val ít mẫu thì lùi về 0,5 và ghi rõ nguồn.
     best_thr, thr_source = metrics.pick_threshold(vs, vy)
+    if val_single_class:
+        # `pick_threshold` đã tự lùi về mặc định khi một lớp; ghi thêm lý do để
+        # `::report` biết vì sao `threshold_source` không phải "val".
+        best_thr, thr_source = metrics.pick_threshold(vs, vy, min_samples=10 ** 9)
     best_acc = metrics.accuracy(vs, vy, best_thr)
 
     ts_, ty_ = _score(model, te_p, te_y, crop, device)
@@ -525,7 +590,9 @@ def train(
         "threshold_source": thr_source,
         "val_acc_at_threshold": round(best_acc, 5),
         "test": test,
-        "split": {"n_train": len(tr), "n_val": len(va), "n_test": len(te), "seed": split_seed},
+        "split": {"n_train": len(tr), "n_val": len(va), "n_test": len(te), "seed": split_seed,
+                  "mode": split_mode, "val_single_class": val_single_class},
+        "split_mode": split_mode,
         "hparams": {"lr": lr, "batch": bs, "crop": crop, "seed": seed, "patience": patience},
         "history": history,
         "seconds": round(time.time() - t0, 2),
@@ -533,6 +600,9 @@ def train(
             "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; "
             "con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, "
             "khác generator)."
+            + ("" if split_mode == "author" else
+               " Tập train/val/test CHIA LẠI THEO HASH vì dữ liệu không có split train "
+               "cho generator này — càng không so được với Table 2.")
         ),
     }
     # `extra`: bối cảnh mà hàm này không biết (ví dụ: đã lọc bài toán theo
