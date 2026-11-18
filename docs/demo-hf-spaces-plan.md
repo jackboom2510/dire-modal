@@ -190,7 +190,8 @@ cd platforms/hf-spaces && streamlit run app.py --server.headless true
 pytest <repo>/tests/test_hf_spaces_demo.py <repo>/tests/test_make_gallery.py -q
 
 # 3. Tạo Space (SDK streamlit, hardware CPU basic)
-hf repo create <user>/dire-demo --repo-type space --space-sdk streamlit
+python tools/hf_space_preflight.py --space <user>/dire-demo   # kiểm máy trước
+hf repos create <user>/dire-demo --repo-type space --space-sdk gradio
 
 # 4. Đẩy nội dung
 git clone https://huggingface.co/spaces/<user>/dire-demo /tmp/space
@@ -199,6 +200,20 @@ cd /tmp/space && git add -A && git commit -m "DIRE demo (streamlit)" && git push
 
 # 5. Chờ build; xem log ở tab *Logs* của Space
 ```
+
+**Nếu bước 3 chết với `FileNotFoundError: [Errno 2]`** ở `ssl.py` /
+`httpx/_config.py`: đó là `SSL_CERT_FILE` trỏ tệp không tồn tại (Git Bash đặt
+`/mingw64/ssl/...`, hoặc conda đổi đường). Không phải token. Sửa:
+
+```bash
+unset SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE SSL_CERT_DIR   # Git Bash
+```
+
+rồi chạy lại, hoặc tạo Space bằng web UI (<https://huggingface.co/new-space>,
+SDK Gradio, CPU basic) — đường đó không đi qua `httpx` của máy. Chi tiết và ba
+cách sửa: `platforms/hf-spaces/README.md` §Deploy.
+
+Một chi tiết CLI: `hf repo` (số ít) đã deprecated, `hf repos` là lệnh hiện hành.
 
 Thứ tự này có một điểm không được đảo: **gallery trước, Space sau**. Đẩy một
 Space có `gallery/` rỗng vẫn hợp lệ (trang 2 hiện lệnh), nhưng nếu đẩy gallery
