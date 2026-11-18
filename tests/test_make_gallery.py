@@ -189,3 +189,29 @@ def test_scores_that_match_no_sample_is_an_error_not_a_silent_no_op(tmp_path):
     msg = str(exc.value)
     assert "KHÔNG khớp mẫu nào" in msg
     assert "adm_" in msg                        # nói luôn khoá đúng là gì
+
+
+def test_it_recognises_a_placeholder_eaten_by_the_shell(tmp_path):
+    """`--maps <volume>/maps/test` để lại `/maps/test` — không phải lỗi đường dẫn.
+
+    Bash biến `<volume>` thành chuyển hướng stdin, bỏ token đó khỏi argv và để
+    lại `/maps/test`. Trên Git Bash/MSYS đường dẫn còn bị dịch thành
+    `C:/Program Files/Git/maps/test`. Thông báo phải chỉ đúng nguyên nhân, vì
+    "không phải thư mục" khiến người dùng đi tìm lỗi ở chỗ khác.
+    """
+    with pytest.raises(SystemExit) as exc:
+        make_gallery.main(["--maps", "/maps/test", "--orig", str(tmp_path),
+                           "--out", str(tmp_path / "g")])
+    msg = str(exc.value)
+    assert "placeholder" in msg
+    assert "<volume>" in msg
+    assert "::gallery" in msg
+
+
+def test_literal_angle_brackets_are_explained_too(tmp_path):
+    """Trường hợp `--maps "<volume>/maps/test"` (có ngoặc kép ⇒ shell không ăn)."""
+    with pytest.raises(SystemExit) as exc:
+        make_gallery.main(["--maps", "<volume>/maps/test", "--orig", str(tmp_path),
+                           "--out", str(tmp_path / "g")])
+    msg = str(exc.value)
+    assert "chuyển" in msg and "hướng stdin" in msg
