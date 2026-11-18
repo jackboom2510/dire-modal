@@ -1158,6 +1158,143 @@ def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
     return {"n": len(by_generator), "by_generator": by_generator, "latest": payload["latest"]}
 
 
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
+def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
+             limit: int = 0) -> dict:
+    """Chấm detector **đã train** trên map của split chấm, và xuất `scores.json`.
+
+    Đây là bước còn thiếu giữa `::train` và trang 2 của demo: `tools/make_gallery.py
+    --scores` cần `{tên mẫu: {p_fake: …}}`, mà trước hàm này repo chỉ có `train.json`
+    (số tổng hợp), không có điểm từng ảnh. Không có nó, gallery vẫn dựng được nhưng
+    trang 2 hiện "chưa có điểm" — mất đúng phần demo muốn khoe.
+
+    ::
+
+        modal run -m dire_zero.modal_app::evaluate                       # mọi detector đã train
+        modal run -m dire_zero.modal_app::evaluate --generator adm       # một cái
+        modal run -m dire_zero.modal_app::evaluate --split val           # chấm trên val
+
+    Ghi ra ``runs/eval/<tag>/eval.json`` (metric + CI) và ``.../scores.json``
+    (điểm từng ảnh, đúng định dạng `make_gallery` đọc).
+
+    **Ngưỡng**: dùng ngưỡng đã chốt trên val lúc train, đổi sang thang xác suất bằng
+    sigmoid cho khớp `p_fake ∈ [0,1]`. Đổi thang không đổi ACC/AP/AUC (hàm đơn điệu
+    tăng), nhưng đổi *cách đọc*: `make_gallery --threshold` yêu cầu `[0,1]`, còn
+    ngưỡng trong `train.json` là logit (có thể âm) — trộn hai thang là hiện điểm
+    sai mà không có lỗi nào báo.
+
+    **Cổng**: `gate: passed` chỉ khi ngưỡng thật sự đến từ val với ≥ 20 mẫu. Không
+    đạt thì `gate: failed`, và `demolib/provenance.py` sẽ **từ chối** hiện điểm —
+    đó là hành vi đúng, không phải lỗi cần lách.
+    """
+    import json  # noqa: PLC0415
+
+    import torch  # noqa: PLC0415
+
+    from . import metrics as M  # noqa: PLC0415
+    from .detector import ResNetDetector, resnet50  # noqa: PLC0415
+    from .pipeline import _score, collect_maps, write_json  # noqa: PLC0415
+
+    ledger_path = f"{OUT}/train.json"
+    ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {}
+    tags = sorted(ledger.get("by_generator") or {})
+    if not tags:
+        raise FileNotFoundError(f"chưa có detector nào trong {OUT}/train.json — chạy `::train` trước")
+    want = _train_targets(generator, [t[4:] if t.startswith("gen-") else t for t in tags])
+    if want and want[0] is None:                      # `auto` ⇒ mọi detector đã train
+        chosen = tags
+    else:
+        chosen = [_train_tag(g) for g in want]
+        missing = [t for t in chosen if t not in tags]
+        if missing:
+            raise FileNotFoundError(f"chưa train {missing}. Có: {tags}")
+
+    all_maps = collect_maps(MAPS)
+    results: dict[str, dict] = {}
+    for tag in chosen:
+        tdir = f"{OUT}/train/{tag}"
+        tpath = f"{tdir}/train.json"
+        ckpt = f"{tdir}/detector.pth"
+        if not (os.path.exists(tpath) and os.path.exists(ckpt)):
+            print(f"[bỏ qua] {tag}: thiếu train.json hoặc detector.pth", flush=True)
+            continue
+        train_meta = json.load(open(tpath, encoding="utf-8"))
+        gens = train_meta.get("generators_used") or []
+        rows = [m for m in all_maps if m["split"] == split and m["generator"] in ("real", *gens)]
+        if limit:
+            keep_real = [m for m in rows if m["label"] == 0][:limit]
+            keep_fake = [m for m in rows if m["label"] == 1][:limit]
+            rows = keep_real + keep_fake
+        if not rows or len({m["label"] for m in rows}) < 2:
+            print(f"[bỏ qua] {tag}: split {split!r} không có đủ hai lớp", flush=True)
+            continue
+
+        model = ResNetDetector(resnet50()).to("cuda")
+        model.load_state_dict(torch.load(ckpt, map_location="cuda"))
+        logits, labels = _score(model, [m["path"] for m in rows], [m["label"] for m in rows],
+                                crop, "cuda")
+        probs = [float(torch.sigmoid(torch.tensor(z))) for z in logits]
+
+        thr_logit = train_meta.get("threshold_from_val", 0.0)
+        thr = float(torch.sigmoid(torch.tensor(float(thr_logit))))
+        src = train_meta.get("threshold_source")
+        n_val = int((train_meta.get("split") or {}).get("n_val") or 0)
+        gate = "passed" if src == "val" and n_val >= 20 else "failed"
+        ev = M.evaluate(probs, labels, threshold=thr, seed=3407)
+
+        samples = {}
+        for m, p in zip(rows, probs):
+            # đúng khoá `make_gallery` sinh ra: f"{prefix}{cls}_{stem}"
+            samples[f"{m['generator']}_{os.path.basename(m['path'])[:-4]}"] = {
+                "p_fake": round(p, 6),
+                "gate": gate,
+                "threshold": round(thr, 6),
+                "threshold_split": "val",
+            }
+
+        payload = {
+            "tag": tag,
+            "split": split,
+            "generators_used": gens,
+            "threshold_logit": thr_logit,
+            "threshold_prob": round(thr, 6),
+            "threshold_source": src,
+            "n_val": n_val,
+            "gate": gate,
+            "metrics": ev,
+            "crop": crop,
+            "honesty": (
+                "chấm trên map **tự tính** (R1) bằng detector train from scratch; "
+                "không so được giá trị tuyệt đối với Table 2 của bài báo "
+                "(khác init, khác số ảnh train, khác generator)."
+            ),
+        }
+        write_json(f"{OUT}/eval/{tag}/eval.json", payload)
+        write_json(f"{OUT}/eval/{tag}/scores.json", {"samples": samples})
+        results[tag] = {"acc": ev["acc"], "ap": ev["ap"], "auc": ev["auc"],
+                        "acc_ci95": ev["acc_ci95"], "n": ev["n"], "gate": gate}
+        print(f"[{tag}] {split}: acc {ev['acc']:.3f} "
+              f"[{ev['acc_ci95'][0]:.3f}, {ev['acc_ci95'][1]:.3f}] · "
+              f"AP {ev['ap']:.3f} · n {ev['n']} · gate {gate}", flush=True)
+    vol.commit()
+    _write_eval_ledger(results)
+    return {"evaluated": sorted(results), "split": split, "by_tag": results}
+
+
+def _write_eval_ledger(results: dict[str, dict]) -> None:
+    """Gộp điểm đã chấm vào `runs/eval.json` — dùng cho `::report` và cho bảng báo cáo."""
+    import json  # noqa: PLC0415
+
+    from .pipeline import write_json  # noqa: PLC0415
+
+    path = f"{OUT}/eval.json"
+    old = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
+    by_tag = dict(old.get("by_tag") or {})
+    by_tag.update(results)
+    write_json(path, {"by_tag": by_tag,
+                      "note": "metric chấm trên map tự tính (R1); xem runs/eval/<tag>/eval.json"})
+
+
 def _map_inventory(maps_root: str) -> dict:
     """Đếm `.npy` theo ``<split>/<generator>`` — nguồn sự thật về map đã có."""
     if not os.path.isdir(maps_root):
@@ -1208,6 +1345,9 @@ def report() -> dict:
         # **Bảng** của Table 2: mỗi generator một detector riêng, không phải một
         # con số gộp. Thiếu mục nào nghĩa là generator đó chưa train.
         "train_by_generator": read("train").get("by_generator", {}),
+        # Điểm đã chấm trên split chấm (mỗi tag một detector) — có `acc_ci95` để
+        # không ai đọc chênh lệch 2 điểm thành thứ hạng.
+        "eval_by_generator": (_read_json(f"{OUT}/eval.json") or {}).get("by_tag", {}),
         "bench": read("bench"),
         "warnings": [
             "ACC trên ~200 ảnh test có CI ±5 điểm — không dùng để so với Table 2",

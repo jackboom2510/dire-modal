@@ -249,6 +249,7 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `bash tools/tree.sh` | Cây toàn bộ Volume (`modal volume ls` chỉ đọc 1 tầng nên không ra cây được) |
 | `bash tools/bench_storage.sh` | Đo Volume vs R2 (mount + S3 API) |
 | `bash tools/bench_baidu_mode.sh` | Đo `--mode locate\|pcs\|stream` của BaiduPCS-Go trên 1 file nhỏ |
+| `modal run -m dire_zero.modal_app::evaluate [--generator all] [--split test]` | Chấm detector đã train trên map của split chấm → `runs/eval/<tag>/{eval.json,scores.json}`; `scores.json` là thứ `tools/make_gallery.py --scores` đọc. Không chạy bước này thì trang 2 hiện "chưa có điểm" |
 | `modal run -m dire_zero.modal_app::maps --n 500 [--verify 20]` | Kiểm **tồn kho** DIRE map (CPU, không GPU): ô nào đủ/thiếu, `.npy` nào ghi dở, tiền còn phải trả, và **lệnh chạy tiếp** đã chia nhóm — `--n` phải khớp `::dire` |
 | `python3 tools/relabel_maps.py --maps <vol>/maps [--apply]` | Sửa nhãn generator cho map cũ nằm ở `maps/<split>/fake/` — đổi tên theo `source` trong `dire.json`, **không** tính lại map (0 USD) |
 | `bash tools/measure_dire.sh` | Đo ảnh/giây của DIRE → số giờ GPU thật |

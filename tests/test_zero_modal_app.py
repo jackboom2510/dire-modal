@@ -31,7 +31,8 @@ def test_app_name_and_image():
 
 
 def test_documented_entrypoints_exist():
-    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "train", "report"):
+    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "train",
+                 "evaluate", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
 
@@ -906,3 +907,112 @@ def test_maps_warns_about_a_class_imbalance(tmp_path, monkeypatch):
     out = modal_app.maps.local(n=0, steps=20)
     assert any("midjourney" in w and "10.0:1" in w for w in out["warnings"]), out["warnings"]
     assert out["total_missing"] == 0
+
+
+# ---------------------------------------------------------------------------
+# `::evaluate` — bước còn thiếu giữa `::train` và trang 2 của demo
+# ---------------------------------------------------------------------------
+def test_evaluate_refuses_when_nothing_was_trained(tmp_path, monkeypatch):
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path))
+    with pytest.raises(FileNotFoundError) as exc:
+        modal_app.evaluate.local()
+    assert "::train" in str(exc.value)
+
+
+def test_evaluate_writes_scores_in_the_format_make_gallery_reads(tmp_path, monkeypatch):
+    """Khoá phải đúng `f"{cls}_{stem}"` — nếu lệch, gallery im lặng "chưa có điểm".
+
+    Đây là hợp đồng thật giữa `::evaluate` và `tools/make_gallery.py`: tool đọc
+    `scores[name]` với `name = f"{prefix}{cls}_{npy.stem}"`. Lệch một ký tự thì
+    không có lỗi nào, chỉ có một trang demo không có điểm.
+    """
+    import numpy as np
+
+    out = tmp_path / "runs"
+    (out / "train" / "gen-adm").mkdir(parents=True)
+    (out / "train" / "gen-adm" / "train.json").write_text(json.dumps({
+        "generators_used": ["adm"], "threshold_from_val": 0.3, "threshold_source": "val",
+        "split": {"n_train": 80, "n_val": 20, "n_test": 20},
+    }), encoding="utf-8")
+    (out / "train" / "gen-adm" / "detector.pth").write_bytes(b"x")
+    (out / "train.json").write_text(json.dumps({"by_generator": {"gen-adm": {"acc": 0.9}}}),
+                                    encoding="utf-8")
+
+    maps = tmp_path / "maps"
+    for gen, label in (("real", 0), ("adm", 1)):
+        d = maps / "test" / gen
+        d.mkdir(parents=True)
+        for i in range(3):
+            np.save(d / f"{i:03d}.npy", np.zeros((3, 8, 8), dtype="float16"))
+
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+    monkeypatch.setattr("dire_zero.pipeline._score",
+                        lambda model, paths, labels, crop, device, bs=32: ([2.0, 2.0, 2.0] + [-2.0] * 3, labels))
+    monkeypatch.setattr("dire_zero.detector.ResNetDetector", lambda *a, **k: _FakeDet())
+    monkeypatch.setattr("dire_zero.detector.resnet50", lambda: None)
+    import torch
+    monkeypatch.setattr(torch, "load", lambda *a, **k: {})
+
+    res = modal_app.evaluate.local(generator="adm")
+    assert res["evaluated"] == ["gen-adm"]
+
+    scores = json.loads((out / "eval" / "gen-adm" / "scores.json").read_text(encoding="utf-8"))
+    assert set(scores["samples"]) == {"real_000", "real_001", "real_002",
+                                      "adm_000", "adm_001", "adm_002"}
+
+    real = scores["samples"]["real_000"]
+    fake = scores["samples"]["adm_000"]
+    assert 0.0 <= real["p_fake"] <= 1.0 and real["p_fake"] < 0.5 < fake["p_fake"]
+    assert real["gate"] == "passed" and real["threshold_split"] == "val"
+    # ngưỡng logit 0,3 đổi sang xác suất — `make_gallery --threshold` cần [0,1]
+    assert 0.0 <= real["threshold"] <= 1.0
+
+    ev = json.loads((out / "eval" / "gen-adm" / "eval.json").read_text(encoding="utf-8"))
+    assert ev["metrics"]["acc"] == 1.0 and ev["metrics"]["n"] == 6
+    assert ev["split"] == "test"
+
+
+def test_evaluate_marks_gate_failed_when_the_threshold_is_not_from_val(tmp_path, monkeypatch):
+    """Ngưỡng không đến từ val ⇒ `gate: failed`; `provenance` sẽ từ chối hiện điểm.
+
+    Đây là hành vi **đúng**, không phải lỗi cần lách: hiện điểm với ngưỡng chọn trên
+    test là tự khen mình.
+    """
+    import numpy as np
+    import torch
+
+    out = tmp_path / "runs"
+    (out / "train" / "gen-adm").mkdir(parents=True)
+    (out / "train" / "gen-adm" / "train.json").write_text(json.dumps({
+        "generators_used": ["adm"], "threshold_from_val": 0.0, "threshold_source": "default",
+        "split": {"n_train": 100, "n_val": 0, "n_test": 20},
+    }), encoding="utf-8")
+    (out / "train" / "gen-adm" / "detector.pth").write_bytes(b"x")
+    (out / "train.json").write_text(json.dumps({"by_generator": {"gen-adm": {}}}), encoding="utf-8")
+    maps = tmp_path / "maps"
+    for gen in ("real", "adm"):
+        d = maps / "test" / gen
+        d.mkdir(parents=True)
+        np.save(d / "0.npy", np.zeros((3, 8, 8), dtype="float16"))
+
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+    monkeypatch.setattr("dire_zero.pipeline._score",
+                        lambda model, paths, labels, crop, device, bs=32: ([0.5] * len(paths), labels))
+    monkeypatch.setattr("dire_zero.detector.ResNetDetector", lambda *a, **k: _FakeDet())
+    monkeypatch.setattr("dire_zero.detector.resnet50", lambda: None)
+    monkeypatch.setattr(torch, "load", lambda *a, **k: {})
+
+    res = modal_app.evaluate.local(generator="adm")
+    assert res["by_tag"]["gen-adm"]["gate"] == "failed"
+
+
+class _FakeDet:
+    def to(self, _d):
+        return self
+
+    def load_state_dict(self, _s):
+        return self
