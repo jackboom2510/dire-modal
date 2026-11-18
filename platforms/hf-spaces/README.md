@@ -183,6 +183,41 @@ Muốn Space chạy **bản Streamlit** thay thế: sửa front-matter thành
 Chi tiết, số đo cold start, cổng kiểm và phương án rollback:
 **`docs/demo-hf-spaces-plan.md`**.
 
+## Đọc log của Space: dòng nào là bình thường
+
+Một lần khởi động **thành công** in đúng bốn dòng này (không có gì khác):
+
+```text
+WARNING: Running pip as the 'root' user can result in broken permissions ...
+[demo] 65 component · 64 mẫu gallery · sẵn sàng cho launcher
+* Running on local URL:  http://0.0.0.0:7860
+* To create a public link, set `share=True` in `launch()`.
+```
+
+| Dòng | Nghĩa | Phải làm gì |
+|---|---|---|
+| `WARNING: Running pip as the 'root' user` | HF cài `requirements.txt` bằng pip **trong container**, nơi user là root. Đây là cảnh báo của HF, không phải của app | không gì cả. Không tắt được từ repo: `pip` **từ chối** `--root-user-action` khi nó nằm trong `requirements.txt` (`no such option`) |
+| `[demo] … sẵn sàng cho launcher` | app dựng xong (65 component), `demo` ở cấp module đã sẵn cho launcher | — |
+| `* Running on local URL: http://0.0.0.0:7860` | uvicorn đã nghe trên cổng 7860, cổng HF chờ. Chữ *local* là cách Gradio gọi URL của chính nó, **không** có nghĩa "chỉ chạy ở máy" | — |
+| `* To create a public link, set share=True` | Gradio in câu này mỗi khi `share=False`. Trên Space **đừng** đặt `share=True`: nó mở thêm tunnel `gradio.live`, chậm và có hạn một tuần | không gì cả |
+
+Chỉ những dòng sau là lỗi thật, và mỗi dòng có một nguyên nhân riêng:
+
+| Dòng | Nguyên nhân |
+|---|---|
+| `GRADIO_HOT_RELOAD: Launching demo not found` | thiếu `demo` ở cấp module — xem mục dưới |
+| `ModuleNotFoundError` | `requirements.txt` thiếu gói, hoặc import một tệp không được đóng gói |
+| `Traceback (most recent call last)` | app ném lỗi lúc import; đọc dòng cuối, đó là nơi sửa |
+| `Stopping Node.js server...` | SSR bật mà app không phục vụ; app đã tắt SSR (`GRADIO_SSR_MODE=False`) |
+
+Kiểm Space đang sống, không cần mở trình duyệt — `$SPACE` đặt như ở §Deploy:
+
+```bash
+curl -s -o /dev/null -w "%{http_code}\n" "https://$HF_USER-$SPACE.hf.space/config"
+```
+
+`200` và body là JSON của app nghĩa là đang chạy; `503` là đang build/ngủ; `404` là sai tên.
+
 ## Nếu Space bật lên rồi tắt ngay
 
 Log kiểu này **không** phải app hỏng:

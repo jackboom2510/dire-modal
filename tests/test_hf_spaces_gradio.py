@@ -256,3 +256,57 @@ def test_the_launcher_contract_is_documented_where_it_will_be_read(gradio_app):
     text = (APP_DIR / "README.md").read_text(encoding="utf-8")
     assert "GRADIO_HOT_RELOAD" in text
     assert "demo = build_app()" in text
+
+
+def test_import_prints_a_ready_line_instead_of_only_gradio_noise():
+    """Log của Space phải có một mốc do **app** in ra.
+
+    Không có nó, log chỉ gồm cảnh báo pip và hai câu của Gradio — và người đọc
+    không phân biệt được "chạy xong" với "chết ngay sau khi in banner". Dòng này
+    xuất hiện tức là `build_app()` đã trả về và `demo` đã ở cấp module.
+    """
+    import subprocess
+
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "import gradio_app as g; print('N_COMPONENTS', len(g.demo.blocks))"],
+        cwd=str(APP_DIR), capture_output=True, text=True, timeout=180)
+    assert r.returncode == 0, r.stderr
+    ready = [ln for ln in r.stdout.splitlines() if ln.startswith("[demo]")]
+    assert len(ready) == 1, r.stdout
+    assert "component" in ready[0]
+    assert "sẵn sàng" in ready[0]
+    # đếm đúng số component của app, không phải một con số chép tay
+    literal = next(ln for ln in r.stdout.splitlines() if ln.startswith("N_COMPONENTS"))
+    n = int(literal.split()[1])
+    assert f"{n} component" in ready[0], (n, ready[0])
+
+
+def test_requirements_has_no_global_pip_options():
+    """`pip` từ chối option toàn cục trong requirements file.
+
+    Đã thử `--root-user-action=ignore` để tắt cảnh báo "Running pip as the 'root'
+    user" của HF: `pip install -r` chết với `no such option`. Cảnh báo đó là của
+    HF, không tắt được từ repo — nên đừng để ai thêm lại.
+    """
+    for line in (APP_DIR / "requirements.txt").read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        assert not stripped.startswith("-"), (
+            f"option toàn cục trong requirements.txt: {stripped!r} — pip sẽ từ chối"
+        )
+
+
+def test_readme_names_the_four_normal_log_lines(gradio_app):
+    """Tài liệu phải nói rõ bốn dòng này là **bình thường**, nếu không lần sau lại
+    có người đi sửa một app đang chạy tốt."""
+    text = (APP_DIR / "README.md").read_text(encoding="utf-8")
+    for needle in (
+        "Running pip as the 'root' user",
+        "[demo]",
+        "* Running on local URL",
+        "To create a public link",
+    ):
+        assert needle in text, needle
+    assert "hf.space/config" in text

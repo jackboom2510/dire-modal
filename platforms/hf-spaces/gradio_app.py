@@ -484,6 +484,17 @@ def build_app() -> gr.Blocks:
 #: hỏng; nó chưa bao giờ được giao cho launcher.
 demo = build_app()
 
+#: Dòng "đã sẵn sàng" của chính app, để log của Space có một mốc rõ ràng giữa
+#: hai loại dòng vô hại (`pip` cảnh báo root, `* To create a public link…`) và
+#: lỗi thật (`Traceback`, `ModuleNotFoundError`, `Stopping Node.js server…`).
+#: In ở cấp module vì đây là lúc HF import tệp — tức lúc nó chuẩn bị phục vụ.
+print(
+    f"[demo] {len(demo.blocks)} component · {len(SAMPLES)} mẫu gallery"
+    + ("" if SAMPLES else " (gallery/ rỗng — hợp lệ, xem README)")
+    + " · sẵn sàng cho launcher",
+    flush=True,
+)
+
 
 if __name__ == "__main__":  # pragma: no cover - chỉ chạy khi phục vụ thật
     # `show_api` đã bị bỏ khỏi `launch()` ở Gradio 6; truyền vào sẽ TypeError ngay
