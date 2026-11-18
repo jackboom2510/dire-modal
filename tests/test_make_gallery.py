@@ -293,8 +293,9 @@ def test_full_build_works_with_only_the_mounted_tree(tmp_path):
         (maps / cls).mkdir(parents=True)
         (orig / cls).mkdir(parents=True)
         for i in range(2):
+            # (3, 256, 256): đúng shape `::dire` ghi cho ảnh RGB, không phải fixture xám
             np.save(maps / cls / f"{cls}_{i}.npy",
-                    (rng.random((256, 256)) * 2.0).astype("float16"))
+                    (rng.random((3, 256, 256)) * 2.0).astype("float16"))
             Image.fromarray((rng.random((256, 256)) * 255).astype("uint8")).save(
                 orig / cls / f"{cls}_{i}.png")
 
@@ -309,3 +310,96 @@ def test_full_build_works_with_only_the_mounted_tree(tmp_path):
     made = sorted(p.name for p in out.glob("*.json"))
     assert len(made) == 4, made
     shutil.rmtree(work, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Map thật của `::dire` có **3 kênh**, không phải ảnh xám.
+#
+# Container đã trả về đúng lỗi này trên dữ liệu thật của repo:
+#
+#     ValueError: 004006349103115c.npy: shape (3, 256, 256), cần (256, 256)
+#
+# `::dire` lưu `dm.squeeze(0)` của một tensor RGB ⇒ (3, 256, 256). Tool chỉ nhận
+# (256, 256) vì mọi fixture đều tự tạo ảnh xám — một lần nữa, fixture không đại
+# diện cho dữ liệu thật.
+# ---------------------------------------------------------------------------
+
+
+def _rgb_map(path: Path, seed: int = 0) -> None:
+    rng = np.random.default_rng(seed)
+    arr = (rng.random((3, 256, 256)) * 2.0).astype("float16")
+    np.save(path, arr)
+
+
+def test_three_channel_map_is_drawn_as_rgb_without_mixing_channels(tmp_path: Path) -> None:
+    from PIL import Image
+
+    npy = tmp_path / "x.npy"
+    png = tmp_path / "x.png"
+    rng = np.random.default_rng(7)
+    arr = (rng.random((3, 256, 256)) * 2.0).astype("float16")
+    np.save(npy, arr)
+
+    mode = make_gallery.map_to_png(npy, png, 1.0)      # gamma 1 để so số chính xác
+    assert mode == "RGB"
+    with Image.open(png) as im:
+        assert im.mode == "RGB"
+        assert im.size == (256, 256)
+        got = np.asarray(im).astype("float32") / 255.0
+    want = np.clip(arr.astype("float32") / make_gallery.MAP_MAX, 0.0, 1.0)
+    got = np.moveaxis(got, -1, 0)
+    assert np.abs(got - want).max() <= 1 / 255 + 1e-6
+    # kênh phải khác nhau — nếu bị trộn thành xám thì ba kênh bằng nhau
+    assert np.abs(got[0] - got[1]).max() > 0.05
+
+
+def test_single_channel_map_still_works(tmp_path: Path) -> None:
+    from PIL import Image
+
+    npy = tmp_path / "y.npy"
+    png = tmp_path / "y.png"
+    np.save(npy, np.zeros((1, 256, 256), dtype="float16"))
+    assert make_gallery.map_to_png(npy, png, 0.5) == "L"
+    with Image.open(png) as im:
+        assert im.mode == "L"
+
+
+def test_channels_last_map_is_read_as_rgb(tmp_path: Path) -> None:
+    """Một số tool lưu `(H, W, 3)`; nhận cả hai thứ tự thay vì đoán sai trục."""
+    from PIL import Image
+
+    npy = tmp_path / "z.npy"
+    png = tmp_path / "z.png"
+    arr = np.zeros((256, 256, 3), dtype="float16")
+    arr[..., 0] = 2.0
+    np.save(npy, arr)
+    assert make_gallery.map_to_png(npy, png, 1.0) == "RGB"
+    with Image.open(png) as im:
+        px = np.asarray(im)
+    assert px[..., 0].min() == 255      # kênh 0 = 2.0/MAP_MAX → 255
+    assert px[..., 1].max() == 0
+
+
+def test_shape_error_lists_what_is_accepted(tmp_path: Path) -> None:
+    """Thông báo cũ chỉ nói "cần (256, 256)" — đúng điều đã làm mất một vòng lặp
+    deploy, vì nó không nói map thật có 3 kênh."""
+    npy = tmp_path / "bad.npy"
+    np.save(npy, np.zeros((2, 256, 256), dtype="float16"))
+    with pytest.raises(ValueError) as err:
+        make_gallery.map_to_png(npy, tmp_path / "bad.png", 0.5)
+    msg = str(err.value)
+    assert "(3, 256, 256)" in msg
+    assert "3 kênh" in msg
+
+
+def test_build_records_channel_count_in_metadata(tmp_path: Path) -> None:
+    """`.json` phải nói PNG giữ 3 kênh hay 1 kênh — người đọc gallery cần biết
+    ảnh mình đang xem là ba phép đo hay một."""
+    maps, orig = _fake_tree(tmp_path / "src", n=1)
+    (maps / "adm" / "0000.npy").unlink()
+    _rgb_map(maps / "adm" / "0000.npy", seed=3)
+    out = tmp_path / "gallery"
+    assert make_gallery.main(_args(maps, orig, out)) == 0
+    meta = json.loads((out / "adm_0000.json").read_text(encoding="utf-8"))
+    assert meta["display"]["channels"] == 3
+    assert meta["display"]["channel_order"] == "RGB"

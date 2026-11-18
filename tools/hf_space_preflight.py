@@ -22,8 +22,19 @@ Chạy::
     python tools/hf_space_preflight.py --space <user>/dire-demo
     python tools/hf_space_preflight.py --json
 
+Lỗi thứ hai mà tool này bắt: Space bật lên rồi chết với
+
+    Runtime Error
+    No @spaces.GPU function detected during startup
+
+Đó **không** phải lỗi của app: Space đang đặt hardware `zero-gpu`, còn app này
+chạy CPU và gọi GPU qua Modal. ZeroGPU từ chối khởi động khi không có hàm nào
+trang trí `@spaces.GPU`, và nó từ chối *trước khi* import `gradio_app.py` — nên
+log container không hề nhắc tới code. Tool đọc hardware của Space và in đúng
+đường sửa.
+
 Mã thoát: ``0`` nếu không có vấn đề chặn, ``1`` nếu có (biến CA trỏ tệp không
-tồn tại, hoặc không có token khi cần tạo repo).
+tồn tại, hardware ZeroGPU, hoặc không có token khi cần tạo repo).
 """
 
 from __future__ import annotations
@@ -112,8 +123,90 @@ def find_token(env: dict[str, str], home: Path | None = None) -> str:
     return ""
 
 
+#: Hardware của ZeroGPU. Giá trị thật trong `SpaceHardware` là **`zero-a10g`**
+#: (không phải "zero-gpu"), nên nhận diện theo tiền tố `zero-` thay vì so chuỗi
+#: với một cái tên không tồn tại trong enum.
+ZERO_GPU_PREFIX = "zero-"
+
+
+def _field(obj, name: str):
+    """Đọc một trường từ dataclass của `huggingface_hub` **hoặc** từ dict.
+
+    `SpaceRuntime` đổi hình dạng giữa các bản hub (có bản trả
+    `hardware={"current":…, "requested":…}`, có bản trả object). Đọc cả hai để
+    tool không chết vì một bản hub mới, trong khi việc nó làm chỉ là in một dòng.
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
+
+
+def _hw_name(value) -> str:
+    """`SpaceHardware.ZERO_A10G` → `"zero-a10g"`; `None` → `""`."""
+    if value is None:
+        return ""
+    return str(getattr(value, "value", value))
+
+
+def hardware_status(runtime=None, error: str = "") -> dict:
+    """Hardware hiện tại/còn xin của Space và nó có phải ZeroGPU không.
+
+    Không bao giờ ném: đây là bước *chẩn đoán*, hỏng mạng thì chỉ là "không kiểm
+    được", không được biến thành chặn deploy.
+    """
+    if error:
+        return {"checked": False, "error": error, "blocking": False,
+                "current": "", "requested": "", "stage": ""}
+    if runtime is None:
+        return {"checked": False, "error": "", "blocking": False,
+                "current": "", "requested": "", "stage": ""}
+    # `SpaceRuntime.hardware` là **enum `SpaceHardware`**, không phải object có
+    # `.current`; bản hub cũ trả dict. Chuẩn hoá cả hai.
+    current = _hw_name(_field(runtime, "hardware"))
+    requested = _hw_name(_field(runtime, "requested_hardware"))
+    stage = _hw_name(_field(runtime, "stage"))
+    zero = any(v.startswith(ZERO_GPU_PREFIX) for v in (current, requested))
+    return {"checked": True, "error": "", "blocking": zero,
+            "current": current, "requested": requested, "stage": stage}
+
+
+def fetch_space_runtime(space: str, api=None) -> tuple[object | None, str]:
+    """`(runtime, lỗi)`. Thiếu `huggingface_hub` cũng chỉ là "không kiểm được"."""
+    if not space:
+        return None, ""
+    try:
+        if api is None:
+            from huggingface_hub import HfApi  # noqa: PLC0415
+
+            api = HfApi()
+        getter = getattr(api, "get_space_runtime", None)
+        if getter is not None:
+            return getter(space), ""
+        return api.space_info(space).runtime, ""
+    except Exception as exc:  # mạng, quyền, repo không tồn tại — đều không chặn
+        return None, f"{type(exc).__name__}: {str(exc)[:160]}"
+
+
+def request_cpu_basic(space: str, api=None, hardware: str = "cpu-basic") -> str:
+    """Xin đổi hardware về `cpu-basic`; trả chuỗi mô tả kết quả (không ném)."""
+    if not space:
+        return "chưa có --space"
+    try:
+        if api is None:
+            from huggingface_hub import HfApi  # noqa: PLC0415
+
+            api = HfApi()
+        api.request_space_hardware(space, hardware)
+        return f"đã xin `{hardware}` cho {space}"
+    except Exception as exc:
+        return f"không đổi được: {type(exc).__name__}: {str(exc)[:160]}"
+
+
 def build_report(space: str, env: dict[str, str] | None = None,
-                 exists=None, which=None, home: Path | None = None) -> dict:
+                 exists=None, which=None, home: Path | None = None,
+                 runtime=None, runtime_error: str = "") -> dict:
     env = dict(os.environ if env is None else env)
     which = which or shutil.which
     ca = ca_status(env, exists)
@@ -128,8 +221,11 @@ def build_report(space: str, env: dict[str, str] | None = None,
         "git": which("git") or "",
         "hf": which("hf") or which("huggingface-cli") or "",
         "blocked": bool(broken),
+        "hardware": hardware_status(runtime, runtime_error),
         "warnings": [],
     }
+    if report["hardware"]["blocking"]:
+        report["blocked"] = True
     if not token:
         report["warnings"].append(
             "không thấy token HF (`HF_TOKEN`, hoặc tệp `~/.cache/huggingface/token`) — "
@@ -170,6 +266,27 @@ def render(report: dict) -> str:
         say("  (đặt biến trong phiên hiện tại là đủ; nếu nó nằm trong `.bashrc`/biến")
         say("   hệ thống thì sửa ở đó, nếu không lần sau mở terminal lại lỗi)")
 
+    hw = report.get("hardware") or {}
+    if hw.get("blocking"):
+        say("\nVÌ SAO SPACE BÁO \"No @spaces.GPU function detected during startup\":")
+        say(f"  hardware hiện tại: {hw.get('current') or '(không rõ)'}"
+            f"   ·   đang xin: {hw.get('requested') or '(không rõ)'}")
+        say("  ZeroGPU từ chối khởi động khi Space không có hàm nào `@spaces.GPU`,")
+        say("  và nó từ chối **trước khi** import `gradio_app.py` — nên log container")
+        say("  không nhắc gì tới code. App này chạy CPU; GPU chỉ dùng qua Modal.")
+        say("\nSửa (chọn một):")
+        say("  web UI : Space → Settings → Space hardware → CPU basic (free)")
+        say("           → Factory reboot")
+        say("  CLI    : python tools/hf_space_preflight.py --space "
+            f"{report['space']} --fix-hardware")
+        say("  (nếu bắt buộc phải ở ZeroGPU: thêm một hàm `@spaces.GPU` — nhưng app")
+        say("   này không dùng GPU của Space, nên CPU basic là cấu hình đúng)")
+    elif hw.get("checked"):
+        say(f"\nHardware Space: {hw.get('current') or '(không rõ)'}"
+            f" (xin: {hw.get('requested') or '(không rõ)'}) — không phải ZeroGPU.")
+    elif hw.get("error"):
+        say("\nHardware Space: không kiểm được — " + hw["error"])
+
     say("\nToken HF: " + (f"có ({report['token']})" if report["token"] else "KHÔNG THẤY"))
     say("git: " + (report["git"] or "KHÔNG THẤY") + "   ·   hf: " + (report["hf"] or "KHÔNG THẤY"))
 
@@ -191,9 +308,24 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="kiểm máy trước khi tạo HF Space")
     ap.add_argument("--space", default="", help="<user>/dire-demo; trống thì chỉ kiểm máy")
     ap.add_argument("--json", action="store_true", help="in JSON thay cho văn bản")
+    ap.add_argument("--no-network", action="store_true",
+                    help="không gọi API HF (chỉ kiểm biến CA trên máy)")
+    ap.add_argument("--fix-hardware", action="store_true",
+                    help="xin đổi hardware của Space về cpu-basic rồi thoát")
     args = ap.parse_args(argv)
 
-    report = build_report(args.space)
+    if args.fix_hardware:
+        msg = request_cpu_basic(args.space)
+        print(msg)
+        if "đã xin" in msg:
+            print("Space cần Factory reboot để áp dụng: Settings → Factory reboot.")
+            return 0
+        return 1
+
+    runtime, runtime_error = None, ""
+    if args.space and not args.no_network and find_token(os.environ):
+        runtime, runtime_error = fetch_space_runtime(args.space)
+    report = build_report(args.space, runtime=runtime, runtime_error=runtime_error)
     print(json.dumps(report, ensure_ascii=False, indent=2) if args.json else render(report))
     return 1 if report["blocked"] else 0
 

@@ -202,7 +202,8 @@ cd "$REPO/platforms/hf-spaces" && python gradio_app.py     # hoặc: streamlit r
 python -m pytest "$REPO/tests/test_hf_spaces_gradio.py" "$REPO/tests/test_make_gallery.py" -q
 
 # 3. Tạo Space (SDK gradio, hardware CPU basic)
-python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE"   # kiểm máy trước
+python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE"   # máy + hardware
+#    Space đang ở ZeroGPU ⇒ tool báo ĐỎ và in lệnh `--fix-hardware`
 hf repos create "$HF_USER/$SPACE" --repo-type space --space-sdk gradio
 
 # 4. Đẩy nội dung
@@ -224,6 +225,16 @@ unset SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE SSL_CERT_DIR   # Git Bash
 rồi chạy lại, hoặc tạo Space bằng web UI (<https://huggingface.co/new-space>,
 SDK Gradio, CPU basic) — đường đó không đi qua `httpx` của máy. Chi tiết và ba
 cách sửa: `platforms/hf-spaces/README.md` §Deploy.
+
+**Nếu Space chết với `No @spaces.GPU function detected during startup`**: Space
+đang đặt hardware `zero-a10g`. ZeroGPU từ chối khởi động khi không có hàm
+`@spaces.GPU`, và nó từ chối *trước khi* import `gradio_app.py` — nên log không
+có traceback. Đây không phải lỗi code: app chạy CPU và gọi GPU qua Modal. Sửa
+bằng *Settings → Space hardware → CPU basic (free) → Factory reboot*, hoặc:
+
+```bash
+python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE" --fix-hardware
+```
 
 Một chi tiết CLI: `hf repo` (số ít) đã deprecated, `hf repos` là lệnh hiện hành.
 

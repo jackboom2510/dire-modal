@@ -108,3 +108,105 @@ def test_exit_code_is_one_only_when_blocked(tmp_path, monkeypatch, capsys):
     assert pf.main(["--space", "me/dire-demo", "--json"]) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["blocked"] is False and out["space"] == "me/dire-demo"
+
+
+# ---------------------------------------------------------------------------
+# Lỗi thứ hai: Space báo "No @spaces.GPU function detected during startup".
+#
+# Đây **không** phải lỗi code. Space đặt hardware ZeroGPU thì runtime đòi một
+# hàm `@spaces.GPU`; app này chạy CPU và gọi GPU qua Modal, nên cấu hình đúng là
+# `cpu-basic`. Runtime từ chối **trước khi** import app, nên log container không
+# hề nhắc tới code — chỉ tool này nói được nguyên nhân.
+# ---------------------------------------------------------------------------
+
+
+class _Runtime:
+    """Bản rút gọn của `huggingface_hub.SpaceRuntime`."""
+
+    def __init__(self, hardware=None, requested=None, stage="RUNNING"):
+        self.hardware, self.requested_hardware, self.stage = hardware, requested, stage
+
+
+def _report(runtime=None, runtime_error=""):
+    return pf.build_report("me/dire-demo", env={}, exists=lambda _p: True,
+                           which=lambda _n: "/usr/bin/git", home=Path("/nonexistent"),
+                           runtime=runtime, runtime_error=runtime_error)
+
+
+def test_zero_a10g_hardware_is_flagged_with_the_real_error_text():
+    """ZeroGPU của HF tên là `zero-a10g` — **không** phải `zero-gpu`."""
+    report = _report(_Runtime("zero-a10g", "zero-a10g"))
+    assert report["hardware"]["blocking"] is True
+    assert report["blocked"] is True
+    text = pf.render(report)
+    assert "No @spaces.GPU function detected during startup" in text
+    assert "CPU basic" in text
+    assert "--fix-hardware" in text
+    # và phải nói được vì sao đổi sang CPU là đúng, không chỉ ra lệnh
+    assert "Modal" in text
+
+
+def test_cpu_basic_is_the_healthy_case():
+    report = _report(_Runtime("cpu-basic", "cpu-basic"))
+    assert report["hardware"]["blocking"] is False
+    assert report["blocked"] is False
+    assert "không phải ZeroGPU" in pf.render(report)
+
+
+def test_hardware_enum_from_huggingface_hub_is_understood():
+    """`SpaceRuntime.hardware` là enum, không phải chuỗi — đọc đúng `.value`."""
+    try:
+        from huggingface_hub.hf_api import SpaceHardware
+    except Exception:
+        import pytest
+
+        pytest.skip("không có huggingface_hub")
+    report = _report(_Runtime(SpaceHardware.ZERO_A10G, SpaceHardware.CPU_BASIC))
+    assert report["hardware"]["current"] == "zero-a10g"
+    assert report["hardware"]["requested"] == "cpu-basic"
+    assert report["hardware"]["blocking"] is True      # vẫn đang ở zero
+
+
+def test_dict_shaped_runtime_from_an_older_hub_still_works():
+    report = _report({"hardware": {"current": "zero-a10g"},
+                      "requested_hardware": "zero-a10g", "stage": "RUNNING"})
+    assert report["hardware"]["blocking"] is True
+
+
+def test_a_network_error_never_blocks_the_deploy():
+    """Không kiểm được hardware vì mạng/quyền ⇒ cảnh báo, không chặn."""
+    report = _report(runtime_error="HfHubHTTPError: 401 Unauthorized")
+    assert report["hardware"]["checked"] is False
+    assert report["hardware"]["blocking"] is False
+    assert report["blocked"] is False
+    assert "không kiểm được" in pf.render(report)
+    assert "401" in pf.render(report)
+
+
+def test_no_space_means_no_hardware_claim():
+    report = _report()
+    assert report["hardware"]["checked"] is False
+    assert "Hardware Space" not in pf.render(report)
+
+
+def test_fix_hardware_requests_cpu_basic():
+    class Api:
+        def __init__(self):
+            self.calls = []
+
+        def request_space_hardware(self, repo_id, hardware, token=None, sleep_time=None):
+            self.calls.append((repo_id, hardware))
+
+    api = Api()
+    msg = pf.request_cpu_basic("me/dire-demo", api=api)
+    assert api.calls == [("me/dire-demo", "cpu-basic")]
+    assert "đã xin" in msg and "cpu-basic" in msg
+
+
+def test_fix_hardware_reports_a_failure_without_raising():
+    class Api:
+        def request_space_hardware(self, *a, **k):
+            raise RuntimeError("payment required")
+
+    msg = pf.request_cpu_basic("me/dire-demo", api=Api())
+    assert "không đổi được" in msg and "payment required" in msg
