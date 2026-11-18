@@ -31,7 +31,7 @@ def test_app_name_and_image():
 
 
 def test_documented_entrypoints_exist():
-    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "train", "report"):
+    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "train", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
 
@@ -658,3 +658,132 @@ def test_train_writes_each_generator_to_its_own_directory():
     body = body[: body.index("def _train_targets(")]
     assert 'f"{OUT}/train/{tag}"' in body
     assert '"runs/train.json"' not in body
+
+
+# ---------------------------------------------------------------------------
+# Sống sót sau khi mất mạng / bị kill
+# ---------------------------------------------------------------------------
+class _VolDem:
+    """Volume giả: đếm số lần `commit()` và chụp lại đường dẫn đã ghi lúc đó."""
+
+    def __init__(self):
+        self.commits = 0
+
+    def commit(self):
+        self.commits += 1
+
+
+def test_compute_with_commits_persists_every_n_images(monkeypatch):
+    """Volume v1 **không** tự ghi: mất mạng giữa lúc chạy mà chưa commit = mất hết.
+
+    Đây là lỗi đắt nhất có thể có trong repo này: đã trả tiền cho từng giây GPU,
+    rồi mất sạch vì `commit()` chỉ nằm ở cuối hàm.
+    """
+    vol = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", vol)
+
+    def fake_compute(f, items, out_dir, meta, limit=None, skip_existing=False, progress=None):
+        for i in range(1, 451):                 # 450 ảnh, commit mỗi 200
+            if progress and i % 50 == 0:        # `compute_maps` gọi mỗi 50 ảnh
+                progress(i)
+        return {"n": 450, "n_new": 450, "n_reused": 0, "nfe_total": 0}
+
+    out = modal_app._compute_with_commits(None, [], None, False, fake_compute, every=200)
+    assert out["n_new"] == 450
+    assert vol.commits == 2                     # tại 200 và 400; 450 chưa tới mốc
+    assert vol.commits * 200 >= 400
+
+
+def test_compute_with_commits_persists_even_when_it_crashes(monkeypatch):
+    """Exception mềm (mất mạng, KeyboardInterrupt) ⇒ commit phần đã xong rồi mới ném."""
+    vol = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", vol)
+
+    def fake_compute(f, items, out_dir, meta, limit=None, skip_existing=False, progress=None):
+        progress(50)
+        raise ConnectionError("mất mạng")
+
+    with pytest.raises(ConnectionError):
+        modal_app._compute_with_commits(None, [], None, False, fake_compute, every=200)
+    assert vol.commits == 1, "phải commit phần đã xong trước khi ném tiếp"
+
+
+def test_dire_delegates_the_commit_cadence_instead_of_duplicating_it():
+    src = Path(modal_app.__file__).read_text(encoding="utf-8")
+    body = src[src.index("def dire("):]
+    body = body[: body.index("def _compute_with_commits(")]
+    assert "_compute_with_commits(" in body
+    # đếm **dòng mã**, không đếm chữ trong docstring/thông báo lỗi
+    code_commits = [ln.strip() for ln in body.splitlines() if ln.strip() == "vol.commit()"]
+    assert code_commits == ["vol.commit()"], "commit chỉ nên nằm ở một chỗ trong `dire`"
+
+
+def test_maps_inventory_counts_what_is_missing(tmp_path, monkeypatch):
+    """`::maps` trả lời "đã đủ chưa" mà không cần GPU: đếm theo **ảnh đang có**."""
+    data, maps = tmp_path / "data", tmp_path / "maps"
+    for split, gen, n_img, n_map in (("train", "real", 4, 4), ("train", "adm", 4, 2),
+                                     ("test", "real", 3, 1), ("test", "adm", 3, 0)):
+        (data / split / gen).mkdir(parents=True, exist_ok=True)
+        for i in range(n_img):
+            (data / split / gen / f"{i}.png").write_bytes(b"png")
+        (maps / split / gen).mkdir(parents=True, exist_ok=True)
+        for i in range(n_map):
+            (maps / split / gen / f"{i}.npy").write_bytes(b"npy" * 10)
+
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+
+    out = modal_app.maps.local(n=0)
+    cells = {c["cell"]: c for c in out["cells"]}
+    assert set(cells) == {"train/real", "train/adm", "test/real", "test/adm"}
+    assert cells["train/real"]["missing"] == 0
+    assert cells["train/adm"]["maps"] == 2 and cells["train/adm"]["missing"] == 2
+    assert cells["test/adm"]["missing"] == 3
+    assert out["total_maps"] == 7                    # 4 + 2 + 1 + 0
+    assert out["total_missing"] == 7                  # 0 + 2 + 2 + 3
+    assert out["ready_for_train"] is False
+
+
+def test_maps_honours_n_and_flags_a_leftover_fake_dir(tmp_path, monkeypatch):
+    data, maps = tmp_path / "data", tmp_path / "maps"
+    (data / "train" / "real").mkdir(parents=True)
+    (data / "train" / "adm").mkdir(parents=True)
+    for i in range(10):
+        (data / "train" / "real" / f"{i}.png").write_bytes(b"png")
+        (data / "train" / "adm" / f"{i}.png").write_bytes(b"png")
+    (maps / "train" / "real").mkdir(parents=True)
+    (maps / "train" / "fake").mkdir(parents=True)
+    for i in range(5):
+        (maps / "train" / "real" / f"{i}.npy").write_bytes(b"npy")
+        (maps / "train" / "fake" / f"{i}.npy").write_bytes(b"npy")
+
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    out = modal_app.maps.local(n=5)
+    cells = {c["cell"]: c for c in out["cells"]}
+    assert cells["train/real"]["wanted"] == 5 and cells["train/real"]["missing"] == 0
+    assert cells["train/real"]["extra"] == 0          # 5 map có, cần 5
+    assert any("fake" in p for p in out["problems"]), out["problems"]
+
+
+def test_maps_verify_catches_a_truncated_npy(tmp_path, monkeypatch):
+    """File ghi dở vẫn tồn tại và khác rỗng ⇒ đếm file là chưa đủ, phải đọc thử."""
+    data, maps = tmp_path / "data", tmp_path / "maps"
+    (data / "train" / "real").mkdir(parents=True)
+    (data / "train" / "adm").mkdir(parents=True)
+    for i in range(3):
+        (data / "train" / "real" / f"{i}.png").write_bytes(b"png")
+        (data / "train" / "adm" / f"{i}.png").write_bytes(b"png")
+    (maps / "train" / "real").mkdir(parents=True)
+    (maps / "train" / "adm").mkdir(parents=True)
+    import numpy as np
+    for gen in ("real", "adm"):
+        (maps / "train" / gen / "ok.npy").write_bytes(b"")
+        np.save(maps / "train" / gen / "ok.npy", np.zeros((3, 8, 8), dtype="float16"))
+    (maps / "train" / "adm" / "broken.npy").write_bytes(b"half a file")
+
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    out = modal_app.maps.local(verify=5)
+    assert any("broken.npy" in b for b in out["bad_files"]), out["bad_files"]
+    assert out["ready_for_train"] is False

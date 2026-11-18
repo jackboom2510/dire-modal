@@ -661,6 +661,76 @@ kết thúc với 12 generator thay vì 15 mà không biết:
 Thiếu ô nào thì chạy bù đúng ô đó (`--generator <tên> --skip-existing`), đừng train
 rồi mới phát hiện.
 
+### 4.4.2 Mất mạng giữa lúc `::dire` đang chạy — chuyện gì xảy ra, kiểm thế nào
+
+```text
+Stopping app - local client disconnected. Use `modal run --detach` to keep apps
+running even if your local client disconnects.
+```
+
+`modal run` (không có `--detach`) **giết app** khi client mất kết nối: container
+dừng, function không "chạy tiếp". Không có lệnh nào nối lại một app đã bị dừng —
+cách duy nhất là chạy lại, và nhờ `--skip-existing` thì lần chạy lại chỉ tính phần
+còn thiếu.
+
+Nhưng có một chỗ chết người nằm sau thông báo đó: **Volume v1 không tự ghi**.
+Thay đổi chỉ bền sau `vol.commit()`, và bản trước chỉ commit **một lần ở cuối
+hàm**. Nghĩa là một lượt bị dừng giữa đường mất **toàn bộ** map đã tính — đã trả
+tiền cho từng giây GPU rồi mất sạch, và lần chạy lại trả tiền lại từ đầu.
+
+Nay `::dire` commit theo hai lớp:
+
+| Lớp | Khi nào | Mất tối đa |
+|---|---|---|
+| định kỳ | mỗi `COMMIT_EVERY = 200` ảnh | 200 ảnh (~6 phút GPU ≈ 0,11 USD) |
+| `except` | exception mềm (lỗi mạng, Ctrl-C) | 0 |
+
+Kill **cứng** (OOM, hết `timeout` của container) không chạy được `except`, nên lớp
+định kỳ mới là lớp chính.
+
+**Kiểm đã đủ chưa — không cần GPU, không cần nối lại app:**
+
+```bash
+modal run -m dire_zero.modal_app::maps                 # bảng tồn kho + dòng gợi ý
+modal run -m dire_zero.modal_app::maps --verify 20      # + đọc thử 20 file mỗi ô
+```
+
+```text
+ô                               ảnh    cần    map  thiếu  %
+test/adm                          500    500    500      0  100.0
+test/real                         500    500    500      0  100.0
+train/adm                         500    500    320    180   64.0
+train/real                        500    500    500      0  100.0
+
+tổng: 1820 map · thiếu 180 · train được: CHƯA
+  ! train/adm: thiếu 180 map (320/500) — chạy `::dire --generator adm --skip-existing`
+lần chạy gần nhất: 2026-11-17T18:40:12Z · 320 map mới
+```
+
+`--n` được hiểu đúng như `::dire` cắt theo từng ô. `--verify` đọc thử bằng
+`np.load`: file ghi **dở** do bị kill vẫn tồn tại và **khác rỗng**, nên đếm file
+là chưa đủ — một `.npy` cụt sẽ làm `::train` nổ giữa epoch.
+
+Ba cách kiểm nhanh khác, không cần chạy hàm nào:
+
+| Cách | Lệnh | Thấy gì |
+|---|---|---|
+| Đếm file trên Volume | `modal volume ls dire-zero maps/train/adm` | danh sách `.npy` (không đếm hộ) |
+| Xem app còn sống | `modal app list` | `ephemeral` + đang chạy hay đã dừng |
+| Log của app đã chết | `modal app logs ap-…` | dừng ở ảnh thứ mấy |
+
+**Lần sau, chạy dài thì `--detach`:**
+
+```bash
+modal run --detach -m dire_zero.modal_app::dire --n 500 --steps 20 --skip-existing \
+    --generator dalle2,ddpm,diff-stylegan
+```
+
+`--detach` làm app sống độc lập với máy local: đổi Wi-Fi, gập laptop, mất mạng
+đều không giết container. Theo dõi bằng `modal app logs <app-id>`, và nếu muốn
+dừng thì `modal app stop <app-id>` — dừng chủ động vẫn commit phần đã xong nhờ lớp
+`except` (nếu là SIGTERM) hoặc mất ≤ 200 ảnh (nếu kill cứng).
+
 **Bước 1 — `--generator all`, không phải `auto`.** Hai bài toán khác nhau:
 
 | | `--generator adm` | `--generator all` | `--generator auto` |
