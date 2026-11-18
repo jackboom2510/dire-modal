@@ -87,14 +87,52 @@ Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/demo-web-pl
 ## Deploy (0 ₫)
 
 ```bash
+# 0. Kiểm máy (1 giây) — bắt đúng lỗi SSL_CERT_FILE bên dưới trước khi nó xảy ra
+python tools/hf_space_preflight.py --space <user>/dire-demo
+
 # 1. Space mới (SDK gradio, hardware CPU basic)
-hf repo create dire-demo --repo-type space --space-sdk gradio
+hf repos create <user>/dire-demo --repo-type space --space-sdk gradio
+# `hf repo` (số ít) vẫn chạy nhưng đã deprecated — dùng `hf repos`.
 
 # 2. Đẩy nội dung thư mục này lên
 git clone https://huggingface.co/spaces/<user>/dire-demo /tmp/space && cd /tmp/space
 cp -r <repo>/platforms/hf-spaces/. .
 git add -A && git commit -m "DIRE demo (gradio, CPU free)" && git push
 ```
+
+### `hf` chết với `FileNotFoundError: [Errno 2]` — không phải lỗi token
+
+Traceback kết thúc ở `ssl.py` / `httpx/_config.py`, **không có tên tệp**:
+
+```text
+File "...\httpx\_config.py", line 35, in create_ssl_context
+    ctx = ssl.create_default_context(cafile=os.environ["SSL_CERT_FILE"])
+FileNotFoundError: [Errno 2] No such file or directory
+```
+
+`httpx` đọc biến `SSL_CERT_FILE` khi dựng SSL context. Biến **có** nhưng trỏ tới
+tệp không mở được — thường là `/mingw64/ssl/certs/ca-bundle.crt` do Git Bash đặt
+(Python bản Windows đọc thành `C:\mingw64\...`), hoặc một `cacert.pem` đã mất khi
+nâng cấp conda. Không liên quan tới token, quyền, hay `huggingface_hub`.
+
+```bash
+# Git Bash
+unset SSL_CERT_FILE REQUESTS_CA_BUNDLE CURL_CA_BUNDLE SSL_CERT_DIR
+# cmd.exe
+set SSL_CERT_FILE=
+# PowerShell
+Remove-Item Env:SSL_CERT_FILE,Env:REQUESTS_CA_BUNDLE,Env:CURL_CA_BUNDLE -ErrorAction SilentlyContinue
+```
+
+Hoặc trỏ cả ba biến vào một bundle có thật:
+`python -c "import certifi; print(certifi.where())"`. Nếu biến nằm trong `.bashrc`
+hay biến hệ thống thì sửa ở đó — không thì mở terminal mới là lỗi lại.
+
+Không muốn sửa gì: tạo Space bằng web UI **không đi qua httpx của máy** —
+<https://huggingface.co/new-space> (SDK *Gradio*, hardware *CPU basic*), rồi
+`git clone`/`git push` như bước 2 (git dùng CA riêng của nó, không đọc biến trên).
+
+`python tools/hf_space_preflight.py` kiểm đúng ba thứ này và in lệnh sửa.
 
 `README.md` của thư mục này là front-matter của Space: `sdk: gradio`,
 `app_file: gradio_app.py`. Nếu HF báo `sdk_version 6.32.0` không hợp lệ, chọn bản
