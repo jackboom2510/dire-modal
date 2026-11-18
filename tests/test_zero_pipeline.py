@@ -5,8 +5,8 @@ Cái được kiểm không phải chất lượng (mô hình ngẫu nhiên 32×
 
 * `gen.json` có đủ trường để người khác dựng lại (seed, bước, sha256, split);
 * `dire.json` khai đúng thang `[0, 2]` và NFE đếm được;
-* `train.json` tự khai nhãn `R1+R2+R3`, chọn ngưỡng trên val, và test chỉ chấm
-  một lần;
+* `train.json` khai nhãn do **người gọi** truyền vào (không tự nhận R3 khi ảnh
+  giả là của tác giả), chọn ngưỡng trên val, và test chỉ chấm một lần;
 * split train/test **rời nhau tuyệt đối** (không một tên file chung).
 
 Nếu bốn điều này sai, con số đẹp nhất cũng vô nghĩa. Và chúng sai được một cách
@@ -126,7 +126,10 @@ def test_train_json_is_honest_about_what_it_is(tmp_run):
         device="cpu",
         patience=99,
     )
-    assert out["label"] == "R1+R2+R3"
+    # Bản trước ghi cứng "R1+R2+R3" cho mọi lượt train, kể cả khi ảnh giả là của
+    # tác giả (`fake_source="author"`) — tức tự nhận mức tái lập cao hơn sự thật.
+    assert out["label"] == "R1+R2"
+    assert out["threshold_space"] == "logit"
     assert out["init"] == "scratch"
     assert "Table 2" in out["honesty"]
     assert 0.0 <= out["threshold_from_val"] <= 1.0
@@ -389,3 +392,24 @@ def test_reused_items_are_marked_so_they_cannot_masquerade_as_fresh(tmp_run):
     reused = [it for it in out["items"] if it.get("reused")]
     assert len(reused) == 3 and out["n_new"] == 1 and out["n_reused"] == 3
     assert out["n"] == 4
+
+
+def test_train_label_comes_from_the_caller_not_a_constant(tmp_path, tmp_run):
+    """Nhãn mức tái lập phải theo dữ liệu thật, không theo một hằng số trong code."""
+    from dire_zero.pipeline import train
+
+    from dire_zero.detector import ResNetDetector, ResNet
+
+    tmp, _, _, rows, _ = tmp_run
+    out = train(
+        lambda: ResNetDetector(ResNet(blocks=(1, 1))),
+        rows,
+        tmp / "train-labelled",
+        epochs=1,
+        bs=4,
+        crop=28,
+        device="cpu",
+        patience=99,
+        label="R1+R2",
+    )
+    assert out["label"] == "R1+R2"

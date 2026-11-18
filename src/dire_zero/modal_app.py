@@ -1053,6 +1053,7 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
             lambda: ResNetDetector(resnet50()),
             subset,
             f"{OUT}/train/{tag}",
+            label=_read_json(DATA_CARD).get("label") or "R1+R2",
             epochs=epochs,
             lr=lr,
             bs=bs,
@@ -1138,7 +1139,10 @@ def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
     for tag, res in results.items():
         t = res.get("test") or {}
         by_generator[tag] = {
-            "acc": t.get("acc"), "acc_ci95": t.get("acc_ci95"), "ap": t.get("ap"),
+            # `acc_at_0.5` đi cùng `acc` để đọc được ngay mức lệch chuẩn hoá: lệch
+            # lớn nghĩa là ACC đang phụ thuộc vào một ngưỡng chọn trên val ít mẫu.
+            "acc": t.get("acc"), "acc_at_0.5": t.get("acc_at_0.5"),
+            "acc_ci95": t.get("acc_ci95"), "ap": t.get("ap"),
             "auc": t.get("auc"), "n": t.get("n"), "n_real": t.get("n_real"),
             "n_fake": t.get("n_fake"), "best_epoch": res.get("best_epoch"),
         }
@@ -1235,8 +1239,12 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
                                 crop, "cuda")
         probs = [float(torch.sigmoid(torch.tensor(z))) for z in logits]
 
-        thr_logit = train_meta.get("threshold_from_val", 0.0)
-        thr = float(torch.sigmoid(torch.tensor(float(thr_logit))))
+        thr_raw = train_meta.get("threshold_from_val", 0.0)
+        space = train_meta.get("threshold_space", "logit")
+        if space == "logit":
+            thr = float(torch.sigmoid(torch.tensor(float(thr_raw))))
+        else:                              # detector cũ đã ghi sẵn xác suất
+            thr = float(thr_raw)
         src = train_meta.get("threshold_source")
         n_val = int((train_meta.get("split") or {}).get("n_val") or 0)
         gate = "passed" if src == "val" and n_val >= 20 else "failed"
@@ -1256,7 +1264,8 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
             "tag": tag,
             "split": split,
             "generators_used": gens,
-            "threshold_logit": thr_logit,
+            "threshold_raw": thr_raw,
+            "threshold_space": space,
             "threshold_prob": round(thr, 6),
             "threshold_source": src,
             "n_val": n_val,
@@ -1316,6 +1325,60 @@ def _read_json(path: str) -> dict:
     return json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
 
 
+def _report_warnings(inventory: dict, dire_json: dict, train_by_gen: dict,
+                     eval_by_gen: dict) -> list[str]:
+    """Cảnh báo **suy ra từ số liệu**, không phải câu chép tay.
+
+    Bản trước hardcode "ACC trên ~200 ảnh test" trong khi lượt chạy thật có
+    `n = 1000`: một câu cảnh báo sai số liệu còn tệ hơn không có cảnh báo, vì nó
+    dạy người đọc bỏ qua cả mục.
+    """
+    out: list[str] = []
+
+    # 1. `fake/` còn sót ⇒ nhãn `fake` sẽ lẫn với generator thật khi train.
+    leftover = sorted(k for k in (inventory.get("by_split_generator") or {}) if k.endswith("/fake"))
+    if leftover:
+        out.append(
+            f"còn thư mục cũ {leftover} ({sum((inventory['by_split_generator'] or {})[k] for k in leftover)} map) "
+            "— chạy `::relabel --apply` trước khi train, nếu không `fake` trộn với generator thật"
+        )
+
+    # 2. CI không phủ điểm ước lượng. Sau khi sửa `metrics.evaluate` điều này không
+    #    còn xảy ra; nếu vẫn thấy thì đó là số cũ (ghi trước bản sửa) — đừng trích dẫn.
+    for tag, row in sorted({**train_by_gen, **eval_by_gen}.items()):
+        acc, ci = row.get("acc"), row.get("acc_ci95")
+        if isinstance(acc, (int, float)) and isinstance(ci, (list, tuple)) and len(ci) == 2:
+            if not (ci[0] <= acc <= ci[1]):
+                out.append(
+                    f"{tag}: acc {acc:.3f} nằm **ngoài** CI {ci} — số ghi bởi bản cũ "
+                    "(CI tính tại 0,5, ACC tại ngưỡng val); chạy lại `::train`/`::evaluate`"
+                )
+
+    # 3. Ngưỡng quá sát 0,5 ⇒ detector gần như không phân biệt được; ACC khi đó là
+    #    hệ quả của một ngưỡng may mắn, không phải của chất lượng map.
+    for tag, row in sorted(train_by_gen.items()):
+        acc, acc05 = row.get("acc"), row.get("acc_at_0.5")
+        if isinstance(acc, (int, float)) and isinstance(acc05, (int, float)) and abs(acc - acc05) > 0.10:
+            out.append(
+                f"{tag}: acc tại ngưỡng {acc:.3f} lệch acc@0,5 {acc05:.3f} > 10 điểm "
+                "— detector chưa hiệu chuẩn; đọc ACC kèm AP/AUC, đừng đọc riêng ACC"
+            )
+
+    # 4. Cỡ mẫu thật, thay cho con số 200 chép tay.
+    ns = [row.get("n") for row in eval_by_gen.values() if isinstance(row.get("n"), int)]
+    if ns:
+        n = min(ns)
+        # nửa độ rộng CI 95 % cho tỉ lệ quanh 0,8: 1,96·√(p(1−p)/n) ≈ 0,78/√n
+        out.append(f"n nhỏ nhất trong bảng = {n} ⇒ nửa độ rộng CI 95 % ≈ ±{0.78 / max(n, 1) ** 0.5 * 100:.1f} điểm ACC")
+
+    if train_by_gen:
+        out.append("detector khởi tạo ngẫu nhiên (`init=scratch`), không ImageNet như bài báo")
+    gens = sorted({str(r.get("n_fake")) for r in train_by_gen.values()})
+    if len(gens) == 1 and list(train_by_gen) == ["gen-adm"]:
+        out.append("một checkpoint ADM duy nhất ⇒ chỉ đo in-distribution (ADM), không đo cross-model")
+    return out
+
+
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
 def report() -> dict:
     """Gom `gen/dire/train` thành một báo cáo có nhãn mức tái lập và cảnh báo."""
@@ -1328,32 +1391,47 @@ def report() -> dict:
         return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
 
     dire_json = read("dire")
+    train_json = read("train")
+    eval_json = _read_json(f"{OUT}/eval.json") or {}
+    inventory = _map_inventory(MAPS)
+    train_by_gen = train_json.get("by_generator", {})
+    eval_by_gen = eval_json.get("by_tag", {})
     payload = {
-        "label": _read_json(DATA_CARD).get("label", "R1+R2+R3 (clean-room)"),
+        "label": _read_json(DATA_CARD).get("label", "R1+R2"),
         "what_is_ours": ["DIRE map", "detector", "ảnh sinh"],
         "what_is_not": ["trọng số ADM (OpenAI)", "LSUN-Bedroom (dữ liệu thật)", "kiến trúc U-Net/ResNet"],
         "gen": {k: v for k, v in read("gen").items() if k in ("n", "steps", "nfe_total", "seconds")},
-        "dire": {k: v for k, v in dire_json.items()
-                 if k in ("n", "steps", "steps_mixed", "nfe_total", "seconds", "n_new", "n_reused")},
+        "dire": {
+            **{k: v for k, v in dire_json.items()
+               if k in ("n", "steps", "steps_mixed", "nfe_total", "seconds")},
+            # `n` là số **map phân biệt** (`len(by_path)`), còn `n_new`/`n_reused` là
+            # **tổng cộng dồn qua mọi lượt chạy**. Một map tính ở lượt trước rồi dùng
+            # lại ở lượt sau được đếm ở cả hai phía, nên `n_new + n_reused > n` là
+            # bình thường. Bản trước in ba số cạnh nhau mà không nói gì, đọc ra như
+            # một phép cộng sai.
+            "n_distinct_maps": dire_json.get("n"),
+            "n_new_cumulative": dire_json.get("n_new"),
+            "n_reused_cumulative": dire_json.get("n_reused"),
+            "n_runs": len(dire_json.get("runs") or []),
+            "n_note": ("n_distinct_maps = số `.npy` phân biệt; n_new/n_reused cộng dồn mọi "
+                       "lượt chạy nên tổng của chúng lớn hơn n_distinct_maps là bình thường"),
+        },
         # Tồn kho map **thực tế trên đĩa**, không phải điều `dire.json` tự khai:
         # sau khi thêm generator, câu hỏi đúng là "map nào đã có", và một thư mục
         # `fake/` còn sót từ bản cũ sẽ lộ ra ở đây chứ không lộ ở `dire.json`.
-        "maps": _map_inventory(MAPS),
+        "maps": inventory,
         "data": _read_json(DATA_CARD),
-        "train": {k: v for k, v in read("train").items()
-                  if k in ("test", "best_epoch", "threshold_from_val", "init", "latest")},
+        "train": {k: v for k, v in train_json.items()
+                  if k in ("test", "best_epoch", "threshold_from_val", "threshold_space",
+                           "threshold_source", "init", "latest", "split")},
         # **Bảng** của Table 2: mỗi generator một detector riêng, không phải một
         # con số gộp. Thiếu mục nào nghĩa là generator đó chưa train.
-        "train_by_generator": read("train").get("by_generator", {}),
+        "train_by_generator": train_by_gen,
         # Điểm đã chấm trên split chấm (mỗi tag một detector) — có `acc_ci95` để
         # không ai đọc chênh lệch 2 điểm thành thứ hạng.
-        "eval_by_generator": (_read_json(f"{OUT}/eval.json") or {}).get("by_tag", {}),
+        "eval_by_generator": eval_by_gen,
         "bench": read("bench"),
-        "warnings": [
-            "ACC trên ~200 ảnh test có CI ±5 điểm — không dùng để so với Table 2",
-            "detector khởi tạo ngẫu nhiên, không ImageNet như bài báo",
-            "một checkpoint ADM duy nhất ⇒ chỉ đo in-distribution (ADM), không đo cross-model",
-        ],
+        "warnings": _report_warnings(inventory, dire_json, train_by_gen, eval_by_gen),
     }
     write_json(f"{OUT}/report.json", payload)
     vol.commit()
