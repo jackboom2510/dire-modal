@@ -691,25 +691,43 @@ Kill **cứng** (OOM, hết `timeout` của container) không chạy được `e
 **Kiểm đã đủ chưa — không cần GPU, không cần nối lại app:**
 
 ```bash
-modal run -m dire_zero.modal_app::maps                 # bảng tồn kho + dòng gợi ý
-modal run -m dire_zero.modal_app::maps --verify 20      # + đọc thử 20 file mỗi ô
+modal run -m dire_zero.modal_app::maps --n 500          # CÙNG --n với lệnh bạn định chạy
+modal run -m dire_zero.modal_app::maps --n 500 --verify 20
 ```
 
 ```text
 ô                               ảnh    cần    map  thiếu  %
 test/adm                          500    500    500      0  100.0
-test/real                         500    500    500      0  100.0
 train/adm                         500    500    320    180   64.0
 train/real                        500    500    500      0  100.0
 
-tổng: 1820 map · thiếu 180 · train được: CHƯA
-  ! train/adm: thiếu 180 map (320/500) — chạy `::dire --generator adm --skip-existing`
-lần chạy gần nhất: 2026-11-17T18:40:12Z · 320 map mới
+tổng: 1820 map · thiếu 180 · ~0.18 GPU-h ≈ 0.20 USD (S=20, dùng lại 1820 map đã có)
+  ! train/real: thiếu 60 map — chạy bất kỳ lệnh `::dire` nào với `--skip-existing`
+  ! test/fake: còn thư mục `fake/` từ bản cũ — chạy `::relabel --apply` trước khi train
+
+chạy tiếp (1 lệnh, mỗi lệnh đã có --skip-existing):
+  modal run -m …::dire --n 500 --steps 20 --splits test,train --skip-existing --generator adm  # …
 ```
 
-`--n` được hiểu đúng như `::dire` cắt theo từng ô. `--verify` đọc thử bằng
-`np.load`: file ghi **dở** do bị kill vẫn tồn tại và **khác rỗng**, nên đếm file
-là chưa đủ — một `.npy` cụt sẽ làm `::train` nổ giữa epoch.
+**`--n` PHẢI khớp `::dire`.** Đây là lỗi đã xảy ra thật: chạy `::maps` trần trên
+cây 40 000 ảnh/ô ⇒ "thiếu 212 583 map". Đúng về số học, vô dụng về quyết định —
+không ai định tính map cho 212 583 ảnh, và con số đó không nói phải chạy lệnh gì.
+Mặc định nay là **2 000**, đúng mặc định của `::dire`; `--n 0` mới là "cả cây".
+
+**Không có `--generator real`.** `real` không phải generator hợp lệ (nó có mặt
+trong **mọi** lệnh `::dire`), nên bản đầu của `::maps` in ra một lệnh không chạy
+được. Nay dòng gợi ý cho `real` chỉ nói "chạy bất kỳ lệnh `::dire` nào với
+`--skip-existing`", và có test chặn đúng chuỗi đó.
+
+**In luôn lệnh chạy tiếp**, dùng chung `group_generators` + `plan_commands` với
+cổng thời gian của `::dire` ⇒ nếu phần còn thiếu vượt 4,5 h thì nó chia nhóm hệt
+như `::dire` sẽ làm, thay vì để người đọc tự chia.
+
+`--verify` đọc thử bằng `np.load`: file ghi **dở** do bị kill vẫn tồn tại và
+**khác rỗng**, nên đếm file là chưa đủ — một `.npy` cụt sẽ làm `::train` nổ giữa
+epoch. `::maps` cũng cảnh báo **mất cân bằng lớp** (ví dụ `test/midjourney` 100
+ảnh vs `test/real` 1 000 ⇒ 10:1): recall của dòng đó phản ánh số mẫu, không phải
+chất lượng DIRE.
 
 Ba cách kiểm nhanh khác, không cần chạy hàm nào:
 
