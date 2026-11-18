@@ -603,8 +603,9 @@ def page_paper() -> None:
 
     st.markdown("### Ba điều kiện để so được với bảng đó — cả ba đang thiếu")
     st.table([
-        {"Điều kiện": "1 000 ảnh mỗi ô", "Repo hiện có": "200 (`--n 200`)", "Hệ quả": "khoảng tin cậy rộng hơn"},
-        {"Điều kiện": "8 generator", "Repo hiện có": "1 (`adm`)", "Hệ quả": "chưa có ô nào so được"},
+        {"Điều kiện": "1 000 ảnh mỗi ô", "Repo hiện có": "500 (`--n 500`)", "Hệ quả": "CI ±2,5 điểm thay vì ±1,8"},
+        {"Điều kiện": "8 generator", "Repo hiện có": "3/8 cột (`adm`, `ddpm`, `iddpm`)",
+         "Hệ quả": "chưa có ô SD-v1/SD-v2/LDM/VQDiff"},
         {"Điều kiện": "detector ImageNet pretrained", "Repo hiện có": "`init=\"scratch\"`", "Hệ quả": "thấp hơn bảng, không cùng cấu hình"},
     ])
 
