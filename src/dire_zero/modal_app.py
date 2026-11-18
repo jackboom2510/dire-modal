@@ -64,10 +64,22 @@ image = (
     .pip_install("torch==2.4.0", "numpy==1.26.4", "pillow==10.4.0")
     .add_local_python_source("dire_zero")
     # `::gallery` chạy đúng `tools/make_gallery.py` của repo (một nguồn sự thật cho
-    # định dạng `.json` mà `demolib/provenance.py` đọc). Chỉ một tệp, không kéo
-    # theo gì khác; máy Windows không phải tải 800 MB map về để dựng 64 mẫu.
+    # định dạng `.json` mà `demolib/provenance.py` đọc). Máy Windows không phải tải
+    # 800 MB map về để dựng 64 mẫu.
+    #
+    # `demolib/` phải đi kèm, và phải **đúng chỗ**: `make_gallery.py` tự thêm
+    # `<repo>/platforms/hf-spaces` vào `sys.path` rồi `from demolib import provenance`.
+    # Mount mỗi tệp tool mà quên thư viện ⇒ container chết ngay ở dòng import:
+    #
+    #     File "/root/tools/make_gallery.py", line 55, in <module>
+    #         from demolib import provenance
+    #     ModuleNotFoundError: No module named 'demolib'
+    #
+    # Đây là toàn bộ `demolib` (6 tệp, thuần stdlib + numpy), không phải cả Space.
     .add_local_file(Path(__file__).resolve().parents[2] / "tools" / "make_gallery.py",
                     "/root/tools/make_gallery.py")
+    .add_local_dir(Path(__file__).resolve().parents[2] / "platforms" / "hf-spaces" / "demolib",
+                   "/root/platforms/hf-spaces/demolib")
 )
 
 app = modal.App(APP_NAME, image=image)

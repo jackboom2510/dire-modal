@@ -92,6 +92,12 @@ python tools/make_gallery.py \
     --map-source "maps/test/*.npy · ::dire --steps 20"
 ```
 
+Cách 1 mount **hai** thứ vào container: `tools/make_gallery.py` và
+`platforms/hf-spaces/demolib/` (đặt ở `/root/platforms/hf-spaces/demolib` — đúng
+chỗ `make_gallery.py` thêm vào `sys.path`). Mount thiếu thư viện thì container
+chết ngay ở dòng `from demolib import provenance`; `tests/test_make_gallery.py`
+dựng lại bố cục đó và chạy thật để chặn tái phát.
+
 `--orig` trỏ tới `data/<split>/<generator>/`, **không** phải `images/…`: ảnh gốc
 được `::dire` đọc từ `data/` (cây chuẩn hoá), và đó là nơi duy nhất có tên tệp
 khớp với tên `.npy`.

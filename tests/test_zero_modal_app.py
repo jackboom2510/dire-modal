@@ -1179,3 +1179,39 @@ def test_report_flags_an_eval_made_with_a_different_detector(tmp_path, monkeypat
     text = " | ".join(modal_app.report.local()["warnings"])
     assert "eval.json" in text and "detector" in text
     assert "CŨ" in text
+
+
+def test_image_mounts_demolib_at_the_path_make_gallery_imports_from():
+    """`::gallery` mount **một tệp** tool — và lần đầu, chỉ thế là đủ để chết.
+
+    Container đã trả về::
+
+        File "/root/tools/make_gallery.py", line 55, in <module>
+          from demolib import provenance
+        ModuleNotFoundError: No module named 'demolib'
+
+    `make_gallery.py` tự thêm ``<repo>/platforms/hf-spaces`` vào `sys.path`, nên
+    `demolib/` phải được mount ở **đúng** đường đó, không phải chỗ nào tiện.
+    Ở máy không thấy gì vì repo ở ngay cạnh — chỉ container mới lộ.
+    """
+    import ast
+
+    src_file = Path(modal_app.__file__).resolve()
+    tree = ast.parse(src_file.read_text(encoding="utf-8"))
+    mounts = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and getattr(node.func, "attr", "") == "add_local_dir":
+            local_expr, remote_expr = node.args[0], node.args[1]
+            local = eval(  # noqa: S307 - biểu thức của chính repo, không phải input
+                compile(ast.Expression(local_expr), str(src_file), "eval"),
+                {"Path": Path, "__file__": str(src_file)},
+            )
+            mounts.append((Path(local), ast.literal_eval(remote_expr)))
+
+    expected_local = src_file.parents[2] / "platforms" / "hf-spaces" / "demolib"
+    assert (expected_local, "/root/platforms/hf-spaces/demolib") in mounts, (
+        f"thiếu mount `demolib` cho `::gallery`; đang có: {mounts}"
+    )
+    # và thư mục đó phải thật sự tồn tại, nếu không Modal chỉ lỗi lúc build
+    assert expected_local.is_dir()
+    assert (expected_local / "provenance.py").is_file()

@@ -215,3 +215,97 @@ def test_literal_angle_brackets_are_explained_too(tmp_path):
                            "--out", str(tmp_path / "g")])
     msg = str(exc.value)
     assert "chuyển" in msg and "hướng stdin" in msg
+
+
+# ---------------------------------------------------------------------------
+# Chạy được **một mình** trong container, không có repo xung quanh.
+#
+# `::gallery` không tải cả repo lên Modal: nó mount đúng `tools/make_gallery.py`
+# (và bây giờ là `demolib/`). Lần đầu chỉ mount tệp tool, và container chết ngay:
+#
+#     File "/root/tools/make_gallery.py", line 55, in <module>
+#       from demolib import provenance
+#     ModuleNotFoundError: No module named 'demolib'
+#
+# Ở máy thì không thấy gì, vì repo ở ngay đó. Hai test dưới dựng lại đúng bố cục
+# container (chỉ `tools/` + `platforms/hf-spaces/demolib`) và chạy bằng subprocess
+# với `-I`, nên `sys.path` chỉ còn đường mà chính tool tự thêm.
+# ---------------------------------------------------------------------------
+
+DEMOLIB = REPO / "platforms" / "hf-spaces" / "demolib"
+
+
+def _container_root(tmp: Path, with_demolib: bool = True) -> Path:
+    """Bố cục y như `modal_app.image`: `/root/tools` + `/root/platforms/hf-spaces`."""
+    import shutil
+
+    root = tmp / "root"
+    (root / "tools").mkdir(parents=True)
+    shutil.copy2(REPO / "tools" / "make_gallery.py", root / "tools" / "make_gallery.py")
+    if with_demolib:
+        shutil.copytree(DEMOLIB, root / "platforms" / "hf-spaces" / "demolib")
+    return root
+
+
+def _run_isolated(root: Path, tmp: Path, *args: str):
+    import os
+    import subprocess
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    return subprocess.run(
+        [sys.executable, "-I", str(root / "tools" / "make_gallery.py"), *args],
+        cwd=tmp, env=env, capture_output=True, text=True, timeout=120,
+    )
+
+
+def test_tool_runs_with_only_the_two_mounted_paths(tmp_path):
+    """Đúng những gì container có: tệp tool + `demolib/`. Không repo, không cwd."""
+    root = _container_root(tmp_path)
+    r = _run_isolated(root, tmp_path, "--help")
+    assert r.returncode == 0, r.stderr
+    assert "--maps" in r.stdout
+
+
+def test_missing_demolib_names_the_mount_instead_of_a_bare_import_error(tmp_path):
+    """Thiếu thư viện thì thông báo phải nói *thiếu cái gì, ở đâu* — lỗi cũ chỉ có
+    `ModuleNotFoundError: No module named 'demolib'` kèm stack của importlib."""
+    root = _container_root(tmp_path, with_demolib=False)
+    r = _run_isolated(root, tmp_path, "--help")
+    assert r.returncode != 0
+    assert "demolib" in r.stderr
+    assert "mount" in r.stderr
+    assert "ModuleNotFoundError" not in r.stderr    # thay bằng thông báo có chỉ dẫn
+
+
+def test_full_build_works_with_only_the_mounted_tree(tmp_path):
+    """Không chỉ `--help`: dựng thật, trong bố cục container. Nếu `numpy`/`PIL` được
+    import ở cấp module thì container (image chỉ có torch/numpy/pillow) sẽ chết ở
+    đây chứ không phải ở `--help`."""
+    import shutil
+
+    root = _container_root(tmp_path)
+    work = tmp_path / "vol"
+    maps, orig = work / "maps" / "test", work / "data" / "test"
+    rng = np.random.default_rng(1)
+    from PIL import Image
+
+    for cls in ("real", "adm"):
+        (maps / cls).mkdir(parents=True)
+        (orig / cls).mkdir(parents=True)
+        for i in range(2):
+            np.save(maps / cls / f"{cls}_{i}.npy",
+                    (rng.random((256, 256)) * 2.0).astype("float16"))
+            Image.fromarray((rng.random((256, 256)) * 255).astype("uint8")).save(
+                orig / cls / f"{cls}_{i}.png")
+
+    out = tmp_path / "gallery"
+    r = _run_isolated(
+        root, tmp_path,
+        "--maps", str(maps), "--orig", str(orig), "--out", str(out),
+        "--n", "2", "--steps", "20", "--label", "R1+R2",
+        "--map-source", "test/*.npy · ::dire --steps 20",
+    )
+    assert r.returncode == 0, r.stderr + r.stdout
+    made = sorted(p.name for p in out.glob("*.json"))
+    assert len(made) == 4, made
+    shutil.rmtree(work, ignore_errors=True)
