@@ -66,7 +66,7 @@ không có secret thì `/healthz` báo `auth: "disabled"` và endpoint mở.
 
 Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **eval checkpoint tác giả**, bỏ hẳn khoản $8–20 của A100).
 
-> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/full-paper-reproduction-plan.md)** — toàn bộ bảng/ablation, inventory dữ liệu, clean-room, train/evaluate matrix, robustness và audit; không cắt quy mô vì trần thời gian/chi phí.
+> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/full-paper-reproduction-plan.md)** — phạm vi bảng/ablation, clean-room, train/evaluate matrix và audit. Đã có dữ liệu/artefact thì bắt đầu bằng **[runbook tiếp tục từ trạng thái hiện có](docs/full-paper-continuation-runbook.md)**: inventory, resume theo đợt, các cổng và thiếu sót cần xử lý trước khi gọi kết quả là đầy đủ.
 
 > **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
 > Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
