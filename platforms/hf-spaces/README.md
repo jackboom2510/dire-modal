@@ -6,6 +6,7 @@ colorTo: gray
 sdk: gradio
 sdk_version: 6.32.0
 app_file: gradio_app.py
+suggested_hardware: cpu-basic
 pinned: false
 license: mit
 short_description: DIRE map, nguồn gốc từng con số, và một phép đo chạy thật
@@ -102,6 +103,13 @@ dựng lại bố cục đó và chạy thật để chặn tái phát.
 được `::dire` đọc từ `data/` (cây chuẩn hoá), và đó là nơi duy nhất có tên tệp
 khớp với tên `.npy`.
 
+Map do `::dire` ghi có shape **`(3, 256, 256)`** — ba kênh của `|x − x̂|`, không
+phải ảnh xám. Tool vẽ nguyên ba kênh thành PNG RGB (`<tên>_diff.png`), không trộn
+thành xám: mỗi kênh là một phép đo riêng, trộn lại là bịa thêm một đại lượng không
+có trong `.npy`. Đổi lại, `(256, 256)` và `(1, 256, 256)` vẫn được nhận (map một
+kênh), và con số trong `.json` (`display.channels`) nói rõ ảnh đang xem có 1 hay 3
+kênh.
+
 Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/demo-web-plan.md`
 §5) đã chạy; mặc định `--gate failed` nên **không** điểm nào được hiện.
 
@@ -114,7 +122,7 @@ export HF_USER=jackboom2510            # tài khoản Hugging Face của bạn
 export SPACE=dire-demo                 # tên Space (sẽ tạo)
 export REPO="$HOME/dire-modal"         # thư mục repo này
 
-# 0. Kiểm máy (1 giây) — bắt đúng lỗi SSL_CERT_FILE bên dưới trước khi nó xảy ra
+# 0. Kiểm máy + hardware của Space (1 giây) — bắt đúng hai lỗi bên dưới
 python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE"
 
 # 1. Space mới (SDK gradio, hardware CPU basic)
@@ -168,7 +176,41 @@ Không muốn sửa gì: tạo Space bằng web UI **không đi qua httpx của 
 <https://huggingface.co/new-space> (SDK *Gradio*, hardware *CPU basic*), rồi
 `git clone`/`git push` như bước 2 (git dùng CA riêng của nó, không đọc biến trên).
 
-`python tools/hf_space_preflight.py` kiểm đúng ba thứ này và in lệnh sửa.
+### `No @spaces.GPU function detected during startup` — không phải lỗi app
+
+Space báo:
+
+```text
+Runtime Error
+No @spaces.GPU function detected during startup
+```
+
+ZeroGPU (hardware `zero-a10g`) **từ chối khởi động** khi trong Space không có hàm
+nào trang trí `@spaces.GPU`. Nó kiểm tra điều đó *trước khi* import
+`gradio_app.py`, nên log container không có traceback, không nhắc tới code — chỉ
+có đúng một dòng này.
+
+App này chạy trên CPU; GPU chỉ được dùng **qua Modal** (tab 2, mặc định tắt). Vì
+vậy cấu hình đúng là CPU basic, không phải ZeroGPU:
+
+```text
+Space → Settings → Space hardware → CPU basic (free) → Factory reboot
+```
+
+Hoặc bằng CLI (cần token):
+
+```bash
+python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE" --fix-hardware
+```
+
+Thêm `@spaces.GPU` cho có là **sai**: nó khiến ZeroGPU cấp GPU mà app không dùng,
+và che mất sự thật rằng Space này không cần GPU. `suggested_hardware: cpu-basic`
+trong front-matter chỉ là gợi ý khi ai đó duplicate Space; hardware thật vẫn phải
+đặt trong *Settings*.
+
+`python tools/hf_space_preflight.py --space "$HF_USER/$SPACE"` kiểm bốn thứ —
+biến CA, token, `git`/`hf`, và hardware của Space — rồi in lệnh sửa cho từng
+cái. Bỏ `--space` thì chỉ kiểm máy.
 
 `README.md` của thư mục này là front-matter của Space: `sdk: gradio`,
 `app_file: gradio_app.py`. Nếu HF báo `sdk_version 6.32.0` không hợp lệ, chọn bản

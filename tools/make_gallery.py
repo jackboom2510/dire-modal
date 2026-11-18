@@ -4,8 +4,9 @@
 Vì sao cần một tool riêng
 -------------------------
 Space chạy trên CPU free, nên nó **không** tính DIRE lúc chạy: map phải có sẵn.
-Nhưng "có sẵn" không có nghĩa là "có ảnh" — `::dire` lưu `.npy` float16 thang
-`[0, 2]`, thứ mà trình duyệt không đọc được. Tool này làm đúng ba việc:
+Nhưng "có sẵn" không có nghĩa là "có ảnh" — `::dire` lưu `.npy` float16, thang
+`[0, 2]`, shape **`(3, 256, 256)`** (ba kênh của `|x − x̂|`, không phải ảnh xám),
+thứ mà trình duyệt không đọc được. Tool này làm đúng ba việc:
 
 1. chọn mẫu **tất định** (sort rồi lấy đều, không `random`) để chạy lại cho ra
    cùng một gallery;
@@ -25,7 +26,7 @@ Ví dụ
 
     python tools/make_gallery.py \\
         --maps  /vol/maps/test \\
-        --orig  /vol/images/test \\
+        --orig  /vol/data/test \\
         --out   platforms/hf-spaces/gallery \\
         --n 8 --steps 20 --label R1+R2 \\
         --map-source "maps/test/*.npy · ::dire --steps 20" \\
@@ -86,19 +87,57 @@ def pick(items: list[Path], n: int) -> list[Path]:
     return [items[min(len(items) - 1, int(i * step))] for i in range(n)]
 
 
-def map_to_png(npy: Path, png: Path, gamma: float) -> None:
+#: Những bố cục `map_to_png` chấp nhận, sau khi chuẩn hoá.
+#: `::dire` ghi ``dm.squeeze(0)``, tức **(3, 256, 256)** cho ảnh RGB — không phải
+#: ảnh xám. Bản đầu của tool chỉ nhận `(256, 256)` và vì thế chết trên dữ liệu
+#: thật của chính repo:
+#:
+#:     ValueError: 004006349103115c.npy: shape (3, 256, 256), cần (256, 256)
+ACCEPTED = "(256, 256) hoặc (3, 256, 256) [::dire ghi (3, 256, 256) cho ảnh RGB]"
+
+
+def _canonical_map(arr):
+    """Đưa map về ``(H, W)`` hoặc ``(3, H, W)``; **không** trộn kênh.
+
+    Không lấy trung bình ba kênh: PNG là để *xem*, và ba kênh của ``|x − x̂|``
+    là ba phép đo riêng. Trộn chúng thành ảnh xám là bịa ra một đại lượng không
+    có trong `.npy`. Hỗ trợ thêm ``(H, W, C)`` vì một số tool khác lưu kênh cuối.
+    """
+    import numpy as np
+
+    if arr.ndim == 3 and arr.shape[0] == 1:
+        return arr[0]
+    if arr.ndim == 3 and arr.shape[-1] in (1, 3) and arr.shape[:2] == (SIZE, SIZE):
+        return arr[..., 0] if arr.shape[-1] == 1 else np.moveaxis(arr, -1, 0)
+    return arr
+
+
+def map_to_png(npy: Path, png: Path, gamma: float) -> str:
+    """Vẽ map thành PNG **chỉ để xem**; trả ``"L"`` hoặc ``"RGB"`` (mode đã ghi)."""
     import numpy as np
     from PIL import Image
 
-    arr = np.load(npy)
-    if arr.ndim == 3 and arr.shape[0] == 1:
-        arr = arr[0]
-    if arr.shape != (SIZE, SIZE):
-        raise ValueError(f"{npy.name}: shape {arr.shape}, cần {(SIZE, SIZE)}")
+    raw = np.load(npy)
+    arr = _canonical_map(raw)
+    if arr.shape == (SIZE, SIZE):
+        mode = "L"
+    elif arr.shape == (3, SIZE, SIZE):
+        mode = "RGB"
+    else:
+        raise ValueError(
+            f"{npy.name}: shape {raw.shape} — cần {ACCEPTED}.\n"
+            "  `.npy` do `::dire` sinh ra có 3 kênh; nếu đây là map tự tạo, kiểm"
+            " lại trục kênh (channel-first) và kích thước 256×256."
+        )
     v = np.clip(arr.astype("float32") / MAP_MAX, 0.0, 1.0)
     if gamma != 1.0:
         v = v ** gamma
-    Image.fromarray((v * 255.0 + 0.5).astype("uint8"), mode="L").save(png, optimize=True)
+    data = (v * 255.0 + 0.5).astype("uint8")
+    if mode == "RGB":
+        # PIL nhận ảnh màu ở dạng (H, W, 3); map lưu channel-first như torch.
+        data = np.moveaxis(data, 0, -1)
+    Image.fromarray(data, mode=mode).save(png, optimize=True)
+    return mode
 
 
 def copy_orig(src: Path, dst: Path) -> None:
@@ -210,10 +249,11 @@ def build(args) -> list[dict]:
             name = f"{args.prefix}{cls}_{npy.stem}"
             orig_png = out / f"{name}_orig.png"
             diff_png = out / f"{name}_diff.png"
+            diff_mode = "L"
             if not args.dry_run:
                 out.mkdir(parents=True, exist_ok=True)
                 copy_orig(src, orig_png)
-                map_to_png(npy, diff_png, args.gamma)
+                diff_mode = map_to_png(npy, diff_png, args.gamma)
 
             meta = {
                 "name": name,
@@ -231,6 +271,10 @@ def build(args) -> list[dict]:
                 "display": {
                     "png_is_display_only": True,
                     "scale": f"[0, {MAP_MAX}] → uint8, gamma {args.gamma}",
+                    "channels": 3 if diff_mode == "RGB" else 1,
+                    "channel_order": "RGB" if diff_mode == "RGB" else "",
+                    "note": ("PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám"
+                             if diff_mode == "RGB" else "map một kênh"),
                     "authoritative": ".npy",
                 },
                 "source_image": str(src),
