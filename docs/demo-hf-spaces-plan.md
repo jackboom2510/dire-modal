@@ -1,6 +1,8 @@
-# Kế hoạch chạy demo trên HF Spaces (Streamlit)
+# Kế hoạch chạy demo trên HF Spaces (Gradio)
 
-- **Trạng thái:** kế hoạch + app đã viết và chạy thử · **Ngày:** 2026-11-17
+- **Trạng thái:** kế hoạch + app đã viết và chạy thử · **Ngày:** 2026-11-17 (cập nhật 2026-10-14: quay lại Gradio)
+- **UI hiện tại:** `platforms/hf-spaces/gradio_app.py` (Gradio, 5 tab) — bản
+  Streamlit cũ vẫn còn ở `app.py` và vẫn chạy được; xem §0b.
 - **Liên quan:** `docs/demo-web-plan.md` (§2 lỗi phải sửa, §3 ba chế độ, §5 cổng
   kiểm), `platforms/hf-spaces/` (mã), `tools/make_gallery.py` (dựng gallery),
   `docs/from-zero-clean-room.md` (§3.6 về `--n` và ước lượng tiền), ADR-0003
@@ -8,6 +10,42 @@
   và không nói dối — cần những gì, theo thứ tự nào, kiểm bằng gì.*
 
 ---
+
+## 0b. Đổi UI về Gradio (2026-10) — cái gì đổi, cái gì **không**
+
+Yêu cầu: quay lại demo dùng **Gradio** thay cho Streamlit. Đã làm, và giới hạn
+quan trọng là: **chỉ đổi cách bày, không đổi một con số nào**.
+
+| Đổi | Cụ thể |
+|---|---|
+| UI | `gradio_app.py`, 5 tab; front-matter của Space là `sdk: gradio`, `app_file: gradio_app.py` |
+| Phụ thuộc | `requirements.txt` = `gradio==6.32.0`; Streamlit chuyển sang `requirements-streamlit.txt` |
+| Lý do chọn Gradio | hàng đợi, trạng thái phiên và nút *Restart* do SDK lo; bản Streamlit phải tự xử ba thứ đó |
+| Bản Streamlit | **giữ**, ở `app.py`; đổi một dòng front-matter là quay lại được |
+
+**Không** đổi:
+
+- **Tab upload ảnh → `P(fake)` vẫn bị bỏ.** Đây là lỗi của bản Gradio *đầu tiên*,
+  và là lý do nó từng bị thay (`demo-web-plan.md` §2). Tab *Tính DIRE thật* của bản
+  mới nhận ảnh nhưng chỉ trả **DIRE map**, kèm câu "đây là map, không phải kết luận
+  thật/giả". Có test chặn: `test_the_upload_path_returns_a_map_never_a_probability`.
+- Cổng hiện điểm vẫn là `provenance.Sample.score()`, không phải `if` viết trong
+  giao diện — test `test_gallery_page_uses_the_shared_gate_not_its_own_if` so hai
+  trạng thái cổng trên cùng một `.json`.
+- Hai UI dùng chung `demolib/`, nên thí nghiệm 2 chiều, lịch/chi phí và gallery
+  cho ra **cùng** số.
+
+Số đo trên máy này (Python 3.11, `gradio==6.32.0`):
+
+| Phép đo | Kết quả |
+|---|---|
+| Kích thước `site-packages/gradio` | **82 MB** (66 MB là `templates/`) — vẫn nhỏ hơn torch ~200 MB |
+| `import gradio` | **2,17 s** (Streamlit: 0,27 s) |
+| `build_app()` | **0,48 s** |
+| Test của bản Gradio | **9 test** (`tests/test_hf_spaces_gradio.py`) |
+
+Cold start thật của Space **chưa đo** — như §4, chỉ biết sau lần deploy đầu; đừng
+trích dẫn con số nào khác.
 
 ## 0. Kết luận trước, chi tiết sau
 

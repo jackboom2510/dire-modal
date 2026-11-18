@@ -1,8 +1,11 @@
-# HF Spaces (CPU free) — đúng một phụ thuộc, có lý do.
+# HF Spaces (CPU free) — UI chính là Gradio.
 #
-# Không torch, không torchvision, không gradio:
-#   * Space này KHÔNG chấm ảnh và KHÔNG tính DIRE lúc chạy — map đã tính sẵn;
-#   * bỏ torch cắt cold start từ ~40 s xuống ~2 s và bỏ 800 MB cài đặt;
-#   * bỏ gradio vì UI viết lại bằng Streamlit (xem docs/demo-hf-spaces-plan.md §3).
-# Thêm một gói ở đây là thêm một tầng có thể hỏng lúc build — cân nhắc trước.
-streamlit==1.67.0
+# Vì sao KHÔNG có torch, torchvision, matplotlib:
+#   * Space này KHÔNG chấm ảnh RGB và KHÔNG tự tính DIRE trên CPU — map đã tính sẵn;
+#   * tab "Tính DIRE thật" gọi endpoint GPU trên Modal (chỉ `urllib` của thư viện chuẩn);
+#   * bỏ torch cắt cold start và ~800 MB cài đặt. Bản Streamlit trước đây cũng vì
+#     lý do này mà chỉ có một phụ thuộc.
+#
+# `demolib/charts.py` vẽ SVG thuần nên không cần matplotlib.
+# Bản Streamlit (dự phòng) cần thêm: xem `requirements-streamlit.txt`.
+gradio==6.32.0

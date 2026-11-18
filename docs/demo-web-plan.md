@@ -4,8 +4,10 @@
 - **Liên quan:** `platforms/hf-spaces/` (app hiện có), `platforms/site/` (trang
   tĩnh), `docs/figures-plan.md` (dùng chung gallery), `docs/dataset-own.md` (nhãn
   R0/R1+R2/R3), `docs/runbook-free.md` (§ demo), ADR-0003
-- **Đã thực hiện:** app Gradio → app **Streamlit** 5 trang; Tab 1 (upload ảnh →
-  `P(fake)`) đã bị bỏ, không phải sửa. Kế hoạch triển khai, số đo cold start và
+- **Đã thực hiện:** app Gradio → Streamlit 5 trang (2026-11) → **quay lại Gradio**
+  5 tab (2026-10) vì SDK gradio tự lo hàng đợi/phiên/restart. Việc đổi framework
+  **không** đổi một quy tắc nào ở đây: Tab upload ảnh → `P(fake)` vẫn bị bỏ, và
+  tab nhận ảnh của bản mới chỉ trả **DIRE map**. Kế hoạch triển khai, số đo và
   quy trình deploy: **`docs/demo-hf-spaces-plan.md`**.
 - **Mục đích:** chốt *demo làm được gì trên CPU free* trước khi viết thêm UI.
   Repo đã có sẵn một app Gradio; vấn đề không phải "chưa có demo", mà là **app

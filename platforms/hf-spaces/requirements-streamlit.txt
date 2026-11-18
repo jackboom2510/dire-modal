@@ -1,0 +1,6 @@
+# Chỉ dùng khi chạy bản Streamlit (`streamlit run app.py`) hoặc khi đổi front-matter
+# của Space sang `sdk: streamlit` + `app_file: app.py`.
+#
+# Hai UI dùng chung `demolib/`, nên không có khác biệt nào về số giữa hai bản —
+# khác biệt duy nhất là thứ được cài.
+streamlit==1.67.0
