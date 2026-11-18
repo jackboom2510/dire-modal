@@ -130,3 +130,20 @@ def test_price_table_has_the_gpus_we_use():
     assert budget.PRICES["A10G"] == pytest.approx(1.10)
     with pytest.raises(ValueError):
         budget.gpu_hours(10, 0)
+
+
+def test_ci_is_of_the_threshold_that_was_reported():
+    """CI phải là CI **của ACC đã báo cáo**, không phải của ACC@0,5.
+
+    Đây là lỗi đọc được từ một log thật: `acc 0,781` đi kèm `acc_ci95 [0,47, 0,529]`.
+    Một khoảng tin cậy không chứa điểm ước lượng của chính nó là bất khả về mặt
+    toán, nên hoặc ACC sai, hoặc CI sai — và người đọc không có cách nào biết cái nào.
+    """
+    scores = [0.55] * 250 + [0.65] * 250 + [0.75] * 250 + [0.85] * 250
+    labels = [0] * 500 + [1] * 500
+    out = metrics.evaluate(scores, labels, threshold=0.6, seed=3407)
+
+    assert out["acc"] == 0.75 and out["acc_at_0.5"] == 0.5   # hai số khác hẳn nhau
+    assert out["acc_ci95"][0] <= out["acc"] <= out["acc_ci95"][1]
+    assert out["acc_ci95_threshold"] == 0.6
+    assert out["acc_ci95_covers_point"] is True

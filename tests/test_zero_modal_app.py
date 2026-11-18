@@ -1016,3 +1016,61 @@ class _FakeDet:
 
     def load_state_dict(self, _s):
         return self
+
+
+def test_report_says_what_the_cumulative_counters_mean(tmp_path, monkeypatch):
+    """`n`, `n_new`, `n_reused` **không** cộng lại thành một số.
+
+    `n` là số map phân biệt; `n_new`/`n_reused` cộng dồn qua mọi lượt chạy, nên một
+    map tính ở lượt trước rồi dùng lại ở lượt sau bị đếm hai lần. In ba số cạnh
+    nhau mà không nói gì thì người đọc tưởng đó là phép cộng sai — đúng như log
+    của một lượt chạy thật: 5 869 + 2 431 = 8 300 nhưng chỉ có 5 900 map.
+    """
+    data, maps = _tree(tmp_path, {("test", "real"): (10, 10), ("test", "adm"): (10, 10)})
+    out = tmp_path / "runs"
+    out.mkdir()
+    (maps / "dire.json").write_text(json.dumps({
+        "n": 20, "n_new": 5869, "n_reused": 2431, "steps": 20, "steps_mixed": [20],
+        "nfe_total": 234760, "seconds": 25787.41,
+        "runs": [{"created": "a"}, {"created": "b"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+
+    rep = modal_app.report.local()
+    assert rep["dire"]["n_distinct_maps"] == 20
+    assert rep["dire"]["n_new_cumulative"] == 5869
+    assert rep["dire"]["n_reused_cumulative"] == 2431
+    assert rep["dire"]["n_runs"] == 2
+    assert "cộng dồn" in rep["dire"]["n_note"]
+
+
+def test_report_surfaces_a_leftover_fake_dir_and_a_ci_that_cannot_be_true(tmp_path, monkeypatch):
+    """Hai thứ phải hiện thành cảnh báo, không phải để người đọc tự phát hiện:
+
+    * `maps/*/fake/` còn sót ⇒ `fake` sẽ trộn với generator thật khi train;
+    * `acc` nằm ngoài `acc_ci95` ⇒ con số không thể đúng (bản cũ tính CI tại 0,5).
+    """
+    data, maps = _tree(tmp_path, {("test", "real"): (10, 10), ("test", "adm"): (10, 10),
+                                  ("test", "fake"): (0, 7)})
+    out = tmp_path / "runs"
+    out.mkdir()
+    (out / "train.json").write_text(json.dumps({"by_generator": {"gen-adm": {
+        "acc": 0.781, "acc_ci95": [0.788, 0.837], "acc_at_0.5": 0.813, "n": 1000,
+        "ap": 0.911, "auc": 0.890}}}), encoding="utf-8")
+    (out / "eval.json").write_text(json.dumps({"by_tag": {"gen-adm": {
+        "acc": 0.781, "acc_ci95": [0.47, 0.529], "n": 1000, "gate": "passed"}}}),
+        encoding="utf-8")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+
+    warnings = " | ".join(modal_app.report.local()["warnings"])
+    assert "test/fake" in warnings and "relabel" in warnings
+    assert "ngoài" in warnings and "gen-adm" in warnings
+    assert "±" in warnings                      # cỡ mẫu thật, không phải "~200" chép tay

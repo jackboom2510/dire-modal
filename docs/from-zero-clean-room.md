@@ -803,8 +803,9 @@ chạy tiếp lệnh sau là được (mỗi generator đã xong nằm trong th�
 **Bước 2 — đọc bảng, không đọc một số.** `train_by_generator` có `acc` + `acc_ci95`,
 `ap`, `auc`, `n_real`/`n_fake` cho từng generator. Ba điều phải nói khi báo cáo:
 
-* `acc_ci95` rộng cỡ ±5 điểm với ~200 ảnh test ⇒ chênh lệch 2–3 điểm giữa hai
-  generator là **nhiễu**, không phải thứ hạng;
+* `acc_ci95` rộng cỡ ±2,5 điểm với 1 000 ảnh test (±7 điểm với 200) ⇒ chênh lệch
+  2–3 điểm giữa hai generator là **nhiễu**, không phải thứ hạng. `::report` tự
+  tính nửa độ rộng từ `n` thật thay vì chép tay một con số;
 * mỗi detector được train lại từ đầu (`init: scratch`), không ImageNet như bài báo;
 * `midjourney` chỉ có ~100 ảnh/ô ⇒ tỉ lệ 5:1, recall là số yếu và nó phản ánh **số
   mẫu**, không phải chất lượng DIRE. `::train` in cảnh báo khi tỉ lệ > 5:1.
@@ -843,17 +844,38 @@ lần — đó là lý do bước 2 không được bỏ qua.
 
 | Trường | Nghĩa |
 |---|---|
-| `label` | `R1+R2+R3` — ba thành phần đều của mình |
+| `label` | do **người gọi** truyền vào, lấy từ `data_card.json`: `R1+R2` khi ảnh giả là của tác giả, `R1+R2+R3` khi ảnh giả do `::gen` sinh ra |
 | `init` | `scratch` ⇒ **không** nạp ImageNet (bài báo có). Kém hơn là bình thường |
 | `test.acc` | ACC tại ngưỡng chọn trên val |
 | `test.acc_at_0.5` | ACC tại 0,5 — con số so được với Table 2 |
-| `test.acc_ci95` | khoảng tin cậy bootstrap 95 % |
+| `test.acc_ci95` | khoảng tin cậy bootstrap 95 % **của chính `test.acc`** (cùng ngưỡng), kèm `acc_ci95_threshold` và `acc_ci95_covers_point` |
 | `threshold_source` | `val` hay `default (val quá nhỏ)` |
 
 Hai con số ACC có thể lệch nhau nhiều khi mô hình còn non: sigmoid chưa hiệu
 chuẩn (mọi điểm ~0,02) làm ACC@0,5 = 0,5 trong khi AP/AUC = 1,0. Đó là vấn đề
 **hiệu chỉnh**, không phải phân biệt — và báo cáo nào chỉ in một trong hai đều
 gây hiểu sai.
+
+Vì thế `acc_ci95` **phải** là CI của đúng con số đứng cạnh nó. Bản trước tính CI
+tại 0,5 trong khi `acc` tính tại ngưỡng chọn trên val; với detector đã hội tụ hai
+số trùng nhau nên lỗi không lộ, nhưng với detector còn non, log thật cho ra
+`acc 0,781` đi kèm `acc_ci95 [0,47, 0,529]` — một khoảng tin cậy **không chứa**
+điểm ước lượng của chính nó. Không có cách đọc nào làm con số đó đúng. Nay
+`metrics.evaluate` truyền đúng ngưỡng vào bootstrap, ghi `acc_ci95_threshold`, và
+tự đặt cờ `acc_ci95_covers_point`; `::report` biến cờ đó thành cảnh báo.
+
+**Hai cặp số trong `::report` dễ đọc sai:**
+
+```text
+dire.n = 5 900   n_new = 5 869   n_reused = 2 431
+```
+
+`n` là số `.npy` **phân biệt**; `n_new`/`n_reused` **cộng dồn qua mọi lượt chạy**,
+nên một map tính ở lượt trước rồi dùng lại ở lượt sau được đếm ở cả hai phía.
+`5 869 + 2 431 ≠ 5 900` là bình thường, không phải mất map — nhưng bản trước in ba
+số cạnh nhau mà không nói, đọc ra như một phép cộng sai. Nay có
+`n_distinct_maps` / `n_new_cumulative` / `n_reused_cumulative` / `n_runs` và một
+dòng `n_note`.
 
 Ba câu **không** được nói từ kết quả này:
 

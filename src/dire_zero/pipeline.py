@@ -424,6 +424,7 @@ def train(
     init: str = "scratch",
     max_minutes: float | None = None,
     extra: dict | None = None,
+    label: str = "R1+R2",
 ) -> dict:
     """R2 — train detector. Ngưỡng chọn trên **val**, test chấm **một lần** (G6).
 
@@ -507,12 +508,20 @@ def train(
 
     torch.save(model.state_dict(), out / "detector.pth")
     payload = {
-        "label": "R1+R2+R3",
+        # Nhãn do **người gọi** truyền vào, không hardcode. Bản trước ghi cứng
+        # "R1+R2+R3" cho mọi lượt train — trong khi ảnh giả đang dùng là của tác
+        # giả (`fake_source = "author"`), tức R3 **không** phải của mình. Đó là
+        # khai man mức tái lập ngay trong tệp số liệu, và nó chỉ lộ khi đọc `data` card.
+        "label": label,
         "init": init,
         "epochs_run": len(history),
         "best_epoch": best["epoch"],
         "best_val_ap": round(best["ap"], 5),
         "threshold_from_val": best_thr,
+        # Ngưỡng nằm trên thang nào là thông tin bắt buộc: `_score` trả logit,
+        # còn `::evaluate` và `make_gallery` làm việc với xác suất. Không ghi
+        # thang thì hai bên phải đoán, và đoán sai cho ra ACC đúng bằng 0,5.
+        "threshold_space": "logit",
         "threshold_source": thr_source,
         "val_acc_at_threshold": round(best_acc, 5),
         "test": test,

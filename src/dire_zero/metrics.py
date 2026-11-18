@@ -171,6 +171,20 @@ def evaluate(
         "confusion": confusion(scores, labels, threshold),
     }
     if ci:
-        lo, hi = bootstrap_ci(scores, labels, accuracy, seed=seed)
+        # CI phải là CI **của chính đại lượng được báo cáo**. Bản trước gọi
+        # `bootstrap_ci(..., accuracy)` — tức `accuracy(..., threshold=0.5)` — trong
+        # khi `acc` ở trên tính tại `threshold`. Với detector đã hội tụ, ngưỡng val
+        # gần 0,5 nên hai số trùng nhau và lỗi không lộ. Với detector còn non, điểm
+        # dồn sát ngưỡng, hai số lệch hàng chục điểm: `acc 0,781` đi kèm
+        # `acc_ci95 [0,47, 0,529]` — một khoảng tin cậy **không chứa** điểm ước
+        # lượng, tức một con số không thể đúng dưới bất kỳ cách đọc nào.
+        def _acc_at(s: Sequence[float], y: Sequence[int]) -> float:
+            return accuracy(s, y, threshold)
+
+        lo, hi = bootstrap_ci(scores, labels, _acc_at, seed=seed)
         out["acc_ci95"] = [lo, hi]
+        out["acc_ci95_threshold"] = threshold
+        # Cờ tự kiểm: percentile CI có thể hiếm khi không phủ điểm ước lượng, nhưng
+        # nếu điều đó xảy ra thì người đọc phải thấy, không phải tự suy ra.
+        out["acc_ci95_covers_point"] = bool(lo <= out["acc"] <= hi)
     return out
