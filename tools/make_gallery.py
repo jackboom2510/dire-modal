@@ -52,7 +52,18 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "platforms" / "hf-spaces"))
 
-from demolib import provenance  # noqa: E402
+try:
+    from demolib import provenance  # noqa: E402
+except ModuleNotFoundError as exc:  # chỉ xảy ra khi tệp đi một mình, không có thư viện
+    if exc.name != "demolib":
+        raise
+    raise SystemExit(
+        f"không import được `demolib` — tìm ở {REPO / 'platforms' / 'hf-spaces' / 'demolib'}\n"
+        "  Thư viện này ghi/đọc định dạng `.json` của gallery; thiếu nó thì không có gì\n"
+        "  để tự kiểm. Chạy từ repo thì đã có sẵn; trong container thì `demolib/` phải\n"
+        "  được mount cạnh `tools/make_gallery.py` (`::gallery` trong\n"
+        "  `src/dire_zero/modal_app.py` làm việc đó)."
+    ) from None
 
 MAP_MAX = 2.0          # thang lưu của `::dire`, không phải thang hiển thị
 SIZE = 256
