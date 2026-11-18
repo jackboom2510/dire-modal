@@ -50,7 +50,7 @@ KiB/s, so với `e2` (17 file / 1.94 GB / 7.4 h).
 **Đường nhanh hơn Baidu (khi đã có mirror):**
 
 ```bash
-modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2
+modal run -m dire_modal.download::from_hf --repo-id "$HF_USER/$HF_REPO" --tiers e2
 ```
 
 **Cần đúng vài file lẻ, không theo tier:**
@@ -98,7 +98,7 @@ modal run -m dire_modal.download::main \
 **Kiểm:** `modal run -m dire_modal.download::verify` (chỉ đọc `/raw`, không tải
 byte nào) phải in định dạng thật cho từng file hỏng.
 
-**Xem Volume có gì:** `modal volume ls <volume> [path]` — nhưng **chỉ một tầng**,
+**Xem Volume có gì:** `modal volume ls dire-zero [path]` — nhưng **chỉ một tầng**,
 và khi stdout không phải TTY thì nó chỉ in đường dẫn (mất cột size). Cần cả cây
 thì `modal run -m dire_modal.download::tree --path /raw` (thêm `--flat` để ra
 `<size>\t<path>`). Đừng lặp `modal volume ls` bằng bash: mỗi lần là một round-trip

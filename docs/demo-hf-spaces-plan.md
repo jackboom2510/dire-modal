@@ -177,26 +177,38 @@ app_file: app.py
 ## 7. Triển khai, theo thứ tự
 
 ```bash
-# 1. Dựng gallery (một lần, trên máy có DIRE map)
-python tools/make_gallery.py \
-    --maps  <volume>/maps/test --orig <volume>/images/test \
-    --out   platforms/hf-spaces/gallery \
+# Đặt biến trước. Trong bash, `<volume>`/`<user>` KHÔNG phải chỗ trống: `<` là
+# chuyển hướng stdin, nên lệnh chết với "volume: No such file or directory" và
+# python không bao giờ chạy.
+export REPO="$HOME/dire-modal"
+export HF_USER=jackboom2510
+export SPACE=dire-demo
+export VOL=/c/Users/ban/dire-vol    # chỉ cần nếu dựng gallery ở máy (cách 2)
+
+# 1. Dựng gallery — cách 1: ngay trên Volume, không cần đường dẫn
+modal run -m dire_zero.modal_app::gallery --n 8 --steps 20
+modal volume get dire-zero gallery "$REPO/platforms/hf-spaces/gallery"
+
+#    cách 2: ở máy, khi map + ảnh đã tải về ($VOL/maps, $VOL/data)
+python "$REPO/tools/make_gallery.py" \
+    --maps "$VOL/maps/test" --orig "$VOL/data/test" \
+    --out "$REPO/platforms/hf-spaces/gallery" \
     --n 8 --steps 20 --label R1+R2 \
     --map-source "maps/test/*.npy · ::dire --steps 20"
 # không thêm --scores cho tới khi cổng 2 (demo-web-plan.md §5) đã chạy
 
 # 2. Kiểm tại chỗ, chưa cần mạng
-cd platforms/hf-spaces && streamlit run app.py --server.headless true
-pytest <repo>/tests/test_hf_spaces_demo.py <repo>/tests/test_make_gallery.py -q
+cd "$REPO/platforms/hf-spaces" && python gradio_app.py     # hoặc: streamlit run app.py
+python -m pytest "$REPO/tests/test_hf_spaces_gradio.py" "$REPO/tests/test_make_gallery.py" -q
 
-# 3. Tạo Space (SDK streamlit, hardware CPU basic)
-python tools/hf_space_preflight.py --space <user>/dire-demo   # kiểm máy trước
-hf repos create <user>/dire-demo --repo-type space --space-sdk gradio
+# 3. Tạo Space (SDK gradio, hardware CPU basic)
+python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE"   # kiểm máy trước
+hf repos create "$HF_USER/$SPACE" --repo-type space --space-sdk gradio
 
 # 4. Đẩy nội dung
-git clone https://huggingface.co/spaces/<user>/dire-demo /tmp/space
-cp -r . /tmp/space/          # từ platforms/hf-spaces/
-cd /tmp/space && git add -A && git commit -m "DIRE demo (streamlit)" && git push
+git clone "https://huggingface.co/spaces/$HF_USER/$SPACE" /tmp/space
+cp -r "$REPO/platforms/hf-spaces/." /tmp/space/
+cd /tmp/space && git remote -v && git add -A && git commit -m "DIRE demo (gradio)" && git push
 
 # 5. Chờ build; xem log ở tab *Logs* của Space
 ```

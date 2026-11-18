@@ -144,7 +144,7 @@ bash scripts/02_improve.sh --stage baseline   # điểm DIRE trên val (e5) + te
 > `download::main` **tự lặp nhiều vòng** trong một lần gọi (ngân sách 20 h), tính
 > lại file còn thiếu từ đĩa sau mỗi vòng ⇒ không phải gõ lại lệnh ~9 lần. Muốn
 > nhanh hơn hẳn thì phải đổi **nguồn**: mirror lên HF rồi
-> `download::from_hf --repo-id <user>/<repo> --tiers e2`.
+> `download::from_hf --repo-id "$HF_USER/$HF_REPO" --tiers e2`.
 
 ## Kiến trúc
 
@@ -269,14 +269,14 @@ python3 tools/storage_cost.py --from-manifest manifests/raw.tsv
 | `modal run -m dire_modal.download::probe_pair` | Chốt ngữ nghĩa `dire/test/<A>/<B>/` bằng **so từng ảnh** trong tar (~53 MB) |
 | `modal run -m dire_modal.download::main --tiers e2,ckpts --mode fetch` | Tải thật (mặc định là dry-run), **tự lặp vòng tới khi đủ hoặc hết 20 h** |
 | `modal run -m dire_modal.download::main --paths a/b.tar.gz,c/d.tar.gz --mode fetch` | Tải **đúng danh sách file**, không cần tier — vẫn qua `NEVER` + guard dung lượng |
-| `modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2` | Kéo từ mirror HF Hub (**nhanh hơn Baidu 1–2 bậc**) |
+| `modal run -m dire_modal.download::from_hf --repo-id "$HF_USER/$HF_REPO" --tiers e2` | Kéo từ mirror HF Hub (**nhanh hơn Baidu 1–2 bậc**) |
 | `modal run -m dire_modal.download::verify` | Kiểm định dạng thật từng file (gzip **hoặc** tar không nén) |
 | `modal run -m dire_modal.download::prune --tiers e2` | Liệt kê file đã tải thừa (`--mode apply` mới xoá) |
 | `modal run -m dire_modal.download::tree --path /raw` | Cây **toàn bộ** Volume. `--flat` · `--depth N` · `--out` |
 | `modal run -m dire_modal.eval::main --tiers e2 --ckpt /raw/checkpoints/lsun_adm.pth` | Eval 1 checkpoint → CSV + `run.json`; in **CỔNG S2** |
 | `modal run -m dire_modal.eval::report` | Gộp mọi lần eval, in Δ so với Table 2 của paper |
-| `modal run -m dire_modal.archive::push_hf --repo-id <user>/<repo>` | Mirror lên HF |
-| `modal run -m dire_modal.archive::verify_hf --repo-id <user>/<repo>` | Đối chiếu sha256 mirror |
+| `modal run -m dire_modal.archive::push_hf --repo-id "$HF_USER/$HF_REPO"` | Mirror lên HF |
+| `modal run -m dire_modal.archive::verify_hf --repo-id "$HF_USER/$HF_REPO"` | Đối chiếu sha256 mirror |
 | `modal run -m dire_modal.compute_dire::dire_batch --n 200 --dry-run` | Chỉ in ước tính tiền, không bật GPU nào |
 | `modal run -m dire_modal.download::bench_concurrency --tiers e2 --limit 2 --ks 1,2` | Đo băng thông thật ở các mức song song (quyết định `max_containers`) |
 | `modal run -m dire_modal.compute_dire::make_gallery --n 12` | Sinh gallery |x−recon| cho demo |

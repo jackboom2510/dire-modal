@@ -72,14 +72,29 @@ lệnh dựng gallery chứ không hiện ba khung xám giả.
 
 ## Dựng gallery (khi đã có DIRE map)
 
+**Cách 1 — dựng ngay trên Volume (không cần đường dẫn nào):**
+
 ```bash
+modal run -m dire_zero.modal_app::gallery --n 8 --steps 20
+modal volume get dire-zero gallery ./platforms/hf-spaces/gallery
+```
+
+**Cách 2 — chạy ở máy, khi map đã tải về.** Đặt đường dẫn vào biến, đừng gõ
+`<volume>`: trong bash, `<...>` là **chuyển hướng stdin**, không phải chỗ trống.
+
+```bash
+VOL=/c/Users/ban/dire-vol          # thư mục đã `modal volume get dire-zero maps .`
 python tools/make_gallery.py \
-    --maps  <volume>/maps/test \
-    --orig  <volume>/images/test \
+    --maps  "$VOL/maps/test" \
+    --orig  "$VOL/data/test" \
     --out   platforms/hf-spaces/gallery \
     --n 8 --steps 20 --label R1+R2 \
     --map-source "maps/test/*.npy · ::dire --steps 20"
 ```
+
+`--orig` trỏ tới `data/<split>/<generator>/`, **không** phải `images/…`: ảnh gốc
+được `::dire` đọc từ `data/` (cây chuẩn hoá), và đó là nơi duy nhất có tên tệp
+khớp với tên `.npy`.
 
 Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/demo-web-plan.md`
 §5) đã chạy; mặc định `--gate failed` nên **không** điểm nào được hiện.
@@ -87,18 +102,33 @@ Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/demo-web-pl
 ## Deploy (0 ₫)
 
 ```bash
+# Đặt ba biến này trước — đừng gõ `<user>`/`<repo>`: bash hiểu `<...>` là chuyển
+# hướng stdin và báo "No such file or directory", lệnh thật không bao giờ chạy.
+export HF_USER=jackboom2510            # tài khoản Hugging Face của bạn
+export SPACE=dire-demo                 # tên Space (sẽ tạo)
+export REPO="$HOME/dire-modal"         # thư mục repo này
+
 # 0. Kiểm máy (1 giây) — bắt đúng lỗi SSL_CERT_FILE bên dưới trước khi nó xảy ra
-python tools/hf_space_preflight.py --space <user>/dire-demo
+python "$REPO/tools/hf_space_preflight.py" --space "$HF_USER/$SPACE"
 
 # 1. Space mới (SDK gradio, hardware CPU basic)
-hf repos create <user>/dire-demo --repo-type space --space-sdk gradio
+hf repos create "$HF_USER/$SPACE" --repo-type space --space-sdk gradio
 # `hf repo` (số ít) vẫn chạy nhưng đã deprecated — dùng `hf repos`.
 
 # 2. Đẩy nội dung thư mục này lên
-git clone https://huggingface.co/spaces/<user>/dire-demo /tmp/space && cd /tmp/space
-cp -r <repo>/platforms/hf-spaces/. .
+git clone "https://huggingface.co/spaces/$HF_USER/$SPACE" /tmp/space && cd /tmp/space
+cp -r "$REPO/platforms/hf-spaces/." .
 git add -A && git commit -m "DIRE demo (gradio, CPU free)" && git push
+
+# 3. Kiểm trước khi push (2 giây, tránh đẩy nhầm lên GitHub)
+git remote -v      # phải là huggingface.co/spaces/$HF_USER/$SPACE
 ```
+
+Lệnh cuối không thừa: nếu bạn từng gõ `cp -r "$REPO/." .` (thiếu
+`platforms/hf-spaces`), `origin` trong `/tmp/space` sẽ là
+`github.com/jackboom2510/dire-modal` và `git push` đẩy lên **repo gốc**. Thấy vậy
+thì `rm -rf /tmp/space` rồi clone lại — đừng `git remote set-url`, vì `.git` đó
+còn mang toàn bộ lịch sử của `dire-modal`.
 
 ### `hf` chết với `FileNotFoundError: [Errno 2]` — không phải lỗi token
 
@@ -153,7 +183,7 @@ Chi tiết, số đo cold start, cổng kiểm và phương án rollback:
 |---|---|---|
 | `DIRE_GALLERY_DIR` | thư mục gallery, tuyệt đối hoặc tương đối với `app.py` | `gallery` |
 | `DIRE_CKPT` | đường dẫn checkpoint ADM (bật tab DIRE **tại chỗ** của bản Streamlit); cần thêm `torch==2.4.0` | `ckpt/adm_lsun.pt` |
-| `DEMO_URL` | địa chỉ endpoint GPU trên Modal (`https://<ws>--dire-demo-api.modal.run`) — bật trang 3 **qua GPU** | *(trống = tắt)* |
+| `DEMO_URL` | địa chỉ endpoint GPU trên Modal, dạng `https://$WS--dire-demo-api.modal.run` (`$WS` = workspace Modal của bạn) — bật tab DIRE **qua GPU** | *(trống = tắt)* |
 | `DEMO_TOKEN` | token của endpoint; **chỉ đặt trong Secrets**, không bao giờ gửi xuống trình duyệt | *(trống)* |
 
 **Không có secret nào là bắt buộc.** Thiếu `DEMO_URL`/`DEMO_TOKEN` thì Space chạy

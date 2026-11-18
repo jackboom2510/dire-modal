@@ -273,9 +273,11 @@ Map của lần chạy cũ thì **không phải tính lại**: `dire.json` của
 là đổi tên file:
 
 ```bash
-python tools/relabel_maps.py --maps <volume>/maps            # xem trước, không đụng đĩa
-python tools/relabel_maps.py --maps <volume>/maps --apply    # đổi tên thật
-# hoặc trên Modal (volume đã mount ở /zero), không cần GPU:
+# Đường dẫn đặt vào biến, đừng gõ `<volume>` — trong bash `<` là chuyển hướng stdin.
+VOL=/c/Users/ban/dire-vol
+python tools/relabel_maps.py --maps "$VOL/maps"            # xem trước, không đụng đĩa
+python tools/relabel_maps.py --maps "$VOL/maps" --apply    # đổi tên thật
+# hoặc trên Modal (volume đã mount ở /zero), không cần GPU, không cần tải gì:
 modal run -m dire_zero.modal_app::relabel --apply
 ```
 

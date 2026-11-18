@@ -30,7 +30,7 @@
 ## 1. Chuẩn bị (một lần, ~30 phút, $0)
 
 ```bash
-git clone <repo> && cd dire-modal
+git clone https://github.com/jackboom2510/dire-modal && cd dire-modal
 cp .env.example .env        # rồi điền các token bên dưới
 pip install -e .
 
@@ -427,8 +427,8 @@ hoặc để đủ điều kiện chạy eval; đừng tạo tier mới cho danh
 **8. Nhanh hơn hẳn thì phải đổi NGUỒN, không phải đổi tham số.**
 
 ```bash
-modal run -m dire_modal.archive::push_hf --repo-id <user>/<repo> --src /raw
-modal run -m dire_modal.download::from_hf --repo-id <user>/<repo> --tiers e2
+modal run -m dire_modal.archive::push_hf --repo-id "$HF_USER/$HF_REPO" --src /raw
+modal run -m dire_modal.download::from_hf --repo-id "$HF_USER/$HF_REPO" --tiers e2
 ```
 
 HF Hub thường cho vài MB/s, tức nhanh hơn Baidu 1–2 bậc. Đây là lối thoát duy
@@ -579,10 +579,10 @@ Thiết kế đã tính tới giới hạn Modal Volume v1 (≤50k file khuyến
 # Tạo repo dataset (public)
 huggingface-cli repo create diffusionforensics-dire --type dataset --public
 
-modal run -m dire_modal.archive::push_hf --repo-id <user>/diffusionforensics-dire
+modal run -m dire_modal.archive::push_hf --repo-id "$HF_USER/diffusionforensics-dire"
 
 # Đối chiếu sha256 Volume ↔ Hub
-modal run -m dire_modal.archive::verify_hf --repo-id <user>/diffusionforensics-dire
+modal run -m dire_modal.archive::verify_hf --repo-id "$HF_USER/diffusionforensics-dire"
 # ✅ CỔNG 5a: mismatch=0, missing=0
 ```
 
@@ -592,7 +592,7 @@ modal run -m dire_modal.archive::verify_hf --repo-id <user>/diffusionforensics-d
 
 ```bash
 modal run -m dire_modal.archive::push_kaggle \
-  --dataset-id <user>/dire-tier-a-train-lsun \
+  --dataset-id "$HF_USER/dire-tier-a-train-lsun" \
   --src-subdir dire/train/lsun_bedroom
 ```
 
@@ -735,7 +735,8 @@ Ba lệnh này và `eval::main` gọi **cùng** `dire_core`, nên `P(fake)` ph�
 `src/dire_modal/api.py` bọc `dire_local.server.score_payload`:
 
 ```bash
-modal secret create dire-api-key DIRE_API_KEY=<chuoi-bi-mat>   # tuỳ chọn nhưng nên có
+modal secret create dire-api-key DIRE_API_KEY="$DIRE_API_KEY"   # tuỳ chọn nhưng nên có
+#   đặt trước: DIRE_API_KEY="$(python -c 'import secrets;print(secrets.token_urlsafe(24))')"
 modal serve  -m dire_modal.api     # URL tạm
 modal deploy -m dire_modal.api     # deploy thật
 ```
@@ -841,10 +842,15 @@ chưa từng được train.
 modal run -m dire_zero.modal_app::dire --splits test --generator adm --n 8 --max-usd 1
 #     đã có map thì thêm --skip-existing: chỉ tính cái còn thiếu, không trả tiền lại
 
-# 9b. Dựng gallery từ map + ảnh gốc — đường dẫn truyền tường minh
+# 9b. Dựng gallery — cách 1: ngay trên Volume, không cần đường dẫn nào
+modal run -m dire_zero.modal_app::gallery --n 8 --steps 20
+modal volume get dire-zero gallery ./platforms/hf-spaces/gallery
+#    cách 2 (chỉ khi map + ảnh đã tải về máy). Đặt đường dẫn vào biến —
+#    gõ `<volume>` trong bash là chuyển hướng stdin: "No such file or directory".
+VOL=/c/Users/ban/dire-vol
 python tools/make_gallery.py \
-    --maps  <volume>/maps/test --orig <volume>/images/test \
-    --out   platforms/hf-spaces/gallery \
+    --maps "$VOL/maps/test" --orig "$VOL/data/test" \
+    --out  platforms/hf-spaces/gallery \
     --n 8 --steps 20 --label R1+R2 \
     --map-source "maps/test/*.npy · ::dire --steps 20"
 
@@ -1056,7 +1062,8 @@ BaiduPCS-Go thấy file `.BaiduPCS-Go-downloading` trong staging và tải tiế
 ```bash
 modal volume ls dire-raw /.staging          # còn gì trong staging
 modal app list                              # app còn chạy?
-modal app stop -y <app-id>                  # dừng êm
+modal app list --json | python -c 'import json,sys;[print(a["App ID"]) for a in json.load(sys.stdin)]'  # lấy id
+modal app stop -y "$APP_ID"                 # dừng êm, APP_ID lấy ở lệnh trên
 DETACH=1 bash scripts/01_repro.sh --quick   # chạy không phụ thuộc terminal
 ```
 

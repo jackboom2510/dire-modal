@@ -133,21 +133,26 @@ Ba mức chọn, tuỳ buổi nói:
 ## 6. Quy trình chạy buổi nói (đã kiểm từng bước trừ bước cuối)
 
 ```bash
+# Đặt biến trước: trong bash, `<user>`/`<ws>` không phải chỗ trống mà là chuyển
+# hướng stdin — lệnh sẽ chết với "No such file or directory".
+export HF_USER=jackboom2510
+export WS="$(modal profile current 2>/dev/null || echo '$HF_USER')"   # workspace Modal
+
 # 1. một lần: secret (token do mình sinh, không dùng lại ở đâu)
 modal secret create dire-demo \
   DEMO_TOKEN="$(python -c 'import secrets;print(secrets.token_urlsafe(24))')" \
-  DEMO_ORIGINS="https://<user>-dire-demo.hf.space"
+  DEMO_ORIGINS="https://$HF_USER-dire-demo.hf.space"
 
 # 2. deploy endpoint
 modal deploy -m dire_zero.demo_api
 
 # 3. smoke test: /health không cần token, /dire cần
-curl -s https://<ws>--dire-demo-api.modal.run/health
+curl -s "https://$WS--dire-demo-api.modal.run/health"
 # {"ok":true,"engine":"adm (sha256 …)","s_range":[1,20],"max_bytes":10485760,"auth":"bật",…}
 
 python - <<'PY'
 import base64, json, os, pathlib, urllib.request
-url = "https://<ws>--dire-demo-api.modal.run/dire"
+url = f"https://{os.environ['WS']}--dire-demo-api.modal.run/dire"
 body = json.dumps({"image_b64": base64.b64encode(pathlib.Path("a.png").read_bytes()).decode(),
                    "steps": 5}).encode()
 req = urllib.request.Request(url, body, {"Content-Type": "application/json",

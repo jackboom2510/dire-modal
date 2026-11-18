@@ -244,7 +244,7 @@ Một hình chỉ được coi là xong khi có **đủ sáu** thứ:
 ```bash
 python tools/figures.py list                      # xem lệnh + đầu vào từng hình
 python tools/figures.py f3-pipeline --out figs    # hình vẽ, chạy ngay
-python tools/figures.py f5-noise --out figs --maps <maps> --label R0   # cần map
+python tools/figures.py f5-noise --out figs --maps "$VOL/maps/test" --label R0   # cần map
 jupyter lab notebooks/                            # hoặc đi theo notebook
 ```
 

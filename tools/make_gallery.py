@@ -125,9 +125,26 @@ def _hint_dir(kind: str, path: Path) -> str:
             "    modal volume get dire-zero data/test ./vol/data/test\n"
             "  rồi trỏ `--orig ./vol/data/test`."
         )
+    eaten = ""
+    shown = str(path).replace("\\", "/")
+    # Dấu vết của một placeholder bị **shell** ăn mất: `--maps <volume>/maps/test`
+    # không phải là đường dẫn có dấu ngoặc — bash biến `<volume>` thành chuyển
+    # hướng stdin và để lại `/maps/test`. Trên Git Bash/MSYS đường dẫn đó lại được
+    # dịch thành `C:/Program Files/Git/maps/test`, nên đây là thứ nhìn thấy được.
+    if "<" in shown or ">" in shown:
+        eaten = ("  Có vẻ bạn gõ nguyên `<...>` của tài liệu. Trong bash, `<` là chuyển\n"
+                 "  hướng stdin: lệnh sẽ chết với \"volume: No such file or directory\" và\n"
+                 "  python không bao giờ chạy. Đặt đường dẫn vào biến: `VOL=/duong/dan`.\n")
+    elif shown.startswith("/maps") or shown.startswith("/data") or "Program Files/Git/" in shown:
+        eaten = ("  Đường dẫn này là dấu vết của một placeholder bị shell ăn: `--maps\n"
+                 "  <volume>/maps/test` để lại `/maps/test` (Git Bash còn dịch thành\n"
+                 "  `C:/Program Files/Git/maps/test`). Đặt đường dẫn vào biến, đừng\n"
+                 "  dùng `<...>`.\n"
+                 "  Cách không cần đường dẫn nào: `modal run -m dire_zero.modal_app::gallery`.\n")
     return (
         f"--{kind} không phải thư mục: {path}\n"
         f"  (đang tra từ {Path.cwd()}; đường dẫn tuyệt đối sẽ là {absolute})\n"
+        + eaten +
         f"  {why}"
     )
 
