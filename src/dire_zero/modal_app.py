@@ -740,60 +740,164 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
           seed: int = 3407, generator: str = "auto") -> dict:
     """R2 — train detector trên map **của mình**.
 
-    `generator` chọn **một** generator để dựng bài toán `real vs generator đó` —
-    đúng một dòng của Table 2. `auto` giữ mọi generator, nghĩa là bài toán
-    `real vs bất kỳ fake`; đó là một phép đo khác, không so được với Table 2, và
-    báo cáo phải nói rõ (xem `generators_used`).
-    """
-    from .pipeline import collect_maps, train as train_fn
+    ``generator``:
 
+    * một tên (`adm`) ⇒ bài toán `real vs adm`, **đúng một dòng của Table 2**;
+    * `a,b,c` ⇒ lần lượt từng generator, mỗi cái một detector riêng;
+    * ``all`` ⇒ **mọi** generator đang có map (đường đi thường dùng sau `::dire`);
+    * ``auto`` ⇒ gộp tất cả vào một bài toán `real vs bất kỳ fake` — **không** so
+      được với Table 2, và `note_scope` trong `train.json` sẽ nói đúng như vậy.
+
+    Mỗi generator ghi vào **thư mục riêng** (`runs/train/<generator>/`), nên chạy
+    lần lượt 15 dòng của Table 2 không ghi đè nhau. Bản trước ghi tất cả vào
+    `runs/train.json` + `runs/detector.pth`: dòng thứ 15 là dòng duy nhất còn lại,
+    và `::report` đọc đúng một dòng mà không nói rằng 14 dòng kia đã mất.
+
+    Không có ước lượng tiền ở đây: mỗi dòng của Table 2 là một lượt train ResNet-50
+    trên ~2 000 map, **giây** chứ không phải GPU-giờ như DIRE. Thay vào đó, mỗi
+    lượt in số giây thật và `--generator all` dừng trước khi chạm timeout, liệt kê
+    generator còn lại để chạy tiếp.
+    """
     from .detector import ResNetDetector, resnet50
+    from .pipeline import collect_maps, train as train_fn
 
     maps = collect_maps(MAPS)
     if not maps:
         raise FileNotFoundError(f"không có .npy trong {MAPS} — chạy `dire` trước")
 
     available = sorted({m["generator"] for m in maps if m["generator"] != "real"})
-    if generator != "auto":
-        if generator not in available:
-            raise ValueError(
-                f"không có map của generator {generator!r} trong {MAPS}. "
-                f"Có: {available or '(chưa có generator nào)'}. "
-                f"Chạy `::dire --generator {generator}` trước."
-            )
-        maps = [m for m in maps if m["generator"] in ("real", generator)]
-        used = [generator]
-    else:
-        used = available
-    if not used:
+    if not available:
         raise FileNotFoundError(f"chỉ có map `real` trong {MAPS} — chưa có ảnh giả nào")
-    payload = train_fn(
-        lambda: ResNetDetector(resnet50()),
-        maps,
-        OUT,
-        epochs=epochs,
-        lr=lr,
-        bs=bs,
-        crop=crop,
-        device="cuda",
-        seed=seed,
-        init="scratch",
-        extra={
-            "generators_used": used,
-            "generator_filter": generator,
-            "note_scope": (
-                "một generator ⇒ so được với đúng một dòng của Table 2"
-                if len(used) == 1 else
-                f"{len(used)} generator gộp lại ⇒ bài toán `real vs bất kỳ fake`, "
-                "KHÔNG so được với Table 2 (mỗi dòng của bảng là một generator)"
-            ),
-        },
-    )
-    vol.commit()
-    print({k: payload[k] for k in ("best_epoch", "best_val_ap", "threshold_from_val")}, flush=True)
-    print("[phạm vi]", payload["note_scope"], flush=True)
-    print("[test]", payload["test"], flush=True)
-    return payload
+    targets = _train_targets(generator, available)
+
+    deadline = time.time() + WORK_TIMEOUT_S * SAFE_TIME_FRACTION
+    results: dict[str, dict] = {}
+    stopped: list[str] = []
+    for gen in targets:
+        left = deadline - time.time()
+        if left <= 60:
+            stopped = targets[targets.index(gen):]
+            print(f"[dừng] hết ngân sách thời gian; còn {len(stopped)} generator: "
+                  f"{', '.join(stopped)}", flush=True)
+            break
+        subset = maps if gen is None else [m for m in maps if m["generator"] in ("real", gen)]
+        real_n = sum(1 for m in subset if m["label"] == 0)
+        fake_n = len(subset) - real_n
+        ratio = max(real_n, fake_n) / max(min(real_n, fake_n), 1)
+        if ratio > MAX_IMBALANCE:
+            print(f"[cảnh báo] {gen or 'auto'}: {real_n} real vs {fake_n} fake "
+                  f"(tỉ lệ {ratio:.1f}:1 > {MAX_IMBALANCE:.0f}:1) — recall là số yếu, "
+                  "và nó phản ánh số mẫu chứ không phải chất lượng DIRE", flush=True)
+
+        tag = _train_tag(gen)
+        print(f"\n=== train {tag}: {real_n} real + {fake_n} fake = {len(subset)} map ===", flush=True)
+        payload = train_fn(
+            lambda: ResNetDetector(resnet50()),
+            subset,
+            f"{OUT}/train/{tag}",
+            epochs=epochs,
+            lr=lr,
+            bs=bs,
+            crop=crop,
+            device="cuda",
+            seed=seed,
+            init="scratch",
+            extra={
+                "generators_used": [gen] if gen else available,
+                "generator_filter": gen or "auto",
+                "n_real": real_n,
+                "n_fake": fake_n,
+                "imbalance_ratio": round(ratio, 2),
+                "note_scope": (
+                    f"một generator ({gen}) ⇒ so được với đúng một dòng của Table 2"
+                    if gen else
+                    f"{len(available)} generator gộp lại ⇒ bài toán `real vs bất kỳ fake`, "
+                    "KHÔNG so được với Table 2 (mỗi dòng của bảng là một generator)"
+                ),
+            },
+        )
+        vol.commit()
+        results[tag] = {k: payload.get(k) for k in
+                        ("best_epoch", "best_val_ap", "threshold_from_val", "test", "seconds")}
+        print(f"[{tag}] {payload['test']['acc']:.3f} acc · AP {payload['test']['ap']:.3f} · "
+              f"{payload['seconds']:.0f} s", flush=True)
+
+    ledger = _write_train_ledger(OUT, results)
+    return {"trained": sorted(results), "stopped": stopped, "ledger": ledger}
+
+
+def _train_targets(spec: str, available: Sequence[str]) -> list[str | None]:
+    """``--generator`` → danh sách việc; ``None`` nghĩa là gộp mọi generator."""
+    spec = (spec or "auto").strip()
+    if spec == "auto":
+        return [None]
+    if spec == "all":
+        return list(available)
+    picked = [x.strip() for x in spec.split(",") if x.strip()]
+    missing = [g for g in picked if g not in available]
+    if missing:
+        raise ValueError(
+            f"không có map của generator {missing} trong {MAPS}. Có: {available}. "
+            f"Chạy `::dire --generator {','.join(missing)}` trước."
+        )
+    return picked
+
+
+def _train_tag(gen: str | None) -> str:
+    """Tên thư mục cho một lượt train: an toàn cho mọi hệ tệp, không trùng nhau."""
+    if gen is None:
+        return "auto"
+    keep = "".join(c if (c.isalnum() or c in "-._") else "_" for c in gen)
+    return f"gen-{keep}" if keep != "auto" else "gen-auto"
+
+
+def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
+    """Gộp các lượt train vào `runs/train.json` — bảng nhiều dòng, không ghi đè.
+
+    Cùng lý do với `dire.json`: 15 dòng của Table 2 là **15 kết quả**, không phải
+    một kết quả được ghi 15 lần. `runs` giữ mọi lượt (kể cả lượt cũ cùng tag, để
+    so lại sau khi đổi seed), và `by_generator` là bảng đọc nhanh.
+    """
+    path = os.path.join(out_root, "train.json")
+    old: dict = {}
+    if os.path.exists(path):
+        try:
+            import json  # noqa: PLC0415
+
+            old = json.load(open(path, encoding="utf-8"))
+        except ValueError:
+            old = {}
+
+    import json  # noqa: PLC0415
+
+    runs = [dict(r) for r in (old.get("runs") or []) if isinstance(r, dict)]
+    if not runs and old.get("test"):
+        runs.append({k: old.get(k) for k in ("best_epoch", "best_val_ap", "threshold_from_val",
+                                             "seconds", "generators_used")})
+    for tag, res in results.items():
+        runs.append({"tag": tag, **res})
+    by_generator = dict(old.get("by_generator") or {})
+    for tag, res in results.items():
+        t = res.get("test") or {}
+        by_generator[tag] = {
+            "acc": t.get("acc"), "acc_ci95": t.get("acc_ci95"), "ap": t.get("ap"),
+            "auc": t.get("auc"), "n": t.get("n"), "n_real": t.get("n_real"),
+            "n_fake": t.get("n_fake"), "best_epoch": res.get("best_epoch"),
+        }
+    latest = runs[-1] if runs else {}
+    payload = {
+        "label": "R1+R2+R3",
+        "what": "mỗi mục của `by_generator` là một detector riêng (một dòng Table 2)",
+        "by_generator": by_generator,
+        "runs": runs,
+        # giữ khoá cũ ở cấp ngoài cho chỗ đọc cũ (`::report`), trỏ tới lượt gần nhất
+        **{k: latest.get(k) for k in ("best_epoch", "best_val_ap", "threshold_from_val", "seconds")},
+        "latest": latest.get("tag"),
+    }
+    from .pipeline import write_json  # noqa: PLC0415
+
+    write_json(path, payload)
+    return {"n": len(by_generator), "by_generator": by_generator, "latest": payload["latest"]}
 
 
 def _map_inventory(maps_root: str) -> dict:
@@ -841,7 +945,11 @@ def report() -> dict:
         # `fake/` còn sót từ bản cũ sẽ lộ ra ở đây chứ không lộ ở `dire.json`.
         "maps": _map_inventory(MAPS),
         "data": _read_json(DATA_CARD),
-        "train": {k: v for k, v in read("train").items() if k in ("test", "best_epoch", "threshold_from_val", "init")},
+        "train": {k: v for k, v in read("train").items()
+                  if k in ("test", "best_epoch", "threshold_from_val", "init", "latest")},
+        # **Bảng** của Table 2: mỗi generator một detector riêng, không phải một
+        # con số gộp. Thiếu mục nào nghĩa là generator đó chưa train.
+        "train_by_generator": read("train").get("by_generator", {}),
         "bench": read("bench"),
         "warnings": [
             "ACC trên ~200 ảnh test có CI ±5 điểm — không dùng để so với Table 2",

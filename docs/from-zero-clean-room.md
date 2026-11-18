@@ -630,14 +630,72 @@ modal run -m dire_zero.modal_app::dire --n 500 --steps 20
 # 4b. thêm map cho ảnh vừa sinh, KHÔNG tính lại ảnh real đã có map
 modal run -m dire_zero.modal_app::dire --n 500 --steps 20 --skip-existing
 
-# 5. R2 — train detector
-modal run -m dire_zero.modal_app::train --epochs 40
+# 5. R2 — train detector: **mỗi generator một dòng của Table 2**
+modal run -m dire_zero.modal_app::train --epochs 40 --generator all
+#    (một generator: --generator adm; gộp tất cả: --generator auto — bài toán KHÁC)
 
 # 6. gom báo cáo
 modal run -m dire_zero.modal_app::report
 ```
 
-Bước 3 và 4 **cố ý khác `--steps`**: Phụ lục A của bài báo sinh bằng DDIM 50
+### 4.4.1 Sau `::dire` thì làm gì — đúng thứ tự
+
+`::dire` chỉ tạo `.npy`; **chưa có một con số nào** cho tới bước 2 dưới đây.
+Thứ tự này là thứ tự phụ thuộc dữ liệu, không phải thứ tự tuỳ thích:
+
+| # | Việc | Lệnh | Ra cái gì | Chặn bởi |
+|---|---|---|---|---|
+| 0 | **Kiểm tồn kho map** | `::report` | `maps.by_split_generator` | — |
+| 1 | **Train từng generator** | `::train --generator all` | `runs/train/<gen>/detector.pth` + `train.json` mỗi cái | 0 phải đủ generator |
+| 2 | **Gom bảng** | `::report` | `train_by_generator` — mỗi dòng một detector | 1 |
+| 3 | **Gallery + demo** | `tools/make_gallery.py` rồi Space | trang 2 có mẫu thật | 1 (cần `detector.pth` để có điểm) |
+| 4 | **So với bài báo** | chưa có `::author_eval` (R0) | cột "bài báo" | cần checkpoint tác giả |
+
+**Bước 0 — trước khi train, xem mình có gì.** `::dire` chạy theo nhóm nên rất dễ
+kết thúc với 12 generator thay vì 15 mà không biết:
+
+```text
+"maps": {"total": 10200, "by_split_generator": {"test/adm": 500, "test/dalle2": 500, …}}
+```
+
+Thiếu ô nào thì chạy bù đúng ô đó (`--generator <tên> --skip-existing`), đừng train
+rồi mới phát hiện.
+
+**Bước 1 — `--generator all`, không phải `auto`.** Hai bài toán khác nhau:
+
+| | `--generator adm` | `--generator all` | `--generator auto` |
+|---|---|---|---|
+| Bài toán | `real vs adm` | 15 detector, mỗi cái `real vs <một generator>` | `real vs bất kỳ fake` |
+| So được Table 2? | **có**, đúng một dòng | **có**, cả bảng | **không** — bảng không có dòng gộp |
+| Số detector | 1 | 15 | 1 |
+
+`all` chạy lần lượt trong **một** container, mỗi generator ghi vào thư mục riêng
+(`runs/train/gen-adm/`, `runs/train/gen-pndm/`, …). Bản trước ghi tất cả vào
+`runs/train.json` + `runs/detector.pth`: chạy 15 lệnh thì dòng thứ 15 là dòng duy
+nhất còn lại, và `::report` đọc đúng một con số mà không nói 14 dòng kia đã mất.
+
+`runs/train.json` nay là **bảng**: `by_generator` (mỗi mục là một dòng Table 2) +
+`runs` (mọi lượt, kể cả lượt cũ cùng generator — để so lại sau khi đổi seed).
+
+**Thời gian**: mỗi lượt là ResNet-50 trên ~2 000 map, **giây đến phút**, không
+phải GPU-giờ như DIRE — nên không có cổng tiền ở đây. `--generator all` in số giây
+thật của từng lượt và **dừng trước khi chạm timeout**, liệt kê generator còn lại;
+chạy tiếp lệnh sau là được (mỗi generator đã xong nằm trong thư mục riêng).
+
+**Bước 2 — đọc bảng, không đọc một số.** `train_by_generator` có `acc` + `acc_ci95`,
+`ap`, `auc`, `n_real`/`n_fake` cho từng generator. Ba điều phải nói khi báo cáo:
+
+* `acc_ci95` rộng cỡ ±5 điểm với ~200 ảnh test ⇒ chênh lệch 2–3 điểm giữa hai
+  generator là **nhiễu**, không phải thứ hạng;
+* mỗi detector được train lại từ đầu (`init: scratch`), không ImageNet như bài báo;
+* `midjourney` chỉ có ~100 ảnh/ô ⇒ tỉ lệ 5:1, recall là số yếu và nó phản ánh **số
+  mẫu**, không phải chất lượng DIRE. `::train` in cảnh báo khi tỉ lệ > 5:1.
+
+**Bước 3–4** (gallery/demo và cột R0 của bài báo) là việc riêng, chưa xong; đừng
+trộn vào bảng kết quả.
+
+Bước 3 và 4 **của khối lệnh trên** (sinh ảnh và DIRE map) **cố ý khác `--steps`**:
+Phụ lục A của bài báo sinh bằng DDIM 50
 bước rồi tính DIRE bằng 20 bước. Dùng chung một số cho cả hai (như code cũ) là
 lệch giao thức — sai lệch này không làm chương trình hỏng, chỉ làm con số không
 so được với bài báo.
