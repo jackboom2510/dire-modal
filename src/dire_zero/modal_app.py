@@ -63,6 +63,11 @@ image = (
     modal.Image.debian_slim(python_version="3.11")
     .pip_install("torch==2.4.0", "numpy==1.26.4", "pillow==10.4.0")
     .add_local_python_source("dire_zero")
+    # `::gallery` chạy đúng `tools/make_gallery.py` của repo (một nguồn sự thật cho
+    # định dạng `.json` mà `demolib/provenance.py` đọc). Chỉ một tệp, không kéo
+    # theo gì khác; máy Windows không phải tải 800 MB map về để dựng 64 mẫu.
+    .add_local_file(Path(__file__).resolve().parents[2] / "tools" / "make_gallery.py",
+                    "/root/tools/make_gallery.py")
 )
 
 app = modal.App(APP_NAME, image=image)
@@ -995,7 +1000,7 @@ def _cell_generators(data_root: str) -> list[str]:
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
-          seed: int = 3407, generator: str = "auto") -> dict:
+          seed: int = 3407, generator: str = "auto", split_mode: str = "author") -> dict:
     """R2 — train detector trên map **của mình**.
 
     ``generator``:
@@ -1017,13 +1022,21 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     generator còn lại để chạy tiếp.
     """
     from .detector import ResNetDetector, resnet50
-    from .pipeline import collect_maps, train as train_fn
+    from .pipeline import SplitError, collect_maps, train as train_fn
 
     maps = collect_maps(MAPS)
     if not maps:
         raise FileNotFoundError(f"không có .npy trong {MAPS} — chạy `dire` trước")
 
-    available = sorted({m["generator"] for m in maps if m["generator"] != "real"})
+    # `fake/` là thư mục map cũ (chưa relabel), không phải một generator. Train nó
+    # cho ra một dòng `gen-fake` trong bảng — một dòng trông như Table 2 nhưng nhãn
+    # của nó là "ảnh giả nói chung", và nó trùng lặp với generator thật.
+    leftover = sorted({m["generator"] for m in maps if m["generator"] == "fake"})
+    available = sorted({m["generator"] for m in maps if m["generator"] not in ("real", "fake")})
+    if leftover:
+        print(f"[bỏ qua] {MAPS}/*/fake: {sum(1 for m in maps if m['generator'] == 'fake')} map "
+              "chưa có nhãn generator — chạy `::relabel --apply` trước; "
+              "`fake` không phải một dòng của Table 2", flush=True)
     if not available:
         raise FileNotFoundError(f"chỉ có map `real` trong {MAPS} — chưa có ảnh giả nào")
     targets = _train_targets(generator, available)
@@ -1031,6 +1044,7 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     deadline = time.time() + WORK_TIMEOUT_S * SAFE_TIME_FRACTION
     results: dict[str, dict] = {}
     stopped: list[str] = []
+    skipped: list[str] = []
     for gen in targets:
         left = deadline - time.time()
         if left <= 60:
@@ -1049,40 +1063,51 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
 
         tag = _train_tag(gen)
         print(f"\n=== train {tag}: {real_n} real + {fake_n} fake = {len(subset)} map ===", flush=True)
-        payload = train_fn(
-            lambda: ResNetDetector(resnet50()),
-            subset,
-            f"{OUT}/train/{tag}",
-            label=_read_json(DATA_CARD).get("label") or "R1+R2",
-            epochs=epochs,
-            lr=lr,
-            bs=bs,
-            crop=crop,
-            device="cuda",
-            seed=seed,
-            init="scratch",
-            extra={
+        try:
+            payload = train_fn(
+                lambda: ResNetDetector(resnet50()),
+                subset,
+                f"{OUT}/train/{tag}",
+                label=_read_json(DATA_CARD).get("label") or "R1+R2",
+                epochs=epochs,
+                lr=lr,
+                bs=bs,
+                crop=crop,
+                device="cuda",
+                seed=seed,
+                init="scratch",
+                split_mode=split_mode,
+                extra={
                 "generators_used": [gen] if gen else available,
                 "generator_filter": gen or "auto",
                 "n_real": real_n,
                 "n_fake": fake_n,
                 "imbalance_ratio": round(ratio, 2),
-                "note_scope": (
-                    f"một generator ({gen}) ⇒ so được với đúng một dòng của Table 2"
-                    if gen else
-                    f"{len(available)} generator gộp lại ⇒ bài toán `real vs bất kỳ fake`, "
-                    "KHÔNG so được với Table 2 (mỗi dòng của bảng là một generator)"
-                ),
-            },
-        )
+                    "note_scope": (
+                        f"một generator ({gen}) ⇒ so được với đúng một dòng của Table 2"
+                        if gen else
+                        f"{len(available)} generator gộp lại ⇒ bài toán `real vs bất kỳ fake`, "
+                        "KHÔNG so được với Table 2 (mỗi dòng của bảng là một generator)"
+                    ),
+                },
+            )
+        except SplitError as e:
+            # Một generator hỏng không được làm hỏng cả lượt `--generator all`:
+            # ghi lý do, bỏ qua, chạy tiếp. Lượt trước im lặng train nó và in ra
+            # một dòng `acc = 0,500`, trông y như kết quả.
+            print(f"[bỏ qua] {tag}: {e}", flush=True)
+            skipped.append(f"{tag}: {e}")
+            continue
         vol.commit()
         results[tag] = {k: payload.get(k) for k in
-                        ("best_epoch", "best_val_ap", "threshold_from_val", "test", "seconds")}
+                        ("label", "split_mode", "best_epoch", "best_val_ap",
+                         "threshold_from_val", "threshold_space", "test", "seconds")}
         print(f"[{tag}] {payload['test']['acc']:.3f} acc · AP {payload['test']['ap']:.3f} · "
               f"{payload['seconds']:.0f} s", flush=True)
 
-    ledger = _write_train_ledger(OUT, results)
-    return {"trained": sorted(results), "stopped": stopped, "ledger": ledger}
+    ledger = _write_train_ledger(OUT, results, skipped)
+    return {"trained": sorted(results), "skipped": skipped, "stopped": stopped,
+            "ledger": ledger}
 
 
 def _train_targets(spec: str, available: Sequence[str]) -> list[str | None]:
@@ -1110,7 +1135,21 @@ def _train_tag(gen: str | None) -> str:
     return f"gen-{keep}" if keep != "auto" else "gen-auto"
 
 
-def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
+def _sha256(path: str) -> str:
+    """sha256 một tệp, rỗng nếu không có — dùng để biết `eval.json` còn khớp detector."""
+    import hashlib  # noqa: PLC0415
+
+    if not os.path.exists(path):
+        return ""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _write_train_ledger(out_root: str, results: dict[str, dict],
+                        skipped: Sequence[str] = ()) -> dict:
     """Gộp các lượt train vào `runs/train.json` — bảng nhiều dòng, không ghi đè.
 
     Cùng lý do với `dire.json`: 15 dòng của Table 2 là **15 kết quả**, không phải
@@ -1136,6 +1175,18 @@ def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
     for tag, res in results.items():
         runs.append({"tag": tag, **res})
     by_generator = dict(old.get("by_generator") or {})
+    # Một generator bị bỏ qua ở lượt này thì dòng cũ của nó **không còn là kết quả
+    # hiện tại** — nhưng nó vẫn nằm trong `by_generator` từ lượt trước. Đánh dấu,
+    # để `::report` cảnh báo thay vì trình bày một con số đã bị thay thế.
+    if skipped:
+        skipped_tags = [ln.split(":", 1)[0].strip() for ln in skipped]
+        old_skipped = dict(old.get("skipped") or {})
+        for t in skipped_tags:
+            old_skipped[t] = next((ln for ln in skipped if ln.startswith(t + ":")), t)
+        body_extra = {"skipped": old_skipped}
+    else:
+        body_extra = {"skipped": dict(old.get("skipped") or {})}
+
     for tag, res in results.items():
         t = res.get("test") or {}
         by_generator[tag] = {
@@ -1148,10 +1199,13 @@ def _write_train_ledger(out_root: str, results: dict[str, dict]) -> dict:
         }
     latest = runs[-1] if runs else {}
     payload = {
-        "label": "R1+R2+R3",
+        # Nhãn lấy từ chính lượt chạy, không phải hằng số: bản trước ghi cứng
+        # "R1+R2+R3" ở đây trong khi `train.json` của từng detector đã ghi R1+R2.
+        "label": latest.get("label") or "R1+R2",
         "what": "mỗi mục của `by_generator` là một detector riêng (một dòng Table 2)",
         "by_generator": by_generator,
         "runs": runs,
+        **body_extra,
         # giữ khoá cũ ở cấp ngoài cho chỗ đọc cũ (`::report`), trỏ tới lượt gần nhất
         **{k: latest.get(k) for k in ("best_epoch", "best_val_ap", "threshold_from_val", "seconds")},
         "latest": latest.get("tag"),
@@ -1235,6 +1289,7 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
 
         model = ResNetDetector(resnet50()).to("cuda")
         model.load_state_dict(torch.load(ckpt, map_location="cuda"))
+        detector_sha = _sha256(ckpt)
         logits, labels = _score(model, [m["path"] for m in rows], [m["label"] for m in rows],
                                 crop, "cuda")
         probs = [float(torch.sigmoid(torch.tensor(z))) for z in logits]
@@ -1263,6 +1318,11 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
         payload = {
             "tag": tag,
             "split": split,
+            # Dấu vân tay của detector **đã chấm**. `::report` so với `detector.pth`
+            # hiện tại; lệch nghĩa là `train` đã chạy lại sau `evaluate`, và điểm
+            # trong `scores.json` là của một mô hình khác — hiện nó cạnh ACC mới là
+            # ghép hai kết quả khác nhau thành một dòng bảng.
+            "detector_sha256": detector_sha,
             "generators_used": gens,
             "threshold_raw": thr_raw,
             "threshold_space": space,
@@ -1281,7 +1341,9 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
         write_json(f"{OUT}/eval/{tag}/eval.json", payload)
         write_json(f"{OUT}/eval/{tag}/scores.json", {"samples": samples})
         results[tag] = {"acc": ev["acc"], "ap": ev["ap"], "auc": ev["auc"],
-                        "acc_ci95": ev["acc_ci95"], "n": ev["n"], "gate": gate}
+                        "acc_ci95": ev["acc_ci95"], "n": ev["n"], "gate": gate,
+                        "detector_sha256": detector_sha, "split": split,
+                        "threshold": round(thr, 6)}
         print(f"[{tag}] {split}: acc {ev['acc']:.3f} "
               f"[{ev['acc_ci95'][0]:.3f}, {ev['acc_ci95'][1]:.3f}] · "
               f"AP {ev['ap']:.3f} · n {ev['n']} · gate {gate}", flush=True)
@@ -1326,7 +1388,7 @@ def _read_json(path: str) -> dict:
 
 
 def _report_warnings(inventory: dict, dire_json: dict, train_by_gen: dict,
-                     eval_by_gen: dict) -> list[str]:
+                     eval_by_gen: dict, skipped: dict | None = None) -> list[str]:
     """Cảnh báo **suy ra từ số liệu**, không phải câu chép tay.
 
     Bản trước hardcode "ACC trên ~200 ảnh test" trong khi lượt chạy thật có
@@ -1364,6 +1426,31 @@ def _report_warnings(inventory: dict, dire_json: dict, train_by_gen: dict,
                 "— detector chưa hiệu chuẩn; đọc ACC kèm AP/AUC, đừng đọc riêng ACC"
             )
 
+    # 3b. Dòng "kết quả" thực chất là bộ phân loại hằng số. `acc = 0,500` tuyệt đối
+    #     + AUC dưới 0,5 là chữ ký của việc train trên tập một lớp (hoặc mô hình
+    #     sụp về một phía); in nó như một dòng Table 2 là trình bày rác thành kết quả.
+    for tag, row in sorted(train_by_gen.items()):
+        acc, auc = row.get("acc"), row.get("auc")
+        if not isinstance(acc, (int, float)) or not isinstance(auc, (int, float)):
+            continue
+        if abs(acc - 0.5) < 1e-9 and auc < 0.55:
+            out.append(
+                f"{tag}: acc đúng 0,500 và AUC {auc:.3f} — mô hình dự đoán **một lớp** "
+                "(train trên tập chỉ có một lớp, hoặc sụp về hằng số). Dòng này KHÔNG "
+                "phải kết quả; chạy lại với `::train --generator "
+                f"{tag[4:] if tag.startswith('gen-') else tag} --split-mode hash` "
+                "nếu dữ liệu không có map ở split `train`"
+            )
+        elif auc < 0.5:
+            out.append(f"{tag}: AUC {auc:.3f} < 0,5 — xếp hạng **ngược**; "
+                       "đọc ACC của dòng này là vô nghĩa")
+
+    # 3c. Generator bị bỏ qua ở lượt train gần nhất nhưng vẫn còn dòng cũ trong bảng.
+    for tag, why in sorted((skipped or {}).items()):
+        if tag in train_by_gen:
+            out.append(f"{tag}: bị bỏ qua ở lượt train gần nhất ({str(why).split(':', 1)[-1].strip()[:120]}…) "
+                       "— dòng trong bảng là của lượt CŨ")
+
     # 4. Cỡ mẫu thật, thay cho con số 200 chép tay.
     ns = [row.get("n") for row in eval_by_gen.values() if isinstance(row.get("n"), int)]
     if ns:
@@ -1371,12 +1458,125 @@ def _report_warnings(inventory: dict, dire_json: dict, train_by_gen: dict,
         # nửa độ rộng CI 95 % cho tỉ lệ quanh 0,8: 1,96·√(p(1−p)/n) ≈ 0,78/√n
         out.append(f"n nhỏ nhất trong bảng = {n} ⇒ nửa độ rộng CI 95 % ≈ ±{0.78 / max(n, 1) ** 0.5 * 100:.1f} điểm ACC")
 
+    # 4b. `eval.json` chấm bằng một detector khác với `detector.pth` hiện tại.
+    for tag, row in sorted(eval_by_gen.items()):
+        sha = row.get("detector_sha256")
+        cur = _sha256(f"{OUT}/train/{tag}/detector.pth")
+        if sha and cur and sha != cur:
+            out.append(
+                f"{tag}: `eval.json` chấm bằng detector {sha[:12]}… nhưng `detector.pth` "
+                f"hiện tại là {cur[:12]}… — điểm đó là của mô hình CŨ; chạy lại `::evaluate`"
+            )
+
     if train_by_gen:
         out.append("detector khởi tạo ngẫu nhiên (`init=scratch`), không ImageNet như bài báo")
     gens = sorted({str(r.get("n_fake")) for r in train_by_gen.values()})
     if len(gens) == 1 and list(train_by_gen) == ["gen-adm"]:
         out.append("một checkpoint ADM duy nhất ⇒ chỉ đo in-distribution (ADM), không đo cross-model")
     return out
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
+def gallery(n: int = 8, steps: int = 20, split: str = "test", label: str = "R1+R2",
+            classes: str = "", force: bool = False, with_scores: bool = False,
+            dry_run: bool = False) -> dict:
+    """Dựng `platforms/hf-spaces/gallery/` **ngay trên Volume**, từ map + ảnh đã có.
+
+    Vì sao không chạy ở máy local: map nằm trên Volume (5 900 `.npy` ≈ 800 MB), còn
+    gallery chỉ là ~64 mẫu (~13 MB). Tải lên để dựng rồi tải xuống là hai lần di
+    chuyển 800 MB qua mạng nhà, và trên Windows còn thêm lớp lỗi đường dẫn
+    (`maps\test` không tồn tại ở máy). Ở đây mọi thứ đã nằm cạnh nhau.
+
+    ::
+
+        modal run -m dire_zero.modal_app::gallery --n 8 --steps 20
+        modal volume get dire-zero gallery ./platforms/hf-spaces/gallery
+
+    ``--with-scores`` chỉ dùng được khi `::evaluate` đã chạy **và** ngưỡng của nó
+    khớp detector hiện tại. Điều kiện thứ hai kiểm ngay tại đây bằng sha256: điểm
+    của một mô hình cũ đi kèm ảnh của mô hình mới là một dòng bảng ghép từ hai kết
+    quả khác nhau.
+    """
+    import importlib.util  # noqa: PLC0415
+    import types  # noqa: PLC0415
+
+    spec = importlib.util.spec_from_file_location("make_gallery", "/root/tools/make_gallery.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)          # type: ignore[union-attr]
+
+    # Lớp lấy từ **map đã có**, không phải từ cây dữ liệu: gallery cần `.npy`, và
+    # một generator có ảnh nhưng chưa có map thì không dựng được mẫu nào.
+    have = sorted(d for d in os.listdir(f"{MAPS}/{split}") if os.path.isdir(f"{MAPS}/{split}/{d}"))
+    wanted = [c.strip() for c in classes.split(",") if c.strip()] or have
+    maps_root = f"{MAPS}/{split}"
+    orig_root = f"{DATA}/{split}"
+
+    scores_path = ""
+    thr = 0.5
+    if with_scores:
+        tags = sorted((_read_json(f"{OUT}/train.json").get("by_generator") or {}))
+        if not tags:
+            raise FileNotFoundError("chưa train detector nào — chạy `::train` rồi `::evaluate`")
+        # Gom điểm của mọi tag đã chấm, mỗi tag một tệp; gộp theo tên mẫu.
+        merged: dict[str, dict] = {}
+        used: list[str] = []
+        for tag in tags:
+            ev_path = f"{OUT}/eval/{tag}/eval.json"
+            sc_path = f"{OUT}/eval/{tag}/scores.json"
+            if not (os.path.exists(ev_path) and os.path.exists(sc_path)):
+                continue
+            ev = _read_json(ev_path)
+            cur = _sha256(f"{OUT}/train/{tag}/detector.pth")
+            if ev.get("detector_sha256") and cur and ev["detector_sha256"] != cur:
+                print(f"[bỏ qua] {tag}: eval.json chấm bằng detector cũ — chạy lại `::evaluate`",
+                      flush=True)
+                continue
+            if ev.get("gate") != "passed":
+                print(f"[bỏ qua] {tag}: gate = {ev.get('gate')!r} (ngưỡng không đến từ val)",
+                      flush=True)
+                continue
+            merged.update(_read_json(sc_path).get("samples") or {})
+            used.append(tag)
+            thr = float(ev.get("threshold_prob", 0.5))
+        if not merged:
+            raise FileNotFoundError(
+                "không có `scores.json` nào dùng được — chạy `::evaluate` trước, "
+                "hoặc bỏ `--with-scores` để dựng gallery không kèm điểm"
+            )
+        scores_path = f"{OUT}/gallery_scores.json"
+        from .pipeline import write_json  # noqa: PLC0415
+
+        write_json(scores_path, {"samples": merged, "tags": used})
+        print(f"[điểm] {len(merged)} khoá từ {used}, ngưỡng {thr:.4f}", flush=True)
+
+    args = types.SimpleNamespace(
+        maps=maps_root, orig=orig_root, out=f"{V.MOUNT}/gallery", n=n, steps=steps,
+        split=split, label=label, map_source=f"{split}/*.npy · ::dire --steps {steps}",
+        scores=scores_path, gate="passed" if with_scores else "failed",
+        threshold=thr, gamma=0.5, prefix="", dry_run=dry_run, force=force,
+    )
+    existing = len(glob_many(f"{V.MOUNT}/gallery/*.json"))
+    if existing and not force and not dry_run:
+        raise FileExistsError(
+            f"{V.MOUNT}/gallery đã có {existing} mẫu — dùng `--force` để ghi đè"
+        )
+    rows = mod.build(args)
+    made = [r for r in rows if "_skipped" not in r]
+    skipped = [s for r in rows if "_skipped" in r for s in r["_skipped"]]
+    vol.commit()
+    for s in skipped[:10]:
+        print(f"[bỏ qua] {s}", flush=True)
+    print(f"[gallery] {len(made)} mẫu → {V.MOUNT}/gallery"
+          + (" (dry-run)" if dry_run else ""), flush=True)
+    print("tải về: modal volume get dire-zero gallery ./platforms/hf-spaces/gallery", flush=True)
+    return {"n": len(made), "skipped": skipped, "classes": wanted, "with_scores": bool(scores_path),
+            "out": f"{V.MOUNT}/gallery", "fetch": "modal volume get dire-zero gallery ./platforms/hf-spaces/gallery"}
+
+
+def glob_many(pattern: str) -> list[str]:
+    import glob  # noqa: PLC0415
+
+    return glob.glob(pattern)
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
@@ -1427,11 +1627,13 @@ def report() -> dict:
         # **Bảng** của Table 2: mỗi generator một detector riêng, không phải một
         # con số gộp. Thiếu mục nào nghĩa là generator đó chưa train.
         "train_by_generator": train_by_gen,
+        "skipped": train_json.get("skipped") or {},
         # Điểm đã chấm trên split chấm (mỗi tag một detector) — có `acc_ci95` để
         # không ai đọc chênh lệch 2 điểm thành thứ hạng.
         "eval_by_generator": eval_by_gen,
         "bench": read("bench"),
-        "warnings": _report_warnings(inventory, dire_json, train_by_gen, eval_by_gen),
+        "warnings": _report_warnings(inventory, dire_json, train_by_gen, eval_by_gen,
+                                     skipped=train_json.get("skipped") or {}),
     }
     write_json(f"{OUT}/report.json", payload)
     vol.commit()

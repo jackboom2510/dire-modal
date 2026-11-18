@@ -27,7 +27,8 @@ FORBIDDEN_STRINGS = ("/opt/dire", "ZhendongWang6", "compute_dire.py", "third_par
 ALLOWED_TOP = {
     "__future__", "abc", "argparse", "base64", "binascii", "collections", "concurrent",
     "dataclasses", "datetime", "hashlib", "hmac",
-    "importlib", "io", "json", "math", "os", "pathlib", "random", "re", "shutil", "sys",
+    "glob", "importlib", "io", "json", "math", "os", "pathlib", "random", "re", "shutil", "sys",
+    "types",
     "tarfile", "tempfile", "time", "typing", "zlib", "numpy", "PIL", "torch", "modal",
     # tầng demo (`demo_service.build_app`) — chỉ để bọc engine thành HTTP, không
     # kéo thêm gì vào phép tính. Import nằm *trong* hàm nên phần còn lại của

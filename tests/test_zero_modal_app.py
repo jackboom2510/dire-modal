@@ -1074,3 +1074,108 @@ def test_report_surfaces_a_leftover_fake_dir_and_a_ci_that_cannot_be_true(tmp_pa
     assert "test/fake" in warnings and "relabel" in warnings
     assert "ngoài" in warnings and "gen-adm" in warnings
     assert "±" in warnings                      # cỡ mẫu thật, không phải "~200" chép tay
+
+
+# ---------------------------------------------------------------------------
+# `::train` — `fake/` không phải generator; một generator hỏng không giết cả lượt
+# ---------------------------------------------------------------------------
+def test_train_skips_a_leftover_fake_dir_and_keeps_going(tmp_path, monkeypatch):
+    """Hai lỗi từ một log thật, cùng một chỗ.
+
+    1. `maps/*/fake/` còn sót bị train thành một dòng `gen-fake` trong bảng —
+       trông y như Table 2 nhưng nhãn của nó là "ảnh giả nói chung".
+    2. Generator chỉ có map ở `test` (dalle2, ddpm, …) làm `train` chết giữa
+       chừng, hoặc tệ hơn: âm thầm cho ra `acc = 0,500`.
+    """
+    from dire_zero.pipeline import SplitError
+
+    data, maps = _tree(tmp_path, {
+        ("train", "real"): (40, 40), ("test", "real"): (40, 40),
+        ("train", "adm"): (40, 40), ("test", "adm"): (40, 40),
+        ("test", "fake"): (0, 40),                  # thư mục cũ, chưa relabel
+        ("test", "dalle2"): (0, 40),                # chỉ có ở test
+    })
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+
+    seen: list[str] = []
+
+    def fake_train(factory, subset, out_dir, **kw):
+        seen.append(sorted({m["generator"] for m in subset}))
+        if any(m["generator"] == "dalle2" for m in subset):
+            raise SplitError("tập `train` chỉ có real — dùng --split-mode hash")
+        return {"label": "R1+R2", "split_mode": "author", "best_epoch": 1,
+                "best_val_ap": 0.9, "threshold_from_val": 0.0, "threshold_space": "logit",
+                "seconds": 1.0,
+                "test": {"acc": 0.9, "acc_at_0.5": 0.9, "acc_ci95": [0.85, 0.95],
+                         "ap": 0.9, "auc": 0.9, "n": 80, "n_real": 40, "n_fake": 40}}
+
+    monkeypatch.setattr("dire_zero.pipeline.train", fake_train)
+    out = modal_app.train.local(generator="all", epochs=1)
+
+    assert "gen-fake" not in seen                      # `fake/` bị loại
+    assert out["trained"] == ["gen-adm"]
+    assert any("dalle2" in s for s in out["skipped"])  # bỏ qua, không chết cả lượt
+    ledger = json.loads((tmp_path / "runs" / "train.json").read_text(encoding="utf-8"))
+    assert "gen-dalle2" in (ledger.get("skipped") or {})
+
+
+def test_report_flags_a_row_that_is_just_a_constant_classifier(tmp_path, monkeypatch):
+    """`acc` đúng 0,500 + AUC dưới 0,5 là chữ ký của "train trên một lớp".
+
+    Dòng đó **không phải** kết quả, nhưng nếu bảng chỉ in `acc` và `AP` thì người
+    đọc không có cách nào biết.
+    """
+    data, maps = _tree(tmp_path, {("train", "real"): (10, 10), ("test", "adm"): (0, 10)})
+    out = tmp_path / "runs"
+    out.mkdir()
+    (out / "train.json").write_text(json.dumps({"by_generator": {
+        "gen-ddpm": {"acc": 0.5, "acc_ci95": [0.471, 0.53], "ap": 0.346, "auc": 0.206,
+                     "n": 1000, "n_real": 500, "n_fake": 500},
+        "gen-adm": {"acc": 0.828, "acc_ci95": [0.8, 0.848], "ap": 0.903, "auc": 0.891,
+                    "n": 1000, "n_real": 500, "n_fake": 500},
+    }, "skipped": {"gen-ddpm": "gen-ddpm: tập `train` chỉ có real"}}), encoding="utf-8")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+
+    rep = modal_app.report.local()
+    text = " | ".join(rep["warnings"])
+    assert "gen-ddpm" in text and "một lớp" in text
+    assert any("KHÔNG" in w and "kết quả" in w for w in rep["warnings"])
+    # Dòng tốt không bị gắn cảnh báo "dự đoán một lớp"
+    assert not any("gen-adm" in w and "một lớp" in w for w in rep["warnings"])
+    assert "gen-ddpm" in (rep.get("skipped") or {})
+
+
+def test_report_flags_an_eval_made_with_a_different_detector(tmp_path, monkeypatch):
+    """`eval.json` cũ chấm bằng detector cũ ⇒ điểm đó không được ghép với ACC mới.
+
+    Log thật cho thấy đúng cảnh này: `train_by_generator.gen-adm.acc = 0,828` (lượt
+    mới) đứng cạnh `eval_by_generator.gen-adm.acc = 0,781` (lượt cũ). Hai con số
+    của hai mô hình khác nhau, trong cùng một khối JSON.
+    """
+    data, maps = _tree(tmp_path, {("train", "real"): (10, 10), ("test", "adm"): (0, 10)})
+    out = tmp_path / "runs"
+    (out / "train" / "gen-adm").mkdir(parents=True)
+    (out / "train" / "gen-adm" / "detector.pth").write_bytes(b"NEW-WEIGHTS")
+    (out / "train.json").write_text(json.dumps({"by_generator": {"gen-adm": {
+        "acc": 0.828, "acc_ci95": [0.8, 0.848], "ap": 0.903, "auc": 0.891, "n": 1000}}}),
+        encoding="utf-8")
+    (out / "eval.json").write_text(json.dumps({"by_tag": {"gen-adm": {
+        "acc": 0.781, "acc_ci95": [0.75, 0.81], "n": 1000, "gate": "passed",
+        "detector_sha256": "0" * 64}}}), encoding="utf-8")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MAPS", str(maps))
+    monkeypatch.setattr(modal_app, "OUT", str(out))
+    monkeypatch.setattr(modal_app, "DATA_CARD", str(data / "data_card.json"))
+    monkeypatch.setattr(modal_app, "vol", _VolDem())
+
+    text = " | ".join(modal_app.report.local()["warnings"])
+    assert "eval.json" in text and "detector" in text
+    assert "CŨ" in text
