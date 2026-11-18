@@ -876,7 +876,7 @@ def test_maps_splits_into_balanced_commands_when_over_the_time_budget(tmp_path, 
     (tmp_path / "runs").mkdir()
     (tmp_path / "runs" / "bench.json").write_text(json.dumps({"sec_per_step": 0.0917}))
 
-    out = modal_app.maps.local(n=0, steps=20)
+    out = modal_app.maps.local(n=2500, steps=20)
     assert out["plan"]["gpu_h"] > 4.5                  # 7 600 ảnh ⇒ ~7,7 h
     cmds = out["plan"]["commands"]
     assert len(cmds) >= 3, cmds
@@ -884,6 +884,35 @@ def test_maps_splits_into_balanced_commands_when_over_the_time_budget(tmp_path, 
     gens = [g for line in flat for g in line.split(",")]
     assert sorted(gens) == ["adm", "if", "pndm"]        # không bỏ sót, không lặp
     assert sum(1 for c in cmds if "real chưa có map" in c) == 1
+
+
+def test_full_tree_inventory_does_not_try_to_schedule_n_zero(tmp_path, monkeypatch):
+    """`maps --n 0` inventories the whole tree; it must never suggest `dire --n 0`.
+
+    A real Modal run had 41,000 pending maps for one generator (41.77 GPU-h), so
+    `_plan_remaining` raised `GateError` and destroyed an otherwise valid,
+    read-only inventory command. Inventory is not a promise that one job fits.
+    """
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+    plan = modal_app._plan_remaining({"adm": 41_000, "real": 41_000},
+                                     ["train", "val", "test"], n=0, steps=20)
+    assert plan["commands"] == []
+    assert plan["gpu_h"] is None and plan["usd"] is None
+    assert "inventory toàn cây" in plan["note"]
+    assert "::dire --n 0" in plan["note"]
+
+
+def test_large_positive_maps_plan_reports_shard_needed_without_raising(tmp_path, monkeypatch):
+    """Một generator vượt ngưỡng job cũng không được làm hỏng bước inventory."""
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "bench.json").write_text(json.dumps({"sec_per_step": SEC}))
+    monkeypatch.setattr(modal_app, "OUT", str(runs))
+    plan = modal_app._plan_remaining({"adm": 41_000, "real": 41_000},
+                                     ["train", "val", "test"], n=41_000, steps=20)
+    assert plan["commands"] == []
+    assert plan["gpu_h"] > 4.5
+    assert "adm" in plan["note"] and "giảm --n" in plan["note"]
 
 
 def test_maps_without_bench_does_not_invent_a_price(tmp_path, monkeypatch):
