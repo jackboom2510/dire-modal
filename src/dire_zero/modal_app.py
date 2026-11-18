@@ -807,7 +807,12 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
 
         modal run -m dire_zero.modal_app::maps --n 500          # cùng --n với lệnh định chạy
         modal run -m dire_zero.modal_app::maps --n 500 --verify 20
-        modal run -m dire_zero.modal_app::maps --n 0            # tính cả cây (40 000 ảnh/ô)
+        modal run -m dire_zero.modal_app::maps --n 0            # inventory cả cây, không sinh lệnh chạy
+
+    `--n 0` là **chế độ inventory toàn cây**, không phải giá trị chạy được của
+    `::dire`: ở `::dire`, `n=0` chọn 0 ảnh. Vì vậy `::maps --n 0` chỉ đếm/kiểm kê;
+    nó không lập lệnh chạy cho workload vượt ngân sách. Dùng `--n` dương để lập
+    kế hoạch cho một đợt chạy.
 
     ``--n`` PHẢI là ``n`` của `::dire` mà bạn định chạy — mặc định 2 000 chỉ là mặc
     định của `::dire`. Đếm cả cây rồi báo "thiếu 212 583 map" là con số đúng nhưng
@@ -964,12 +969,28 @@ def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int) ->
     thì không ước lượng (``gpu_h = None``) — đoán `sec_per_step` là cách chắc chắn
     nhất để mọi con số tiền sau đó sai.
     """
-    from .budget import Estimate, load_sec_per_step  # noqa: PLC0415
+    from .budget import Estimate, GateError, load_sec_per_step  # noqa: PLC0415
 
     todo = {g: k for g, k in pending.items() if k}
     if not todo:
         return {"gpu_h": None, "usd": None, "commands": [],
                 "note": "không thiếu map nào — không có gì để chạy"}
+    if n == 0:
+        # `::maps --n 0` is explicitly the whole-tree inventory mode. Never turn
+        # that into `::dire --n 0`: `_items_to_map(..., n=0)` selects [:0], and
+        # so the suggested command would process no images. It must also remain
+        # usable for inventories whose one-generator total exceeds one job's
+        # time budget; planning limits are not inventory limits.
+        return {
+            "gpu_h": None,
+            "usd": None,
+            "commands": [],
+            "groups": [],
+            "note": (f"inventory toàn cây: còn {sum(todo.values())} map; chưa sinh lệnh chạy vì "
+                     "`::dire --n 0` không chọn ảnh và một generator có thể vượt thời gian/job. "
+                     "Sau khi xem inventory, dùng `::maps --n <số dương>` để lập một đợt có giới hạn; "
+                     "chạy `::bench` trước nếu chưa có bench.json."),
+        }
     try:
         sec = load_sec_per_step(f"{OUT}/bench.json")
     except Exception:  # noqa: BLE001 - thiếu bench.json là trạng thái hợp lệ
@@ -992,7 +1013,22 @@ def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int) ->
                     "chạy bất kỳ generator nào với `--skip-existing` là đủ")
             groups = []
     else:
-        groups = group_generators(todo, sec, steps, budget_h)
+        try:
+            groups = group_generators(todo, sec, steps, budget_h)
+        except GateError as exc:
+            # Inventory and plan generation are separate concerns: a single large
+            # generator can exceed one job even though `::maps` has successfully
+            # counted every cell. Return the inventory plus an actionable note,
+            # rather than turning a read-only check into an uncaught exception.
+            return {
+                "gpu_h": round(est.gpu_h, 2),
+                "usd": round(est.usd, 2),
+                "commands": [],
+                "groups": [],
+                "note": (f"chưa sinh lệnh chạy an toàn: {exc}. `::maps` vẫn kiểm kê đầy đủ; "
+                         "giảm --n cho một đợt nhỏ hơn rồi kiểm tra lại. Không dùng `--n 0` "
+                         "cho `::dire` và không giảm `--steps` khỏi protocol chỉ để qua cổng."),
+            }
         note = (f"ước tính {est.gpu_h:.2f} h > trần {budget_h:.2f} h ⇒ chia {len(groups)} lệnh; "
                 "mỗi lệnh dùng lại map đã có nhờ `--skip-existing`.")
     commands = plan_commands(groups, n=n, steps=steps, splits=split_arg) if groups else []
