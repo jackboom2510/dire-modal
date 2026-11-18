@@ -205,3 +205,54 @@ def test_schedule_rows_end_at_the_right_timestep(gradio_app):
     assert rows[0][0] == 0
     # Điểm dễ sai nhất: mốc cuối là 950, không phải 999 (xem tab Lịch & chi phí).
     assert rows[-1][0] == round((20 - 1) * toy2d.T_TRAIN / 20) == 950
+
+
+def test_module_exposes_demo_for_the_hf_launcher(gradio_app):
+    """HF Spaces **import** tệp rồi tìm `demo`, không chạy nó như script.
+
+    Log của một lần deploy thật::
+
+        GRADIO_HOT_RELOAD: Launching demo not found in __main__. Using 'demo'
+        * Running on local URL: http://0.0.0.0:7860, with SSR
+        Stopping Node.js server...
+
+    Launcher không tìm thấy object nào để phục vụ, rơi vào nhánh dự phòng, bật
+    SSR proxy rồi tiến trình Python kết thúc ⇒ proxy chết. App không hỏng; nó
+    chưa bao giờ được giao cho launcher. Test này khoá điều kiện tối thiểu:
+    `gradio_app.demo` tồn tại ở cấp module.
+    """
+    import gradio as gr
+
+    assert hasattr(gradio_app, "demo"), "thiếu `demo` ở cấp module — HF không phục vụ được"
+    assert isinstance(gradio_app.demo, gr.Blocks)
+
+
+def test_importing_the_module_does_not_start_a_server(gradio_app):
+    """`demo` phải được **dựng**, không phải **launch**. Import mà mở cổng thì
+    test và HF sẽ tranh nhau cổng 7860."""
+    import socket
+
+    with socket.socket() as s:
+        try:
+            s.bind(("127.0.0.1", 7860))
+        except OSError:
+            pytest.fail("cổng 7860 đang bị chiếm sau khi import — có gì đó đã launch()")
+
+
+def test_ssr_is_off_by_default_but_can_be_turned_back_on(gradio_app):
+    """SSR = thêm một tiến trình Node đứng trước Python: thêm một chỗ để chết.
+
+    Không bật mặc định, nhưng cũng không cấm: `setdefault` để Space tự đặt
+    `GRADIO_SSR_MODE=true` nếu ai đó thật sự cần SSR (SEO) và đã đo.
+    """
+    import os
+
+    assert os.environ.get("GRADIO_SSR_MODE", "").lower() == "false"
+
+
+def test_the_launcher_contract_is_documented_where_it_will_be_read(gradio_app):
+    """README phải nói về `demo` ở cấp module — nếu không, người sửa sau lại đưa
+    `build_app()` vào trong `if __name__ == "__main__"` và Space chết y hệt."""
+    text = (APP_DIR / "README.md").read_text(encoding="utf-8")
+    assert "GRADIO_HOT_RELOAD" in text
+    assert "demo = build_app()" in text

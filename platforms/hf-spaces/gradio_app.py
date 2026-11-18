@@ -41,6 +41,12 @@ import gradio as gr
 
 from demolib import charts, cost, provenance, remote, toy2d
 
+#: Tắt SSR trước khi launcher của HF đọc biến này. SSR = một tiến trình Node 24
+#: đứng trước Python; nó chỉ thêm một chỗ có thể chết (log của lần deploy hỏng
+#: kết thúc bằng "Stopping Node.js server...") mà không thêm gì cho 5 tab tĩnh.
+#: `setdefault` để vẫn bật lại được bằng biến môi trường của Space khi cần đo.
+os.environ.setdefault("GRADIO_SSR_MODE", "False")
+
 HERE = Path(__file__).resolve().parent
 _raw_gallery = Path(os.environ.get("DIRE_GALLERY_DIR", "gallery"))
 GALLERY_DIR = _raw_gallery if _raw_gallery.is_absolute() else HERE / _raw_gallery
@@ -465,10 +471,35 @@ def build_app() -> gr.Blocks:
     return demo
 
 
+#: Bắt buộc phải có, **ở cấp module**. HF Spaces (SDK gradio) không chạy
+#: `python app_file.py` như một script: nó `import` tệp rồi tìm một object tên
+#: `demo` để tự gọi `launch()`. Không có biến này thì log ra
+#:
+#:     GRADIO_HOT_RELOAD: Launching demo not found in __main__. Using 'demo'
+#:     * Running on local URL: http://0.0.0.0:7860, with SSR
+#:     Stopping Node.js server...
+#:
+#: — tức launcher rơi vào nhánh dự phòng, dựng SSR proxy, rồi không có app nào
+#: phục vụ nên tiến trình Python kết thúc và proxy chết theo. Ứng dụng *không*
+#: hỏng; nó chưa bao giờ được giao cho launcher.
+demo = build_app()
+
+
 if __name__ == "__main__":  # pragma: no cover - chỉ chạy khi phục vụ thật
     # `show_api` đã bị bỏ khỏi `launch()` ở Gradio 6; truyền vào sẽ TypeError ngay
     # lúc khởi động — tức Space build xong rồi chết ở giây đầu.
-    build_app().launch(
+    #
+    # `ssr_mode=False`: SSR là một tiến trình Node đứng trước Python. Trên CPU free
+    # nó chỉ thêm một chỗ có thể chết (đúng như log "Stopping Node.js server...")
+    # mà không thêm gì cho một app 5 tab. Chỉ truyền khi bản gradio đang cài có
+    # tham số này — 5.x không có, và TypeError ở đây giết app ngay giây đầu.
+    _kw = {}
+    import inspect as _inspect  # noqa: PLC0415
+
+    if "ssr_mode" in _inspect.signature(demo.launch).parameters:
+        _kw["ssr_mode"] = False
+    demo.launch(
         server_name=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
         server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
+        **_kw,
     )

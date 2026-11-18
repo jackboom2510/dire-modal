@@ -177,6 +177,34 @@ Muốn Space chạy **bản Streamlit** thay thế: sửa front-matter thành
 Chi tiết, số đo cold start, cổng kiểm và phương án rollback:
 **`docs/demo-hf-spaces-plan.md`**.
 
+## Nếu Space bật lên rồi tắt ngay
+
+Log kiểu này **không** phải app hỏng:
+
+```text
+GRADIO_HOT_RELOAD: Launching demo not found in __main__. Using 'demo'
+* Running on local URL: http://0.0.0.0:7860, with SSR ⚡ (Node proxy -> Python :7861)
+Stopping Node.js server...
+```
+
+HF (SDK gradio) **import** `app_file`, rồi tìm một object tên **`demo`** ở cấp
+module để tự gọi `launch()`. Nếu tệp chỉ dựng app bên trong
+`if __name__ == "__main__":`, launcher không có gì để phục vụ: nó rơi vào nhánh
+dự phòng, bật SSR proxy, rồi tiến trình Python kết thúc và proxy chết theo. Ứng
+dụng *không* hỏng — nó chưa bao giờ được giao cho launcher.
+
+Điều kiện bắt buộc, đã có trong `gradio_app.py`:
+
+```python
+demo = build_app()          # cấp module, KHÔNG nằm trong `if __name__`
+if __name__ == "__main__":  # chỉ dùng khi chạy tay ở máy
+    demo.launch(...)
+```
+
+Nếu vẫn thấy `with SSR ⚡` và muốn bỏ hẳn Node proxy, đặt biến `GRADIO_SSR_MODE`
+= `false` trong *Settings → Variables* (app đã `setdefault` sẵn giá trị này, biến
+của Space chỉ cần khi bạn muốn bật lại).
+
 ## Cấu hình
 
 | Biến | Ý nghĩa | Mặc định |
