@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -56,7 +57,57 @@ MANIFEST = V.MANIFEST
 DATA_CARD = V.DATA_CARD
 GEN = V.GEN                   # chỉ dùng khi chưa có ảnh giả nào
 MAPS = V.MAPS                 # <split>/<generator>/*.npy
+REBUILD_MAPS_ROOT = f"{V.MOUNT}/rebuild/maps"
 OUT = V.RUNS
+
+
+def _maps_root_for_run(run_id: str = "") -> str:
+    """Map root chuẩn hoặc namespace cô lập cho lượt tính mới, không ghi đè MAPS."""
+    if not run_id:
+        return MAPS
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", run_id):
+        raise ValueError("run_id chỉ nhận 1–64 ký tự ASCII chữ/số, '.', '_' hoặc '-'")
+    return f"{REBUILD_MAPS_ROOT}/{run_id}"
+
+
+def _lock_rebuild_namespace(maps_root: str, steps: int, ckpt_sha256: str | None,
+                            splits: Sequence[str]) -> None:
+    """Persist and enforce the protocol identity before writing any fresh maps."""
+    import json  # noqa: PLC0415
+
+    root = Path(maps_root)
+    config_path = root / "_run_config.json"
+    protocol = {
+        "steps": steps,
+        "dtype": "float16",
+        "scale": "[0, 2]",
+        "splits": sorted(set(splits)),
+    }
+    if config_path.exists():
+        actual = json.loads(config_path.read_text(encoding="utf-8"))
+        if any(actual.get(k) != v for k, v in protocol.items()):
+            raise ValueError(
+                f"namespace {maps_root} đã khóa protocol khác: {actual}; "
+                f"chọn run_id mới thay vì trộn map"
+            )
+        if ckpt_sha256 is not None and actual.get("ckpt_sha256") != ckpt_sha256:
+            raise ValueError(
+                f"namespace {maps_root} dùng checkpoint khác; chọn run_id mới thay vì trộn map"
+            )
+        return
+    if root.exists() and any(root.iterdir()):
+        raise ValueError(
+            f"namespace {maps_root} có dữ liệu nhưng thiếu _run_config.json; "
+            "không resume mù, chọn run_id mới"
+        )
+    if ckpt_sha256 is None:
+        return
+    root.mkdir(parents=True, exist_ok=True)
+    config_path.write_text(
+        json.dumps({**protocol, "ckpt_sha256": ckpt_sha256}, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    vol.commit()
 
 #: Image riêng: chỉ torch + numpy + pillow. **Không** clone repo tác giả.
 image = (
@@ -459,7 +510,8 @@ def gen(n: int = 500, steps: int = 20, seed_base: int = 1000, size: int = 256, m
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
-         steps: int = 20, max_usd: float = 5.0, skip_existing: bool = False) -> dict:
+         steps: int = 20, max_usd: float = 5.0, skip_existing: bool = False,
+         run_id: str = "") -> dict:
     """R1 — DIRE map cho cả hai phía, cùng một lịch, **giữ split của người đóng gói**.
 
     ``generator="auto"``: dùng **mọi** thư mục generator đang có trong cây dữ liệu
@@ -478,7 +530,17 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     ``--skip-existing`` cần cho cả hai lý do trên: nó làm mỗi lượt chia nhỏ **cộng
     dồn** thay vì trả tiền lại cho ảnh `real`, và làm lượt bị kill không mất phần
     đã xong (map đã ghi thì lần sau dùng lại).
+
+    ``run_id`` khác rỗng ghi vào `/zero/rebuild/maps/<run_id>` thay vì `/zero/maps`.
+    Dùng namespace mới để tính lại mà giữ nguyên map cũ; khi resume namespace này,
+    phải giữ nguyên `steps`/checkpoint và luôn bật `--skip-existing`. Namespace này
+    chưa được `::train` đọc tự động; chỉ train sau khi đã audit và quyết định rõ cách
+    dùng bộ map mới.
     """
+    maps_root = _maps_root_for_run(run_id)
+    if run_id and not skip_existing:
+        raise ValueError("namespace run_id bắt buộc --skip-existing để resume không tính lại map")
+
     from .budget import Estimate, GateError, load_sec_per_step, require_estimate
     from .pipeline import RunMeta, compute_maps
 
@@ -496,7 +558,7 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
             f"không có ảnh nào để chạy: splits={list(want)} generators={gens}. "
             "Kiểm `::checkdata` trước."
         )
-    pending = _pending_by_generator(items, MAPS, skip_existing)
+    pending = _pending_by_generator(items, maps_root, skip_existing)
     existing = len(items) - sum(pending.values())
     to_compute = sum(pending.values())
     sec = load_sec_per_step(f"{OUT}/bench.json")
@@ -511,8 +573,9 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     if to_compute == 0:
         print("[kế hoạch] không có gì mới — không gọi GPU", flush=True)
         return {"n": 0, "n_reused": existing, "generators": gens, "splits": list(want),
+                "map_root": maps_root, "run_id": run_id or None,
                 "nfe_total": 0, "est": Estimate(0, 2 * steps, sec).as_dict(),
-                "note": "mọi map đã có; bỏ --skip-existing nếu muốn tính lại từ đầu"}
+                "note": "mọi map trong namespace đã có; không gọi GPU"}
 
     est = Estimate(n_images=to_compute, nfe_per_image=2 * steps, sec_per_step=sec)
     print("[tiền]", est.line(), flush=True)
@@ -524,7 +587,7 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
     budget_h = WORK_TIMEOUT_S / 3600 * SAFE_TIME_FRACTION
     if est.gpu_h > budget_h:
         groups = group_generators(pending, sec, steps, budget_h)
-        lines = plan_commands(groups, n=n, steps=steps, splits=splits)
+        lines = plan_commands(groups, n=n, steps=steps, splits=splits, run_id=run_id)
         raise GateError(
             f"ước tính {est.gpu_h:.2f} GPU-h > trần thời gian {budget_h:.2f} h "
             f"(timeout {WORK_TIMEOUT_S / 3600:.0f} h × {SAFE_TIME_FRACTION:.0%}).\n"
@@ -537,17 +600,22 @@ def dire(splits: str = "train,test", generator: str = "auto", n: int = 2000,
         )
     require_estimate(est, max_usd)
 
+    if run_id:
+        # Fail closed on protocol mismatch before loading a GPU model.
+        _lock_rebuild_namespace(maps_root, steps, None, want)
     f, digest = _counter(dtype="float16")
+    if run_id:
+        _lock_rebuild_namespace(maps_root, steps, digest, want)
     meta = RunMeta(digest, steps)
-    out = _compute_with_commits(f, items, meta, skip_existing, compute_maps)
+    out = _compute_with_commits(f, items, meta, skip_existing, compute_maps, maps_root=maps_root)
     vol.commit()
     return {"n": out["n"], "n_new": out["n_new"], "n_reused": out["n_reused"],
             "generators": gens, "splits": list(want), "nfe_total": out["nfe_total"],
-            "est": est.as_dict()}
+            "map_root": maps_root, "run_id": run_id or None, "est": est.as_dict()}
 
 
 def _compute_with_commits(f, items, meta, skip_existing: bool, compute_maps,
-                          every: int | None = None) -> dict:
+                          every: int | None = None, maps_root: str = MAPS) -> dict:
     """Chạy `compute_maps` và **ghi bền** Volume trên đường đi.
 
     Volume v1 không tự ghi: thay đổi chỉ bền sau `commit()`. Bản trước chỉ commit ở
@@ -573,7 +641,7 @@ def _compute_with_commits(f, items, meta, skip_existing: bool, compute_maps,
               f"(mất mạng từ đây chỉ mất ≤ {every} ảnh)", flush=True)
 
     try:
-        out = compute_maps(f, items, MAPS, meta, limit=None, skip_existing=skip_existing,
+        out = compute_maps(f, items, maps_root, meta, limit=None, skip_existing=skip_existing,
                            progress=checkpoint_progress)
     except BaseException:
         vol.commit()
@@ -682,7 +750,8 @@ def group_generators(pending: dict, sec_per_step: float, steps: int,
     return groups
 
 
-def plan_commands(groups: list[dict], n: int, steps: int, splits: str) -> list[str]:
+def plan_commands(groups: list[dict], n: int, steps: int, splits: str,
+                  run_id: str = "") -> list[str]:
     """Lệnh copy–paste được, mỗi nhóm một dòng, kèm ước tính của **chính nhóm đó**.
 
     In `--generator …` trơ trọi là chưa đủ: người dùng còn phải nhớ `--n`,
@@ -691,8 +760,10 @@ def plan_commands(groups: list[dict], n: int, steps: int, splits: str) -> list[s
     """
     lines = []
     for grp in groups:
+        namespace = f" --run-id {run_id}" if run_id else ""
         cmd = (f"modal run -m dire_zero.modal_app::dire --n {n} --steps {steps} "
-               f"--splits {splits} --skip-existing --generator {','.join(grp['generators'])}")
+               f"--splits {splits} --skip-existing --generator {','.join(grp['generators'])}"
+               f"{namespace}")
         n_images = grp["n_images"] + grp["includes_real"]
         note = f"  # {n_images} ảnh"
         if grp["includes_real"]:
@@ -839,7 +910,7 @@ def relabel(apply: bool = False) -> dict:
 
 @app.function(volumes=VOLUMES, cpu=2, timeout=1800)
 def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
-         steps: int = 20) -> dict:
+         steps: int = 20, run_id: str = "") -> dict:
     """Kiểm **tồn kho** DIRE map và in **lệnh chạy tiếp** — không cần GPU.
 
     Dùng đúng vào lúc cần: một lượt `::dire` bị dừng giữa đường (mất mạng, hết
@@ -851,6 +922,10 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
         modal run -m dire_zero.modal_app::maps --n 500          # cùng --n với lệnh định chạy
         modal run -m dire_zero.modal_app::maps --n 500 --verify 20
         modal run -m dire_zero.modal_app::maps --n 0            # inventory cả cây, không sinh lệnh chạy
+        modal run -m dire_zero.modal_app::maps --n 0 --run-id fresh-2026-11
+
+    `--run-id` kiểm kê namespace `/zero/rebuild/maps/<run-id>` — dữ liệu gốc ở
+    `/zero/maps` không bị đọc làm map sẵn có và không bị ghi đè.
 
     `--n 0` là **chế độ inventory toàn cây**, không phải giá trị chạy được của
     `::dire`: ở `::dire`, `n=0` chọn 0 ảnh. Vì vậy `::maps --n 0` chỉ đếm/kiểm kê;
@@ -864,11 +939,17 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
 
     ``verify`` đọc thử ngẫu nhiên từng ấy file bằng ``np.load``: file ghi dở do bị
     kill **vẫn tồn tại với kích thước khác 0**, nên đếm file là chưa đủ.
+
+    Với namespace mới và toàn bộ dataset, tăng dần `--n` theo các mốc (ví dụ
+    1000, 2000, ... đến số ảnh lớn nhất trong inventory). Mỗi lần `::maps` chỉ
+    lập lệnh cho phần còn thiếu trong namespace; các lệnh luôn bật `--skip-existing`.
+    Nếu cổng thời gian yêu cầu, chạy các nhóm generator tuần tự rồi mới lập mốc kế.
     """
     import numpy as np  # noqa: PLC0415
 
     from .data import list_images  # noqa: PLC0415
 
+    maps_root = _maps_root_for_run(run_id)
     data_gens = _cell_generators(DATA)
     gens = select_generators(data_gens, generator) if data_gens else []
     cells: list[dict] = []
@@ -882,7 +963,7 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
                 continue
             imgs = list_images(gdir)
             want = min(len(imgs), n) if n else len(imgs)
-            mdir = os.path.join(MAPS, split, gen)
+            mdir = os.path.join(maps_root, split, gen)
             have = sorted(p for p in os.listdir(mdir) if p.endswith(".npy")) if os.path.isdir(mdir) else []
             nonempty = [p for p in have if os.path.getsize(os.path.join(mdir, p)) > 0]
             cells.append({
@@ -897,7 +978,7 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
 
     import json  # noqa: PLC0415
 
-    index_path = os.path.join(MAPS, "dire.json")
+    index_path = os.path.join(maps_root, "dire.json")
     index = json.load(open(index_path, encoding="utf-8")) if os.path.exists(index_path) else {}
     runs = index.get("runs") or []
 
@@ -919,9 +1000,9 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
     # `fake/` chỉ nằm trong `maps/`, không có ảnh tương ứng trong `data/` ⇒ không
     # xuất hiện như một ô. Nó vẫn phải bị báo: map ở đó bị `collect_maps` đọc thành
     # một generator tên `fake`, tức là một lớp giả **không có thật** trong dữ liệu.
-    if os.path.isdir(MAPS):
-        for split in sorted(os.listdir(MAPS)):
-            if os.path.isdir(os.path.join(MAPS, split, "fake")):
+    if os.path.isdir(maps_root):
+        for split in sorted(os.listdir(maps_root)):
+            if os.path.isdir(os.path.join(maps_root, split, "fake")):
                 problems.append(f"{split}/fake: còn thư mục `fake/` từ bản cũ — "
                                 "chạy `::relabel --apply` trước khi train")
 
@@ -944,7 +1025,7 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
     if verify:
         rng = np.random.default_rng(0)
         for c in cells:
-            mdir = os.path.join(MAPS, *c["cell"].split("/"))
+            mdir = os.path.join(maps_root, *c["cell"].split("/"))
             files = [p for p in os.listdir(mdir) if p.endswith(".npy")] if os.path.isdir(mdir) else []
             for name in rng.choice(files, size=min(verify, len(files)), replace=False) if files else []:
                 path = os.path.join(mdir, str(name))
@@ -958,12 +1039,14 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
     # Ước lượng phần còn thiếu + lệnh chạy tiếp, cùng một công thức với cổng của
     # `::dire`. Nếu chỉ in "thiếu 3 500 map" thì người đọc vẫn phải tự chia nhóm.
     splits = sorted({c["cell"].split("/")[0] for c in cells})
-    plan = _plan_remaining(pending, splits, n, steps)
+    plan = _plan_remaining(pending, splits, n, steps, run_id=run_id)
     total_missing = sum(c["missing"] for c in cells)
     has_fake = any(not c["cell"].endswith("/real") and c["maps"] for c in cells)
     ready = bool(cells) and not problems and not bad_files and has_fake and total_missing == 0
     payload = {
         "n": n,
+        "run_id": run_id or None,
+        "map_root": maps_root,
         "cells": cells,
         "total_maps": sum(c["maps"] for c in cells),
         "total_missing": total_missing,
@@ -1005,7 +1088,8 @@ def maps(n: int = 2000, verify: int = 0, generator: str = "auto",
     return payload
 
 
-def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int) -> dict:
+def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int,
+                    run_id: str = "") -> dict:
     """Ước lượng phần còn thiếu + lệnh chạy tiếp, dùng **cùng** công thức với `::dire`.
 
     Trả ``{"gpu_h", "usd", "commands", "groups", "note"}``. Không có `bench.json`
@@ -1074,7 +1158,8 @@ def _plan_remaining(pending: dict, splits: Sequence[str], n: int, steps: int) ->
             }
         note = (f"ước tính {est.gpu_h:.2f} h > trần {budget_h:.2f} h ⇒ chia {len(groups)} lệnh; "
                 "mỗi lệnh dùng lại map đã có nhờ `--skip-existing`.")
-    commands = plan_commands(groups, n=n, steps=steps, splits=split_arg) if groups else []
+    commands = plan_commands(groups, n=n, steps=steps, splits=split_arg,
+                             run_id=run_id) if groups else []
     return {"gpu_h": round(est.gpu_h, 2), "usd": round(est.usd, 2),
             "commands": commands, "groups": groups, "note": note}
 
