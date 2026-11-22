@@ -59,6 +59,65 @@ def test_checkpoint_keeps_its_filename_so_nothing_has_to_be_downloaded_again():
     assert modal_app.CKPT.endswith("adm_lsun.pt")
 
 
+def test_rebuild_run_id_uses_a_separate_safe_maps_namespace():
+    assert modal_app._maps_root_for_run() == modal_app.MAPS
+    root = modal_app._maps_root_for_run("recompute-2026-11")
+    assert root == "/zero/rebuild/maps/recompute-2026-11"
+    assert not root.startswith(modal_app.MAPS + "/")
+    for invalid in ("../maps", "run/child", "-bad", " "):
+        with pytest.raises(ValueError):
+            modal_app._maps_root_for_run(invalid)
+
+
+def test_plan_commands_preserve_rebuild_namespace():
+    groups = [{"generators": ["adm"], "n_images": 10, "includes_real": 2, "gpu_h": 0.1}]
+    command = modal_app.plan_commands(groups, n=1000, steps=20, splits="train,test",
+                                     run_id="recompute-2026-11")[0]
+    assert "--run-id recompute-2026-11" in command
+    assert "--skip-existing" in command
+
+
+def test_rebuild_namespace_locks_protocol_and_refuses_mixing(tmp_path, monkeypatch):
+    root = tmp_path / "fresh-maps"
+    monkeypatch.setattr(modal_app.vol, "commit", lambda: None)
+    modal_app._lock_rebuild_namespace(str(root), 20, "sha-a", ("train", "test"))
+    config = json.loads((root / "_run_config.json").read_text(encoding="utf-8"))
+    assert config["steps"] == 20 and config["ckpt_sha256"] == "sha-a"
+    modal_app._lock_rebuild_namespace(str(root), 20, "sha-a", ("test", "train"))
+    with pytest.raises(ValueError, match="chọn run_id mới"):
+        modal_app._lock_rebuild_namespace(str(root), 50, "sha-a", ("train", "test"))
+
+
+def test_rebuild_namespace_refuses_unindexed_existing_files(tmp_path):
+    root = tmp_path / "old"
+    root.mkdir()
+    (root / "partial.npy").write_bytes(b"map")
+    with pytest.raises(ValueError, match="thiếu _run_config"):
+        modal_app._lock_rebuild_namespace(str(root), 20, "sha-a", ("train",))
+
+
+def test_maps_plans_against_the_isolated_rebuild_namespace(tmp_path, monkeypatch):
+    data, _old_maps = _tree(tmp_path, {("test", "real"): (10, 0), ("test", "adm"): (10, 0)})
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    (runs / "bench.json").write_text(json.dumps({"sec_per_step": SEC}), encoding="utf-8")
+    rebuild_root = tmp_path / "rebuild" / "maps"
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "REBUILD_MAPS_ROOT", str(rebuild_root))
+    monkeypatch.setattr(modal_app, "OUT", str(runs))
+
+    out = modal_app.maps.local(n=10, run_id="fresh-test")
+    assert out["map_root"] == str(rebuild_root / "fresh-test")
+    assert out["total_maps"] == 0 and out["total_missing"] == 20
+    assert out["plan"]["commands"]
+    assert all("--run-id fresh-test" in command for command in out["plan"]["commands"])
+
+
+def test_dire_requires_skip_existing_for_a_rebuild_namespace():
+    with pytest.raises(ValueError, match="bắt buộc --skip-existing"):
+        modal_app.dire.local(run_id="fresh-test", skip_existing=False)
+
+
 # --------------------------------------------------------------------------- #
 # `::train --generator`: một dòng của Table 2, không phải bài toán gộp
 # --------------------------------------------------------------------------- #
