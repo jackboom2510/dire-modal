@@ -773,7 +773,9 @@ def relabel(apply: bool = False) -> dict:
     """Sửa nhãn generator cho map cũ nằm ở `maps/<split>/fake/` (xem `maps_index`).
 
     Chạy **không cần GPU**: đây là đổi tên file theo `source` đã ghi trong
-    `dire.json`, không phải tính lại map. Mặc định chỉ in kế hoạch.
+    `dire.json`, không phải tính lại map. Mặc định chỉ in kế hoạch. Mỗi lượt
+    ghi báo cáo đầy đủ (kể cả move và conflict/unresolved) thành file riêng trong
+    `/zero/runs/relabel/`, rồi commit Volume để có thể tải/đọc lại sau.
 
     ::
 
@@ -781,17 +783,58 @@ def relabel(apply: bool = False) -> dict:
         modal run -m dire_zero.modal_app::relabel --apply       # đổi tên thật
     """
     import json  # noqa: PLC0415
+    from datetime import datetime, timezone  # noqa: PLC0415
 
-    from .maps_index import apply as apply_fn, plan as plan_fn  # noqa: PLC0415
+    from .maps_index import (  # noqa: PLC0415
+        apply as apply_fn,
+        plan as plan_fn,
+        relabel_log_path,
+        write_relabel_log,
+    )
 
     p = plan_fn(MAPS)
-    out = {"plan": {k: v for k, v in p.items() if k != "moves"}, "n_moves": p["n_moves"],
-           "apply": apply}
-    if apply and p["moves"]:
-        out["applied"] = apply_fn(p)["n_moves"]
+    created_at = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+    log_path = relabel_log_path(OUT)
+    out = {
+        "created_at_utc": created_at,
+        "status": "planned" if not apply else "applying",
+        "apply": apply,
+        "log_path": str(log_path),
+        "plan": p,
+    }
+
+    # Ghi và commit kế hoạch trước khi có thay đổi: nếu container bị dừng giữa
+    # lúc apply, audit record vẫn tồn tại với trạng thái "applying".
+    write_relabel_log(log_path, out)
+    vol.commit()
+    try:
+        if apply:
+            applied = apply_fn(p) if p["moves"] else {"n_moves": 0, "moved": []}
+            out["status"] = "applied"
+            out["applied"] = applied["n_moves"]
+            out["moved"] = applied["moved"]
+    except Exception as exc:
+        out["status"] = "failed"
+        out["error"] = f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        write_relabel_log(log_path, out)
+        # Cả dry-run cũng phải commit để log tồn tại trên Volume.
         vol.commit()
-    print(json.dumps(out, ensure_ascii=False, indent=2), flush=True)
-    return out
+
+    summary = {
+        "created_at_utc": created_at,
+        "status": out["status"],
+        "apply": apply,
+        "log_path": str(log_path),
+        "n_moves": p["n_moves"],
+        "n_unresolved": len(p["unresolved"]),
+        "by_generator": p["by_generator"],
+    }
+    if "applied" in out:
+        summary["applied"] = out["applied"]
+    print(json.dumps(summary, ensure_ascii=False, indent=2), flush=True)
+    return summary
 
 
 @app.function(volumes=VOLUMES, cpu=2, timeout=1800)

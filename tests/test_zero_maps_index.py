@@ -118,6 +118,32 @@ def test_missing_source_is_reported_not_guessed(tmp_path: Path):
     assert p["n_moves"] == 1 and p["moves"][0]["generator"] == "mystery"
 
 
+def test_relabel_audit_log_is_a_unique_json_file_with_full_conflicts(tmp_path: Path):
+    runs = tmp_path / "runs"
+    first = maps_index.relabel_log_path(runs)
+    second = maps_index.relabel_log_path(runs)
+    report = {
+        "status": "planned",
+        "plan": {
+            "moves": [{"rel_src": "train/fake/a.npy", "rel_dst": "train/adm/a.npy"}],
+            "unresolved": [{
+                "rel_src": "test/fake/x.npy",
+                "rel_dst": "test/adm/x.npy",
+                "problem": "đích đã tồn tại — không ghi đè",
+            }],
+        },
+    }
+
+    assert first.parent == runs / "relabel"
+    assert first != second
+    maps_index.write_relabel_log(first, report)
+    text = first.read_text(encoding="utf-8")
+    assert text.endswith("\n")
+    saved = json.loads(text)
+    assert saved["plan"]["unresolved"][0]["problem"] == "đích đã tồn tại — không ghi đè"
+    assert saved["plan"]["moves"] == report["plan"]["moves"]
+
+
 def test_missing_index_is_an_error_not_a_silent_noop(tmp_path: Path):
     with pytest.raises(FileNotFoundError):
         maps_index.plan(tmp_path / "khong-co")
