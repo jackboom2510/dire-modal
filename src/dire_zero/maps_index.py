@@ -25,9 +25,27 @@ import json
 import os
 import shutil
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 GENERATOR_BUCKET = "fake"
+
+
+def relabel_log_path(runs_root: str | Path) -> Path:
+    """Tạo đường dẫn mới, duy nhất cho audit log dưới `<runs>/relabel/`."""
+    log_dir = Path(runs_root) / "relabel"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    return log_dir / f"relabel-{stamp}-{uuid4().hex[:8]}.json"
+
+
+def write_relabel_log(path: str | Path, report: dict) -> None:
+    """Ghi toàn bộ kế hoạch/kết quả (gồm danh sách conflict) thành JSON riêng."""
+    Path(path).write_text(
+        json.dumps(report, ensure_ascii=False, indent=2, default=str) + "\n",
+        encoding="utf-8",
+    )
 
 
 def _read(path: Path) -> dict:
