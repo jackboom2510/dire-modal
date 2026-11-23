@@ -13,6 +13,7 @@ Lệnh::
     modal run -m dire_zero.modal_app::bench
     modal run -m dire_zero.modal_app::gen --n 500
     modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test
+    modal run -m dire_zero.modal_app::reconcilemanifest --report-id empty-images-delete-2026-10-14
     modal run -m dire_zero.modal_app::auditimages --splits train,val,test
     modal run -m dire_zero.modal_app::dire --n 500
     modal run -m dire_zero.modal_app::train --epochs 40
@@ -552,6 +553,136 @@ def pruneemptyimages(splits: str = "", apply: bool = False, report_id: str = "")
     print(json.dumps({k: result[k] for k in (
         "report_id", "n_scanned", "n_candidates", "n_deleted", "apply", "report_json", "report_tsv",
     )}, ensure_ascii=False, indent=2), flush=True)
+    return result
+
+
+def _manifest_relpath(value: str, data_root: str | Path) -> str | None:
+    """Normalize a manifest path under DATA; ignore absolute paths outside DATA."""
+    root = Path(data_root).resolve()
+    value = value.strip().replace("\\", "/")
+    path = Path(value)
+    if path.is_absolute():
+        try:
+            return path.resolve(strict=False).relative_to(root).as_posix()
+        except ValueError:
+            return None
+    if ".." in path.parts:
+        raise ValueError(f"manifest path escapes data root: {value}")
+    return path.as_posix().removeprefix("./")
+
+
+def _plan_manifest_reconciliation(manifest_text: str, report: dict, data_root: str | Path) -> dict:
+    """Remove only rows whose source files are recorded as actually deleted."""
+    if not report.get("apply"):
+        raise ValueError("report is a dry-run; reconciliation requires an apply deletion report")
+    deleted = {
+        row["relative_path"] for row in report.get("actions", [])
+        if row.get("status") == "deleted_zero_bytes"
+    }
+    for rel in deleted:
+        p = Path(rel)
+        if p.is_absolute() or ".." in p.parts:
+            raise ValueError(f"deletion report path escapes data root: {rel}")
+        if (Path(data_root) / p).exists():
+            raise ValueError(f"report says deleted but file exists again; refusing manifest change: {rel}")
+
+    lines = manifest_text.splitlines()
+    if not lines or lines[0].split("\t", 1)[0] != "png":
+        raise ValueError("manifest.tsv header is missing or does not start with png")
+    kept = [lines[0]]
+    removed, matched = [], set()
+    for line in lines[1:]:
+        if not line.strip():
+            kept.append(line)
+            continue
+        png = line.split("\t", 1)[0]
+        rel = _manifest_relpath(png, data_root)
+        if rel in deleted:
+            removed.append(rel)
+            matched.add(rel)
+        else:
+            kept.append(line)
+    return {
+        "manifest_text": "\n".join(kept) + ("\n" if manifest_text.endswith(("\n", "\r")) else ""),
+        "n_deleted_in_report": len(deleted),
+        "n_manifest_rows_removed": len(removed),
+        "removed_paths": removed,
+        "unmatched_deleted_paths": sorted(deleted - matched),
+    }
+
+
+@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
+def reconcilemanifest(report_id: str, apply: bool = False) -> dict:
+    """Reconcile manifest.tsv with a completed pruneemptyimages report.
+
+    Dry-run by default. With ``--apply``, make a one-time backup beside manifest,
+    then remove only rows whose files were actually deleted according to that
+    report. The report's files must remain absent. No image/map files are changed.
+    """
+    import datetime as dt  # noqa: PLC0415
+    import hashlib  # noqa: PLC0415
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+    import shutil  # noqa: PLC0415
+    import tempfile  # noqa: PLC0415
+
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", report_id):
+        raise ValueError("report_id chỉ nhận 1–64 ký tự ASCII chữ/số, '.', '_' hoặc '-'")
+    report_path = Path(IMAGE_AUDITS) / f"{report_id}.json"
+    manifest = Path(MANIFEST)
+    if not report_path.is_file():
+        raise FileNotFoundError(f"không thấy deletion report: {report_path}")
+    if not manifest.is_file():
+        raise FileNotFoundError(f"không thấy manifest: {manifest}")
+
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    original = manifest.read_text(encoding="utf-8")
+    plan = _plan_manifest_reconciliation(original, report, DATA)
+    before_sha = hashlib.sha256(original.encode("utf-8")).hexdigest()
+    backup = manifest.with_name(f"manifest.tsv.before-{report_id}.bak")
+    if apply and plan["n_manifest_rows_removed"]:
+        if plan["unmatched_deleted_paths"]:
+            raise ValueError(
+                "một số file đã xóa không có trong manifest; không sửa manifest để tránh lệch bộ dữ liệu: "
+                + ", ".join(plan["unmatched_deleted_paths"][:10])
+            )
+        if backup.exists():
+            raise FileExistsError(f"backup đã tồn tại, không ghi đè: {backup}")
+        new_text = plan.pop("manifest_text")
+        backup.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(manifest, backup)
+        fd, temp_name = tempfile.mkstemp(prefix="manifest.tsv.", suffix=".tmp", dir=str(manifest.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+                f.write(new_text)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_name, manifest)
+        except BaseException:
+            try:
+                os.unlink(temp_name)
+            except OSError:
+                pass
+            raise
+        vol.commit()
+        plan["backup"] = str(backup)
+        plan["manifest_sha256_after"] = hashlib.sha256(new_text.encode("utf-8")).hexdigest()
+    else:
+        plan.pop("manifest_text", None)
+        if apply and not plan["n_manifest_rows_removed"]:
+            plan["note"] = "không có manifest row cần xóa; manifest không đổi"
+        else:
+            plan["note"] = "dry-run; manifest chưa được sửa"
+
+    result = {
+        "report_id": report_id,
+        "apply": apply,
+        "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "manifest": str(manifest),
+        "manifest_sha256_before": before_sha,
+        **plan,
+    }
+    print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
     return result
 
 

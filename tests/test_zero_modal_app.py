@@ -32,7 +32,7 @@ def test_app_name_and_image():
 
 def test_documented_entrypoints_exist():
     for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "pruneemptyimages",
-                 "auditimages",
+                 "auditimages", "reconcilemanifest",
                  "train", "evaluate", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
@@ -150,6 +150,87 @@ def test_pruneemptyimages_apply_deletes_only_zero_byte_images(tmp_path: Path, mo
     assert result["actions"][0]["status"] == "deleted_zero_bytes"
     assert not empty.exists()
     assert nonempty.read_bytes() == b"still keep this"
+    assert fake_volume.commits == 1
+
+
+def test_manifest_reconciliation_removes_only_successfully_deleted_report_rows(tmp_path: Path):
+    data = tmp_path / "data"
+    (data / "train" / "stylegan").mkdir(parents=True)
+    (data / "train" / "stylegan" / "keep.png").write_bytes(b"still present")
+    report = {
+        "apply": True,
+        "actions": [
+            {"relative_path": "train/stylegan/empty.png", "status": "deleted_zero_bytes"},
+            {"relative_path": "train/stylegan/failed.png", "status": "delete_error"},
+        ],
+    }
+    manifest = (
+        "png\tlabel\tgenerator\tsplit\tdataset\tsource_tar\tmember\tsha256\twidth\theight\n"
+        "train/stylegan/empty.png\t1\tstylegan\ttrain\tds\tarchive\tmember-a\tsha\t256\t256\n"
+        "train/stylegan/keep.png\t1\tstylegan\ttrain\tds\tarchive\tmember-b\tsha2\t256\t256\n"
+    )
+
+    plan = modal_app._plan_manifest_reconciliation(manifest, report, data)
+
+    assert plan["n_deleted_in_report"] == 1
+    assert plan["n_manifest_rows_removed"] == 1
+    assert plan["removed_paths"] == ["train/stylegan/empty.png"]
+    assert plan["unmatched_deleted_paths"] == []
+    assert "empty.png" not in plan["manifest_text"]
+    assert "keep.png" in plan["manifest_text"]
+
+
+def test_manifest_reconciliation_fails_closed_if_file_exists_or_report_is_dry_run(tmp_path: Path):
+    data = tmp_path / "data"
+    image = data / "train" / "stylegan" / "empty.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"")
+    manifest = "png\tlabel\ntrain/stylegan/empty.png\t1\n"
+    with pytest.raises(ValueError, match="file exists again"):
+        modal_app._plan_manifest_reconciliation(manifest, {
+            "apply": True,
+            "actions": [{"relative_path": "train/stylegan/empty.png", "status": "deleted_zero_bytes"}],
+        }, data)
+    with pytest.raises(ValueError, match="dry-run"):
+        modal_app._plan_manifest_reconciliation(manifest, {
+            "apply": False,
+            "actions": [],
+        }, data)
+
+
+def test_reconcilemanifest_dry_run_then_apply_keeps_backup(tmp_path: Path, monkeypatch):
+    data = tmp_path / "data"
+    (data / "train" / "stylegan").mkdir(parents=True)
+    manifest = data / "manifest.tsv"
+    original = (
+        "png\tlabel\tgenerator\tsplit\tdataset\tsource_tar\tmember\tsha256\twidth\theight\n"
+        "train/stylegan/deleted.png\t1\tstylegan\ttrain\tds\tarc\tm1\th1\t256\t256\n"
+        "train/stylegan/kept.png\t1\tstylegan\ttrain\tds\tarc\tm2\th2\t256\t256\n"
+    )
+    manifest.write_text(original, encoding="utf-8")
+    audits = tmp_path / "runs" / "image-audits"
+    audits.mkdir(parents=True)
+    report_id = "empty-delete"
+    (audits / f"{report_id}.json").write_text(json.dumps({
+        "apply": True,
+        "actions": [{"relative_path": "train/stylegan/deleted.png", "status": "deleted_zero_bytes"}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MANIFEST", str(manifest))
+    monkeypatch.setattr(modal_app, "IMAGE_AUDITS", str(audits))
+    fake_volume = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", fake_volume)
+
+    dry = modal_app.reconcilemanifest.local(report_id=report_id)
+    assert dry["n_manifest_rows_removed"] == 1
+    assert manifest.read_text(encoding="utf-8") == original
+    assert not (data / f"manifest.tsv.before-{report_id}.bak").exists()
+
+    applied = modal_app.reconcilemanifest.local(report_id=report_id, apply=True)
+    updated = manifest.read_text(encoding="utf-8")
+    assert applied["n_manifest_rows_removed"] == 1
+    assert "deleted.png" not in updated and "kept.png" in updated
+    assert (data / f"manifest.tsv.before-{report_id}.bak").read_text(encoding="utf-8") == original
     assert fake_volume.commits == 1
 
 

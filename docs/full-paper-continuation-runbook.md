@@ -220,8 +220,17 @@ modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test \\
 
 Nó chỉ xóa image file vẫn có size 0 khi kiểm tra lần cuối; không đụng file rỗng
 ngoài các thư mục split, nonzero file, hoặc DIRE map. Báo cáo JSON/TSV lưu dưới
-`/zero/runs/image-audits/`, kèm tree path và byte size. Để tìm file không giải mã
-được hoặc sai kích thước 256×256, dùng audit sâu hơn:
+`/zero/runs/image-audits/`, kèm tree path và byte size. Sau khi xóa, đồng bộ
+manifest bằng đúng report ID: chạy trước ở dry-run, rồi `--apply` để lưu backup
+và loại đúng các row đã xóa khỏi `manifest.tsv`:
+
+```bash
+modal run -m dire_zero.modal_app::reconcilemanifest --report-id empty-images-delete-2026-10-14
+modal run -m dire_zero.modal_app::reconcilemanifest --report-id empty-images-delete-2026-10-14 --apply
+```
+
+Backup được giữ ở `/zero/data/manifest.tsv.before-empty-images-delete-2026-10-14.bak`.
+Để tìm file không giải mã được hoặc sai kích thước 256×256, dùng audit sâu hơn:
 
 ```bash
 modal run -m dire_zero.modal_app::auditimages --splits train,val,test \\
