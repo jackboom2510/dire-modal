@@ -31,10 +31,74 @@ def test_app_name_and_image():
 
 
 def test_documented_entrypoints_exist():
-    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "train",
-                 "evaluate", "report"):
+    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "auditimages",
+                 "train", "evaluate", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
+
+
+def test_auditimages_lists_invalid_files_with_tree_path_and_both_sizes(tmp_path: Path):
+    Image = pytest.importorskip("PIL.Image")
+
+    root = tmp_path / "data"
+    cell = root / "train" / "stylegan"
+    cell.mkdir(parents=True)
+    empty = cell / "empty.png"
+    empty.write_bytes(b"")
+    corrupt = cell / "corrupt.png"
+    corrupt.write_bytes(b"not an image")
+    wrong_size = cell / "wrong-size.png"
+    Image.new("RGB", (128, 256), color="red").save(wrong_size)
+    valid = cell / "valid.png"
+    Image.new("RGB", (256, 256), color="blue").save(valid)
+
+    before = {p: p.read_bytes() for p in (empty, corrupt, wrong_size, valid)}
+    result = modal_app._scan_image_tree(root, splits="train", expected_size=256)
+
+    assert result["n_scanned"] == 4
+    assert result["n_valid"] == 1
+    assert result["n_invalid"] == 3
+    found = {row["relative_path"]: row for row in result["invalid_files"]}
+    assert found["train/stylegan/empty.png"]["reason"] == "zero_bytes"
+    assert found["train/stylegan/empty.png"]["file_size_bytes"] == 0
+    assert found["train/stylegan/corrupt.png"]["reason"] == "decode_error"
+    assert found["train/stylegan/corrupt.png"]["file_size_bytes"] == len(b"not an image")
+    assert found["train/stylegan/wrong-size.png"]["reason"] == "wrong_dimensions"
+    assert (found["train/stylegan/wrong-size.png"]["width"],
+            found["train/stylegan/wrong-size.png"]["height"]) == (128, 256)
+    assert all(row["exclude_from_map_generation"] for row in found.values())
+    assert {p: p.read_bytes() for p in before} == before  # audit không sửa/xoá ảnh
+
+
+def test_auditimages_persists_tsv_and_json_without_touching_input(tmp_path: Path, monkeypatch):
+    Image = pytest.importorskip("PIL.Image")
+    data = tmp_path / "data"
+    cell = data / "train" / "stylegan"
+    cell.mkdir(parents=True)
+    (cell / "empty.png").write_bytes(b"")
+    Image.new("RGB", (300, 256), color="green").save(cell / "bad-size.png")
+    audits = tmp_path / "runs" / "image-audits"
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "IMAGE_AUDITS", str(audits))
+    fake_volume = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", fake_volume)
+
+    result = modal_app.auditimages.local(
+        splits="train", expected_size=256, report_id="audit-test",
+    )
+
+    assert result["n_scanned"] == 2 and result["n_invalid"] == 2
+    assert result["report_json"] == str(audits / "audit-test.json")
+    tsv = (audits / "audit-test.tsv").read_text(encoding="utf-8")
+    assert "relative_path\tsplit\tgenerator\tfile_size_bytes" in tsv
+    assert "train/stylegan/empty.png" in tsv
+    assert "train/stylegan/bad-size.png" in tsv
+    assert fake_volume.commits == 1
+    assert (cell / "empty.png").stat().st_size == 0
+    with pytest.raises(FileExistsError):
+        modal_app.auditimages.local(
+            splits="train", expected_size=256, report_id="audit-test",
+        )
 
 
 def test_paths_come_from_the_single_layout_module():
