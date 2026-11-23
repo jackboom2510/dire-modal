@@ -202,18 +202,34 @@ chuyển gần hết byte.
 **Kết quả mong đợi:** số file mỗi nhánh local/remote khớp; `checkdata` không có
 hash mismatch, split leakage, thiếu manifest hoặc bất thường trong tỉ lệ lớp.
 `checkdata` chỉ kiểm hash/cấu trúc, không giải mã pixel. Trước khi tính map, quét
-ảnh có thể đọc được bằng lệnh read-only:
+ảnh có thể đọc được. Nếu nghi ngờ file 0 byte, dùng lượt quét metadata nhanh
+trước; lượt này không mở/giải mã pixel:
+
+```bash
+modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test \\
+  --report-id empty-images-2026-10-14
+```
+
+Lệnh trên là dry-run, chỉ báo cáo. Sau khi xem TSV, nếu đúng là chỉ muốn xóa file
+0 byte, chạy lại với ID mới và `--apply`:
+
+```bash
+modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test \\
+  --apply --report-id empty-images-delete-2026-10-14
+```
+
+Nó chỉ xóa image file vẫn có size 0 khi kiểm tra lần cuối; không đụng file rỗng
+ngoài các thư mục split, nonzero file, hoặc DIRE map. Báo cáo JSON/TSV lưu dưới
+`/zero/runs/image-audits/`, kèm tree path và byte size. Để tìm file không giải mã
+được hoặc sai kích thước 256×256, dùng audit sâu hơn:
 
 ```bash
 modal run -m dire_zero.modal_app::auditimages --splits train,val,test \\
   --expected-size 256 --report-id image-audit-2026-10-14
 ```
 
-Lệnh lưu JSON và TSV dưới `/zero/runs/image-audits/`; TSV ghi tree path
-(`train/stylegan/file.png`), byte size, chiều rộng/cao, định dạng và lý do lỗi.
-`exclude_from_map_generation=true` đánh dấu ảnh cần loại khỏi lượt tạo map sau khi
-rà soát. Lệnh không sửa/xóa ảnh, và bản hiện tại không tự áp dụng danh sách loại
-trừ vào `::dire`.
+Audit sâu mở tất cả ảnh và giải mã pixel để xác thực, nên lâu hơn; nó chỉ đánh dấu
+trong báo cáo, không tự xóa hoặc tự lọc danh sách đầu vào của `::dire`.
 
 **Lỗi có thể xảy ra:** token/volume sai; timeout/mạng; upload lô lỗi; remote file
 cùng tên nhưng khác size; quota/disk Volume thiếu. Chạy lại đúng lệnh resume,

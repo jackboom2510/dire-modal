@@ -31,7 +31,8 @@ def test_app_name_and_image():
 
 
 def test_documented_entrypoints_exist():
-    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "auditimages",
+    for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "pruneemptyimages",
+                 "auditimages",
                  "train", "evaluate", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
@@ -99,6 +100,57 @@ def test_auditimages_persists_tsv_and_json_without_touching_input(tmp_path: Path
         modal_app.auditimages.local(
             splits="train", expected_size=256, report_id="audit-test",
         )
+
+
+def test_pruneemptyimages_dry_run_is_metadata_only_and_keeps_sources(tmp_path: Path, monkeypatch):
+    data = tmp_path / "data"
+    cell = data / "train" / "stylegan"
+    cell.mkdir(parents=True)
+    empty = cell / "empty.png"
+    empty.write_bytes(b"")
+    corrupt_nonempty = cell / "corrupt.png"
+    corrupt_nonempty.write_bytes(b"not an image")
+    audits = tmp_path / "runs" / "image-audits"
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "IMAGE_AUDITS", str(audits))
+    fake_volume = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", fake_volume)
+
+    result = modal_app.pruneemptyimages.local(
+        splits="train", report_id="empty-dry-run",
+    )
+
+    assert result["n_scanned"] == 2
+    assert result["n_candidates"] == 1 and result["n_deleted"] == 0
+    assert result["actions"][0]["relative_path"] == "train/stylegan/empty.png"
+    assert result["actions"][0]["file_size_bytes"] == 0
+    assert empty.exists() and corrupt_nonempty.exists()
+    assert fake_volume.commits == 1
+
+
+def test_pruneemptyimages_apply_deletes_only_zero_byte_images(tmp_path: Path, monkeypatch):
+    data = tmp_path / "data"
+    cell = data / "val" / "ddpm"
+    cell.mkdir(parents=True)
+    empty = cell / "empty.png"
+    empty.write_bytes(b"")
+    nonempty = cell / "corrupt.png"
+    nonempty.write_bytes(b"still keep this")
+    audits = tmp_path / "runs" / "image-audits"
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "IMAGE_AUDITS", str(audits))
+    fake_volume = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", fake_volume)
+
+    result = modal_app.pruneemptyimages.local(
+        splits="val", apply=True, report_id="empty-delete",
+    )
+
+    assert result["n_deleted"] == 1
+    assert result["actions"][0]["status"] == "deleted_zero_bytes"
+    assert not empty.exists()
+    assert nonempty.read_bytes() == b"still keep this"
+    assert fake_volume.commits == 1
 
 
 def test_paths_come_from_the_single_layout_module():

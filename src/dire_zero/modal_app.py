@@ -12,6 +12,7 @@ Lệnh::
     modal run -m dire_zero.modal_app::selfcheck
     modal run -m dire_zero.modal_app::bench
     modal run -m dire_zero.modal_app::gen --n 500
+    modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test
     modal run -m dire_zero.modal_app::auditimages --splits train,val,test
     modal run -m dire_zero.modal_app::dire --n 500
     modal run -m dire_zero.modal_app::train --epochs 40
@@ -429,6 +430,131 @@ SAFE_TIME_FRACTION = 0.75
 #: `cpu=8` và timeout 4 giờ, không phải 2 core/30 phút: 217 585 PNG nhỏ là bài
 #: toán **độ trễ mở file**, không phải băng thông. Lần chạy thật với `cpu=2`,
 #: một luồng, timeout 1800 s đã bị cắt trước khi băm xong.
+def _find_zero_byte_images(root: str | Path, splits: str = "") -> dict:
+    """Fast metadata-only pass for empty image files; never opens image pixels."""
+    import os  # noqa: PLC0415
+    from .data import IMAGE_SUFFIXES  # noqa: PLC0415
+
+    base = Path(root)
+    if not base.is_dir():
+        raise FileNotFoundError(f"không có thư mục dữ liệu: {base}")
+    want = {s.strip() for s in splits.split(",") if s.strip()}
+    found: list[dict] = []
+    scanned = 0
+    for current, dirnames, filenames in os.walk(base):
+        dirnames.sort()
+        for name in sorted(filenames):
+            if Path(name).suffix.lower() not in IMAGE_SUFFIXES:
+                continue
+            path = Path(current) / name
+            rel = path.relative_to(base).as_posix()
+            parts = Path(rel).parts
+            if want and (not parts or parts[0] not in want):
+                continue
+            scanned += 1
+            try:
+                size = path.stat().st_size
+            except OSError as exc:
+                found.append({
+                    "relative_path": rel,
+                    "split": parts[0] if parts else "",
+                    "generator": parts[1] if len(parts) > 1 else "",
+                    "file_size_bytes": None,
+                    "status": "stat_error",
+                    "error": f"{type(exc).__name__}: {exc}"[:500],
+                })
+            else:
+                if size == 0:
+                    found.append({
+                        "relative_path": rel,
+                        "split": parts[0] if parts else "",
+                        "generator": parts[1] if len(parts) > 1 else "",
+                        "file_size_bytes": 0,
+                        "status": "zero_bytes",
+                        "error": "",
+                    })
+    return {
+        "root": str(base),
+        "splits_filter": sorted(want),
+        "n_scanned": scanned,
+        "n_candidates": len(found),
+        "candidates": found,
+    }
+
+
+@app.function(volumes=VOLUMES, cpu=8, timeout=4 * 3600)
+def pruneemptyimages(splits: str = "", apply: bool = False, report_id: str = "") -> dict:
+    """Quickly find zero-byte images and optionally delete only those files.
+
+    The default is a read-only dry run. ``--apply`` unlinks only files that are
+    still exactly zero bytes when checked again. It never opens image pixels and
+    never touches map files. A JSON/TSV receipt is kept on the Volume.
+
+    Example::
+
+        modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test \\
+          --report-id empty-images-2026-10-14              # dry run
+        modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test \\
+          --apply --report-id empty-images-delete-2026-10-14
+    """
+    import csv  # noqa: PLC0415
+    import datetime as dt  # noqa: PLC0415
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    if report_id:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", report_id):
+            raise ValueError("report_id chỉ nhận 1–64 ký tự ASCII chữ/số, '.', '_' hoặc '-'")
+        rid = report_id
+    else:
+        rid = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    report_root = Path(IMAGE_AUDITS)
+    json_path = report_root / f"{rid}.json"
+    tsv_path = report_root / f"{rid}.tsv"
+    if json_path.exists() or tsv_path.exists():
+        raise FileExistsError(f"báo cáo {rid} đã tồn tại; chọn report_id mới để không ghi đè")
+
+    result = _find_zero_byte_images(DATA, splits=splits)
+    actions = []
+    for item in result["candidates"]:
+        row = dict(item)
+        if apply and item["status"] == "zero_bytes":
+            target = Path(DATA) / item["relative_path"]
+            try:
+                if target.stat().st_size != 0:
+                    row["status"] = "changed_since_scan"
+                else:
+                    target.unlink()
+                    row["status"] = "deleted_zero_bytes"
+            except OSError as exc:
+                row["status"] = "delete_error"
+                row["error"] = f"{type(exc).__name__}: {exc}"[:500]
+        actions.append(row)
+
+    result.update({
+        "report_id": rid,
+        "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "apply": apply,
+        "n_deleted": sum(r["status"] == "deleted_zero_bytes" for r in actions),
+        "actions": actions,
+        "report_json": str(json_path),
+        "report_tsv": str(tsv_path),
+        "note": "metadata-only zero-byte scan; no image decoding; only zero-byte image files can be deleted with --apply",
+    })
+    report_root.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    columns = ("relative_path", "split", "generator", "file_size_bytes", "status", "error")
+    with tsv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, delimiter="\t", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(actions)
+    vol.commit()
+    print(json.dumps({k: result[k] for k in (
+        "report_id", "n_scanned", "n_candidates", "n_deleted", "apply", "report_json", "report_tsv",
+    )}, ensure_ascii=False, indent=2), flush=True)
+    return result
+
+
 def _scan_image_tree(root: str | Path, splits: str = "", expected_size: int = 256,
                      progress=None) -> dict:
     """Đọc-only audit ảnh trong ``root``; không sửa, đổi tên hay xoá file.
