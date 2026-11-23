@@ -12,6 +12,7 @@ Lệnh::
     modal run -m dire_zero.modal_app::selfcheck
     modal run -m dire_zero.modal_app::bench
     modal run -m dire_zero.modal_app::gen --n 500
+    modal run -m dire_zero.modal_app::auditimages --splits train,val,test
     modal run -m dire_zero.modal_app::dire --n 500
     modal run -m dire_zero.modal_app::train --epochs 40
     modal run -m dire_zero.modal_app::report
@@ -59,6 +60,7 @@ GEN = V.GEN                   # chỉ dùng khi chưa có ảnh giả nào
 MAPS = V.MAPS                 # <split>/<generator>/*.npy
 REBUILD_MAPS_ROOT = f"{V.MOUNT}/rebuild/maps"
 OUT = V.RUNS
+IMAGE_AUDITS = f"{OUT}/image-audits"
 
 
 def _maps_root_for_run(run_id: str = "") -> str:
@@ -427,6 +429,159 @@ SAFE_TIME_FRACTION = 0.75
 #: `cpu=8` và timeout 4 giờ, không phải 2 core/30 phút: 217 585 PNG nhỏ là bài
 #: toán **độ trễ mở file**, không phải băng thông. Lần chạy thật với `cpu=2`,
 #: một luồng, timeout 1800 s đã bị cắt trước khi băm xong.
+def _scan_image_tree(root: str | Path, splits: str = "", expected_size: int = 256,
+                     progress=None) -> dict:
+    """Đọc-only audit ảnh trong ``root``; không sửa, đổi tên hay xoá file.
+
+    Ghi lại mọi file ảnh 0 byte, không giải mã được hoặc không đúng kích thước
+    đầu vào của DIRE. `relative_path` giữ nguyên dạng cây ``split/generator/file``
+    để có thể đối chiếu và lập danh sách loại trừ mà không đụng dữ liệu gốc.
+    """
+    from collections import defaultdict  # noqa: PLC0415
+    from .data import IMAGE_SUFFIXES  # noqa: PLC0415
+
+    base = Path(root)
+    if not base.is_dir():
+        raise FileNotFoundError(f"không có thư mục dữ liệu: {base}")
+    if expected_size < 1:
+        raise ValueError("expected_size phải lớn hơn 0")
+    want = {s.strip() for s in splits.split(",") if s.strip()}
+    paths = sorted(
+        (p for p in base.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_SUFFIXES),
+        key=lambda p: p.relative_to(base).as_posix(),
+    )
+    if want:
+        paths = [p for p in paths if p.relative_to(base).parts[0] in want]
+
+    from PIL import Image  # noqa: PLC0415
+
+    bad: list[dict] = []
+    cells = defaultdict(lambda: {"files": 0, "valid": 0, "invalid": 0})
+    for index, path in enumerate(paths, start=1):
+        rel = path.relative_to(base).as_posix()
+        parts = Path(rel).parts
+        cell = "/".join(parts[:2]) if len(parts) >= 2 else (parts[0] if parts else "")
+        try:
+            file_size = path.stat().st_size
+        except OSError as exc:
+            file_size = None
+            reason = "stat_error"
+            width = height = image_format = None
+            error = f"{type(exc).__name__}: {exc}"
+        else:
+            reason = None
+            width = height = image_format = None
+            error = None
+            if file_size == 0:
+                reason = "zero_bytes"
+            else:
+                try:
+                    with Image.open(path) as im:
+                        width, height = im.size
+                        image_format = im.format
+                        if width != expected_size or height != expected_size:
+                            reason = "wrong_dimensions"
+                        else:
+                            # Open() chỉ đọc header; load() giải mã đầy đủ pixel để
+                            # phát hiện file PNG có header hợp lệ nhưng data bị cụt.
+                            im.load()
+                except Exception as exc:
+                    reason = "decode_error"
+                    error = f"{type(exc).__name__}: {exc}"[:500]
+
+        cells[cell]["files"] += 1
+        if reason is None:
+            cells[cell]["valid"] += 1
+        else:
+            cells[cell]["invalid"] += 1
+            bad.append({
+                "relative_path": rel,
+                "split": parts[0] if parts else "",
+                "generator": parts[1] if len(parts) > 1 else "",
+                "file_size_bytes": file_size,
+                "width": width,
+                "height": height,
+                "format": image_format,
+                "reason": reason,
+                "error": error,
+                "exclude_from_map_generation": True,
+            })
+        if progress and (index % 10000 == 0 or index == len(paths)):
+            progress(index, len(paths))
+
+    return {
+        "root": str(base),
+        "splits_filter": sorted(want),
+        "expected_dimensions": [expected_size, expected_size],
+        "n_scanned": len(paths),
+        "n_valid": len(paths) - len(bad),
+        "n_invalid": len(bad),
+        "by_split_generator": dict(sorted(cells.items())),
+        "invalid_files": bad,
+    }
+
+
+@app.function(volumes=VOLUMES, cpu=8, timeout=4 * 3600)
+def auditimages(splits: str = "", expected_size: int = 256, report_id: str = "") -> dict:
+    """Quét ảnh trên Volume và lưu danh sách loại trừ có kích thước + đường dẫn cây.
+
+    Lệnh chỉ đọc dữ liệu ảnh; không xoá hoặc sửa file. Nó ghi JSON và TSV riêng
+    dưới ``/zero/runs/image-audits/``. TSV có cột ``exclude_from_map_generation``
+    để rà soát/loại trừ tường minh trước khi sinh map.
+
+    Ví dụ::
+
+        modal run -m dire_zero.modal_app::auditimages --splits train,test,val \\
+          --expected-size 256 --report-id zero-byte-audit-2026-10-14
+    """
+    import csv  # noqa: PLC0415
+    import datetime as dt  # noqa: PLC0415
+    import json  # noqa: PLC0415
+    import re  # noqa: PLC0415
+
+    if report_id:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", report_id):
+            raise ValueError("report_id chỉ nhận 1–64 ký tự ASCII chữ/số, '.', '_' hoặc '-'")
+        rid = report_id
+    else:
+        rid = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+    root = Path(IMAGE_AUDITS)
+    json_path = root / f"{rid}.json"
+    tsv_path = root / f"{rid}.tsv"
+    if json_path.exists() or tsv_path.exists():
+        raise FileExistsError(f"báo cáo {rid} đã tồn tại; chọn report_id mới để không ghi đè")
+
+    t0 = time.time()
+
+    def progress(done: int, total: int) -> None:
+        print(f"[audit] {done}/{total} ảnh · {done / max(time.time() - t0, 1e-9):.0f} file/s",
+              flush=True)
+
+    result = _scan_image_tree(DATA, splits=splits, expected_size=expected_size, progress=progress)
+    result.update({
+        "report_id": rid,
+        "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "report_json": str(json_path),
+        "report_tsv": str(tsv_path),
+        "note": "read-only audit; không file nào bị sửa/xoá; danh sách invalid được đánh dấu để loại khỏi map generation sau khi duyệt",
+    })
+    root.mkdir(parents=True, exist_ok=True)
+    json_path.write_text(json.dumps(result, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    columns = ("relative_path", "split", "generator", "file_size_bytes", "width", "height",
+               "format", "reason", "error", "exclude_from_map_generation")
+    with tsv_path.open("w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, delimiter="\t", extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(result["invalid_files"])
+    vol.commit()
+    print(json.dumps({k: result[k] for k in (
+        "report_id", "n_scanned", "n_valid", "n_invalid", "by_split_generator",
+        "report_json", "report_tsv",
+    )}, ensure_ascii=False, indent=2), flush=True)
+    return result
+
+
 @app.function(volumes=VOLUMES, cpu=8, timeout=4 * 3600)
 def checkdata(skip_sha: bool = False, workers: int = 64, splits: str = "",
               sample: int = 0, count_png: bool = False,
