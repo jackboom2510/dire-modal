@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Schematic DIRE pipeline</title>
+<desc id="desc">An original conceptual diagram: source image, deterministic DDIM inversion, reconstruction, absolute pixelwise residual map, and detector.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient>
+  <linearGradient id="tile" x2="0" y2="1"><stop stop-color="#74c6ba"/><stop offset="1" stop-color="#326879"/></linearGradient>
+  <linearGradient id="heat" x2="1" y2="1"><stop stop-color="#182c4a"/><stop offset=".38" stop-color="#27b4b2"/><stop offset=".7" stop-color="#f2b84b"/><stop offset="1" stop-color="#eb745d"/></linearGradient>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#9bb6c7"/></marker>
+  <style>.sans{font-family:Inter,Arial,sans-serif}.mono{font-family:ui-monospace,Menlo,monospace}.label{fill:#d8e6eb;font-size:22px;font-weight:700}.small{fill:#9eb4c1;font-size:16px}.tiny{fill:#87a0af;font-size:13px}.formula{fill:#fff;font-size:27px;font-weight:700}.number{fill:#81d1c2;font-size:16px;font-weight:700;letter-spacing:1.5px}</style>
+</defs>
+<rect width="1200" height="600" rx="28" fill="url(#bg)"/>
+<text x="56" y="57" class="sans number">DIRE · CONCEPTUAL PIPELINE</text>
+<text x="56" y="100" class="sans" fill="#fff" font-size="30" font-weight="700">A reconstruction error becomes an image representation</text>
+<!-- source -->
+<g transform="translate(66 175)">
+  <rect width="170" height="170" rx="14" fill="#203a4b" stroke="#55758a" stroke-width="2"/>
+  <rect x="12" y="12" width="146" height="146" rx="7" fill="url(#tile)"/>
+  <path d="M12 120 L55 73 L83 102 L109 64 L158 121 V158 H12Z" fill="#1b455b" opacity=".85"/>
+  <circle cx="118" cy="43" r="17" fill="#f3c46a"/>
+  <path d="M22 135 Q50 105 75 130 T130 129 T158 132" fill="none" stroke="#d7eee2" stroke-width="5" opacity=".8"/>
+  <text x="85" y="207" text-anchor="middle" class="sans label">Source image x</text>
+  <text x="85" y="232" text-anchor="middle" class="sans small">original RGB</text>
+</g>
+<!-- arrows -->
+<path d="M247 258 H311" stroke="#9bb6c7" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- inversion -->
+<g transform="translate(331 205)">
+  <rect width="174" height="104" rx="16" fill="#1a3046" stroke="#3f667a" stroke-width="2"/>
+  <text x="87" y="39" text-anchor="middle" class="sans label">DDIM</text>
+  <text x="87" y="68" text-anchor="middle" class="sans" fill="#81d1c2" font-size="18" font-weight="700">inversion · I(x)</text>
+  <text x="87" y="91" text-anchor="middle" class="sans tiny">deterministic path</text>
+  <text x="87" y="143" text-anchor="middle" class="sans small">encode to xₜ</text>
+</g>
+<path d="M514 258 H565" stroke="#9bb6c7" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- reconstruct -->
+<g transform="translate(585 175)">
+  <rect width="170" height="170" rx="14" fill="#203a4b" stroke="#55758a" stroke-width="2"/>
+  <rect x="12" y="12" width="146" height="146" rx="7" fill="url(#tile)"/>
+  <path d="M12 120 L55 73 L83 102 L109 64 L158 121 V158 H12Z" fill="#1b455b" opacity=".85"/>
+  <circle cx="118" cy="43" r="17" fill="#f3c46a"/>
+  <path d="M22 135 Q50 105 75 130 T130 129 T158 132" fill="none" stroke="#d7eee2" stroke-width="5" opacity=".8"/>
+  <rect x="12" y="12" width="146" height="146" rx="7" fill="#f2b84b" opacity=".10"/>
+  <text x="85" y="207" text-anchor="middle" class="sans label">Reconstruction x̂</text>
+  <text x="85" y="232" text-anchor="middle" class="sans small">DDIM reverse · R(I(x))</text>
+</g>
+<path d="M764 258 H819" stroke="#9bb6c7" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- map -->
+<g transform="translate(839 175)">
+  <rect width="170" height="170" rx="14" fill="#203a4b" stroke="#55758a" stroke-width="2"/>
+  <rect x="12" y="12" width="146" height="146" rx="7" fill="url(#heat)"/>
+  <path d="M20 102 Q45 42 70 88 T119 65 T157 111" fill="none" stroke="#f9e3a6" stroke-width="9" opacity=".78"/>
+  <text x="85" y="207" text-anchor="middle" class="sans label">DIRE map</text>
+  <text x="85" y="232" text-anchor="middle" class="sans small">|x − x̂|, pixelwise</text>
+</g>
+<path d="M1018 258 H1061" stroke="#9bb6c7" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- detector -->
+<g transform="translate(1080 204)">
+  <rect width="78" height="108" rx="14" fill="#163f50" stroke="#63b8ae" stroke-width="2"/>
+  <path d="M18 24 H60 M18 42 H60 M18 60 H60 M18 78 H60" stroke="#82d4c6" stroke-width="4" stroke-linecap="round"/>
+  <text x="39" y="138" text-anchor="middle" class="sans" fill="#d8e6eb" font-size="17" font-weight="700">ResNet-50</text>
+  <text x="39" y="163" text-anchor="middle" class="sans tiny">P(fake)</text>
+</g>
+<rect x="56" y="438" width="1088" height="93" rx="16" fill="#102234" stroke="#28465c"/>
+<text x="84" y="475" class="sans formula">DIRE(x) = |x − R(I(x))|</text>
+<text x="84" y="507" class="sans small">Intuition: reconstruction error may reveal mismatch with the diffusion model’s learned image distribution.</text>
+<text x="1122" y="562" text-anchor="end" class="sans tiny">SCHEMATIC · not an actual sample or measured result</text>
+</svg>

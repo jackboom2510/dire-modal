@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1138" height="485" viewBox="0 0 1138 485" role="img">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient></defs>
+<rect width="100%" height="100%" rx="24" fill="url(#bg)"/>
+<text x="44" y="48" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700" letter-spacing="1.4">DIRE · SLIDE DATA</text>
+<text x="44" y="87" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Table 5 · representation contracts from dire_zero/experiments.py</text>
+<text x="44" y="116" fill="#a6bbc7" font-family="Inter,Arial,sans-serif" font-size="14">Generated from checked-in sources · no experiment was run</text>
+<rect x="44" y="135" width="1050" height="54" rx="8" fill="#214253"/>
+<text x="60" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Representation</text>
+<text x="250" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Input semantics</text>
+<text x="660" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Channels</text>
+<text x="780" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Stored value range</text>
+<rect x="44" y="189" width="1050" height="56" fill="#13283a"/>
+<path d="M44 245 H1094" stroke="#345168" stroke-width="1"/>
+<text x="60" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">REC</tspan></text>
+<text x="250" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="250" dy="0">Reconstruction image</tspan></text>
+<text x="660" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="660" dy="0">3</tspan></text>
+<text x="780" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="780" dy="0">[0,1]</tspan></text>
+<rect x="44" y="245" width="1050" height="56" fill="#182f42"/>
+<path d="M44 301 H1094" stroke="#345168" stroke-width="1"/>
+<text x="60" y="270" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">RGB</tspan></text>
+<text x="250" y="270" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="250" dy="0">Original RGB image</tspan></text>
+<text x="660" y="270" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="660" dy="0">3</tspan></text>
+<text x="780" y="270" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="780" dy="0">[0,1]</tspan></text>
+<rect x="44" y="301" width="1050" height="56" fill="#13283a"/>
+<path d="M44 357 H1094" stroke="#345168" stroke-width="1"/>
+<text x="60" y="326" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">RGB_DIRE</tspan></text>
+<text x="250" y="326" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="250" dy="0">RGB channels then DIRE channels</tspan></text>
+<text x="660" y="326" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="660" dy="0">6</tspan></text>
+<text x="780" y="326" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="780" dy="0">RGB [0,1] + DIRE [0,2]</tspan></text>
+<rect x="44" y="357" width="1050" height="56" fill="#182f42"/>
+<path d="M44 413 H1094" stroke="#345168" stroke-width="1"/>
+<text x="60" y="382" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">DIRE</tspan></text>
+<text x="250" y="382" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="250" dy="0">Absolute residual map</tspan></text>
+<text x="660" y="382" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="660" dy="0">3</tspan></text>
+<text x="780" y="382" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="780" dy="0">[0,2]</tspan></text>
+<text x="44" y="447" fill="#f2c66d" font-family="Inter,Arial,sans-serif" font-size="13">Implementation contract; exact correspondence to every paper detail must be independently verified.</text>
+</svg>

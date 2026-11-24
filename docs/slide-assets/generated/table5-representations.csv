@@ -1,0 +1,5 @@
+Representation,Input semantics,Channels,Stored value range
+REC,Reconstruction image,3,"[0,1]"
+RGB,Original RGB image,3,"[0,1]"
+RGB_DIRE,RGB channels then DIRE channels,6,"RGB [0,1] + DIRE [0,2]"
+DIRE,Absolute residual map,3,"[0,2]"

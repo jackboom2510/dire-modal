@@ -1,0 +1,31 @@
+{
+  "asset_count": 16,
+  "sources": [
+    "src/dire_zero/experiments.py",
+    "src/dire_modal/paper_table2.tsv",
+    "docs/slide-assets/*.svg"
+  ],
+  "per_cell_stages": [
+    200,
+    400
+  ],
+  "warning": "SVGs are schematics/source-backed tables, not current subset experiment measurements.",
+  "files": [
+    "dire-pipeline.svg",
+    "map-provenance.svg",
+    "nested-subsets.svg",
+    "experiment-map.svg",
+    "experiment-protocol.svg",
+    "experiment-protocol.csv",
+    "table5-representations.svg",
+    "table5-representations.csv",
+    "subset-stages.svg",
+    "subset-stages.csv",
+    "paper-table2-reference.svg",
+    "paper-table2-reference.csv",
+    "status-and-caveats.svg",
+    "status-and-caveats.csv",
+    "index.html",
+    "asset-manifest.json"
+  ]
+}

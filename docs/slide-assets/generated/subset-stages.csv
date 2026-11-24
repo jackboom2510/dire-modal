@@ -1,0 +1,3 @@
+Stage size,Maximum rows*,Selection identity,Storage / reuse
+200 / cell,"≤ 2,000",Nested SHA-256 ranking; same subset_id + seed,Manifest/index only; original images are not copied
+400 / cell,"≤ 4,000",Nested SHA-256 ranking; same subset_id + seed,Manifest/index only; original images are not copied
