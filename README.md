@@ -66,7 +66,7 @@ không có secret thì `/healthz` báo `auth: "disabled"` và endpoint mở.
 
 Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **eval checkpoint tác giả**, bỏ hẳn khoản $8–20 của A100).
 
-> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/full-paper-reproduction-plan.md)** — phạm vi bảng/ablation, clean-room, train/evaluate matrix và audit. Đã có dữ liệu/artefact thì bắt đầu bằng **[runbook tiếp tục từ trạng thái hiện có](docs/full-paper-continuation-runbook.md)**: inventory, resume theo đợt, các cổng và thiếu sót cần xử lý trước khi gọi kết quả là đầy đủ.
+> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/full-paper-reproduction-plan.md)** — phạm vi bảng/ablation, clean-room, train/evaluate matrix và audit. Đã có dữ liệu/artefact thì bắt đầu bằng **[runbook tiếp tục từ trạng thái hiện có](docs/full-paper-continuation-runbook.md)**. Runbook riêng cho **[Table 4, Table 5 và Figure 4](docs/table4-table5-figure4-runbook.md)** có lệnh chạy, yêu cầu checkpoint và bước dựng bảng/hình.
 
 > **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
 > Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
@@ -202,7 +202,8 @@ Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-roo
 | [`docs/demo-hf-spaces-plan.md`](docs/demo-hf-spaces-plan.md) | **Kế hoạch chạy demo trên HF Spaces (Streamlit)**: 1 phụ thuộc, không torch, không ô upload; số đo cold start/RAM; cấu hình Space; deploy 5 bước; 8 điểm kiểm sau deploy; rollback; bảng rủi ro |
 | [`docs/demo-modal-plan.md`](docs/demo-modal-plan.md) | **Modal làm backend GPU cho demo**: vì sao Space làm cửa còn Modal chỉ tính; endpoint `POST /dire` (token, 10 MB, 6 ảnh/phút, `S ≤ 20`); chi phí từng ảnh từ bảng giá (0,0011 USD/ảnh ở `S=20`, 0,020 USD/phút khi ấm); cold start ước tính và memory snapshot; quy trình buổi nói; danh sách *đã kiểm / chưa kiểm* |
 | [`docs/demo-web-plan.md`](docs/demo-web-plan.md) | **Kế hoạch demo web**: 3 chế độ (gallery R0 / upload CPU / GPU), cổng kiểm trước khi công khai, lỗi "chấm ảnh RGB bằng model học DIRE" phải sửa, chữ bắt buộc trên UI, chi phí, chia PR D1–D5 |
-| [`docs/figures-plan.md`](docs/figures-plan.md) | **Kế hoạch figure**: dựng lại 10 hình của paper (F1–F10) theo 4 đợt phụ thuộc dữ liệu, 8 hình paper **không có** (phân bố điểm, ROC/PR + CI, chất lượng–NFE, audit dữ liệu, calibration, ca sai), quy ước + định nghĩa "xong" |
+| [`docs/table4-table5-figure4-runbook.md`](docs/table4-table5-figure4-runbook.md) | Runner Table 4 (S=5/10/20/50), Table 5 (REC/RGB/RGB+DIRE/DIRE), Figure 4 (blur/JPEG), checkpoint, output ledgers và giới hạn reproduction |
+| [`docs/figures-plan.md`](docs/figures-plan.md) | Kế hoạch/registry figure của paper; `f4-robustness` dựng AP từ ledger điều kiện blur/JPEG, kèm cảnh báo baseline chưa tái hiện |
 | [`notebooks/`](notebooks/README.md) | **Notebook sinh figure**: 4 file theo thứ tự phụ thuộc dữ liệu, chỉ gọi `tools/figures.py` (không tự vẽ ⇒ không có bản hình thứ hai) |
 | [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md) | **Clean-room**: viết lại U-Net/DDIM/DIRE/ResNet-50 từ công thức, không dùng một dòng code tác giả — 4 lớp chứng minh, 3 lỗi tìm được trong code cũ, cách chạy và đọc số |
 | [`docs/download-manual.md`](docs/download-manual.md) | Tải dữ liệu **bằng tay**: danh sách file, vị trí dưới `data/raw/`, tên dễ sai, kiểm offline, đẩy lên Volume |

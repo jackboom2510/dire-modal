@@ -31,9 +31,7 @@ Hệ quả kỹ thuật: `matplotlib` **không** được vào `src/dire_zero` �
 canh đúng điều đó. Toàn bộ code vẽ nằm ở `tools/figures.py` (một file, một entry
 point), đọc `.npy`/`.json`/`.tsv` do `dire_zero` sinh ra.
 
-**Đã có (từ 2026-11-16):** `tools/figures.py` với 8 lệnh, `tests/test_figures_tool.py`
-(27 test), `tests/test_notebooks.py` (16 test) và 4 notebook trong `notebooks/`.
-Chạy `python tools/figures.py list` để xem lệnh và đầu vào từng hình.
+**Đã có:** `tools/figures.py` có lệnh F4 đọc `figure4.json` và vẽ AP theo condition; Modal có runner thu score-level artefact. F4 hiện chỉ so RGB ResNet-50 của dự án với DIRE, không gồm baseline CNNDetection*/PatchForensics* của paper. Chạy `python tools/figures.py list` để xem các lệnh/đầu vào.
 
 ## 2. Figure của paper — kiểm kê đủ 10 hình
 
@@ -42,7 +40,7 @@ Chạy `python tools/figures.py list` để xem lệnh và đầu vào từng h�
 | F1 | Teaser: 1 ảnh thật + 4 ảnh sinh (DDPM, iDDPM, ADM, PNDM) kèm DIRE | map + ảnh gốc | `images/test/lsun_bedroom/*` + `dire/test/...` | **đợt 1** (0 GPU) | R0 |
 | F2 | Sơ đồ khái niệm: `p_r`, `p_g`, `x_r → x_r'`, `x_g → x_g'` | vẽ tay | không cần dữ liệu | **đợt 0** | — |
 | F3 | Pipeline: `x0 → (DDIM inversion) → x_T → (DDIM gen) → x0' → DIRE → classifier` | vẽ | `src/dire_zero/schedule.py` (mốc thật) | **đợt 0** | — |
-| F4 | Độ bền: Gaussian blur σ=1,2,3 · JPEG q=65,30, AP theo từng mức | map tính lại trên ảnh đã làm hỏng | **phải tự tính** — `dire/` là map cố định, không làm hỏng lại được | đợt 2 (GPU) | R1+R2 |
+| F4 | Độ bền: Gaussian blur σ=1,2,3 · JPEG q=65,30, AP theo từng mức | map tính lại trên ảnh đã làm hỏng | Có runner `::figure4_robustness` và `tools/figures.py f4-robustness`; chạy sau Table 5 RGB/DIRE. So sánh RGB ResNet-50 dự án với DIRE; baseline CNNDetection*/PatchForensics* của paper vẫn chưa có | đợt 2 (GPU) | R1+R2 (scope hạn chế) |
 | F5 | Noise pattern + phổ tần số của DIRE (thật vs sinh) | map + FFT | `dire/` có sẵn ⇒ FFT được ngay | **đợt 1** (0 GPU) | R0 |
 | F6 | App C: DDPM + iDDPM | triplet | `recons/` không có ddpm/iddpm | đợt 2 | R1+R2 |
 | F7 | App C: ADM + PNDM | triplet | `recons/` **không có adm** (chỉ real, ldm, pndm) | một nửa được | R1+R2 |
@@ -234,12 +232,13 @@ Một hình chỉ được coi là xong khi có **đủ sáu** thứ:
 
 | Thứ | Trạng thái |
 |---|---|
-| `tools/figures.py` | **có** — 8 lệnh: `f2-concept`, `f3-pipeline`, `a1-provenance`, `f5-noise`, `f1-teaser`, `a6-audit`, `a2-scores`, `a3-roc` |
+| `tools/figures.py` | **có** — 9 lệnh, gồm `f4-robustness` để vẽ AP từ Figure 4 score ledger |
 | F2, F3, A1 | **chạy được ngay**, không cần dữ liệu (`01_hinh_schematic.ipynb`) |
 | F5, F1 | **có code**, cần map đã giải nén (`02_hinh_R0_tu_dire.ipynb`) |
 | A6 | **có code**, cần `manifest.tsv` từ `ingest` |
 | A2, A3 | **có code**, cần `scores.npy`/`labels.npy` từ một lần eval thật |
-| F4, F6–F10, A4, A5, A7, A8 | **chưa có code** — vẫn theo đợt 2 như bảng trên |
+| F4 | **runner/plot có code**, chưa chạy GPU; chỉ đối chiếu RGB ResNet-50 dự án với DIRE, baseline CNNDetection*/PatchForensics* chưa tái hiện |
+| F6–F10, A4, A5, A7, A8 | **chưa có code đầy đủ** — xem kế hoạch theo đợt ở bảng trên |
 
 ```bash
 python tools/figures.py list                      # xem lệnh + đầu vào từng hình

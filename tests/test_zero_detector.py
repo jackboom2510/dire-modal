@@ -41,6 +41,24 @@ def test_normalisation_is_imagenet():
     assert model.std.flatten().tolist() == pytest.approx([0.229, 0.224, 0.225])
 
 
+def test_rgb_dire_detector_has_six_channels_and_repeated_imagenet_normalisation():
+    model = ResNetDetector(in_channels=6)
+    assert model.backbone.stem[0].weight.shape[1] == 6
+    assert model.mean.shape[1] == model.std.shape[1] == 6
+    assert model.mean.flatten().tolist() == pytest.approx([0.485, 0.456, 0.406] * 2)
+    assert model.logits(torch.randn(1, 6, 64, 64)).shape == (1,)
+
+
+def test_imagenet_rgb_stem_initializes_both_rgb_dire_branches():
+    model = ResNet(blocks=(1, 1), widths=(16, 32, 32, 32), in_channels=6)
+    rgb_weight = torch.arange(64 * 3 * 7 * 7, dtype=torch.float32).reshape(64, 3, 7, 7)
+    skipped = model.load_imagenet({"conv1.weight": rgb_weight})
+    got = model.stem[0].weight
+    assert "stem.0.weight" not in skipped
+    assert torch.equal(got[:, :3], rgb_weight * 0.5)
+    assert torch.equal(got[:, 3:], rgb_weight * 0.5)
+
+
 def test_imagenet_alias_roundtrip():
     """Đổi tên sang kiểu torchvision rồi nạp lại ⇒ tham số không đổi.
 

@@ -54,10 +54,14 @@ class Bottleneck(nn.Module):
 class ResNet(nn.Module):
     """ResNet chuẩn, đầu ra 1 logit (thật/giả) — không phải 1000 lớp ImageNet."""
 
-    def __init__(self, blocks: tuple[int, ...] = (3, 4, 6, 3), widths: tuple[int, ...] = (64, 128, 256, 512)) -> None:
+    def __init__(self, blocks: tuple[int, ...] = (3, 4, 6, 3), widths: tuple[int, ...] = (64, 128, 256, 512),
+                 in_channels: int = 3) -> None:
         super().__init__()
+        if in_channels not in (3, 6):
+            raise ValueError("ResNet DIRE chỉ hỗ trợ 3 kênh hoặc RGB+DIRE 6 kênh")
+        self.in_channels = in_channels
         self.stem = nn.Sequential(
-            nn.Conv2d(3, 64, 7, stride=2, padding=3, bias=False),
+            nn.Conv2d(in_channels, 64, 7, stride=2, padding=3, bias=False),
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(3, stride=2, padding=1),
@@ -156,6 +160,13 @@ class ResNet(nn.Module):
                 my_full = f"{my_key}.{suffix}"
                 if full in state and my_full in own and state[full].shape == own[my_full].shape:
                     renamed[my_full] = state[full]
+        if self.in_channels == 6 and "conv1.weight" in state:
+            # RGB+DIRE starts from ImageNet ResNet-50: initialize both input
+            # groups from the RGB conv and divide by two so equal branches match
+            # the response scale of the original 3-channel stem.
+            w = state["conv1.weight"]
+            if tuple(w.shape) == (64, 3, 7, 7):
+                renamed["stem.0.weight"] = torch.cat((w * 0.5, w * 0.5), dim=1)
         skipped = [k for k in own if k not in renamed]
         own.update(renamed)          # thay tại chỗ: giữ nguyên fc và các buffer khác
         self.load_state_dict(own, strict=True)
@@ -213,11 +224,20 @@ class ResNetDetector(nn.Module):
     MEAN = (0.485, 0.456, 0.406)
     STD = (0.229, 0.224, 0.225)
 
-    def __init__(self, backbone: nn.Module | None = None) -> None:
+    def __init__(self, backbone: nn.Module | None = None, in_channels: int = 3) -> None:
         super().__init__()
-        self.backbone = backbone or resnet50()
-        self.register_buffer("mean", torch.tensor(self.MEAN).view(1, 3, 1, 1))
-        self.register_buffer("std", torch.tensor(self.STD).view(1, 3, 1, 1))
+        if in_channels not in (3, 6):
+            raise ValueError("detector chỉ hỗ trợ 3 kênh hoặc RGB+DIRE 6 kênh")
+        self.backbone = backbone or ResNet(in_channels=in_channels)
+        if int(getattr(self.backbone, "in_channels", in_channels)) != in_channels:
+            raise ValueError("in_channels của detector không khớp backbone")
+        self.in_channels = in_channels
+        base_mean = torch.tensor(self.MEAN)
+        base_std = torch.tensor(self.STD)
+        mean = base_mean.repeat(in_channels // 3).view(1, in_channels, 1, 1)
+        std = base_std.repeat(in_channels // 3).view(1, in_channels, 1, 1)
+        self.register_buffer("mean", mean)
+        self.register_buffer("std", std)
 
     def logits(self, x: Tensor) -> Tensor:
         return self.backbone((x - self.mean) / self.std)

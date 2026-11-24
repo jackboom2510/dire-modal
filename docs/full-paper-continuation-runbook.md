@@ -436,21 +436,17 @@ chọn threshold/model.
 
 ### Bước 10 — Ablation và robustness trong phạm vi paper
 
-Chạy từng giao thức như config/job riêng: số bước DDIM; `REC`, `RGB`, `RGB&DIRE`,
-`DIRE`; signed residual so với absolute residual; blur/JPEG ở đúng mức paper.
-Mỗi cấu hình cần input/target artifact riêng; map `S=20` không được tái dùng cho
-`S` khác. Mọi biến đổi ảnh được tạo deterministic và ghi seed/config.
+Đã thêm runner tách riêng cho các protocol được yêu cầu:
 
-**Kết quả mong đợi:** bảng/hình được sinh từ score artifacts, không phải số nhập
-tay; có baseline và DIRE trên cùng split, cùng model-selection protocol.
+- `::table4 --steps {5,10,20,50}`: mỗi S có input namespace riêng, map được tính lại, detector ImageNet khởi tạo riêng, năm generator test và ledger `missing_steps`.
+- `::table5_prepare` + `::table5_train`: REC, RGB, RGB_DIRE và DIRE từ cùng triplet/split tại S=20; train/eval từng representation riêng.
+- `::figure4_robustness`: clean, Gaussian blur σ=1,2,3 và JPEG q=65,30; lưu scores/labels/sample IDs/AP theo từng generator. `tools/figures.py f4-robustness` dựng hình từ ledger.
 
-**Lỗi/thiếu sót:** pipeline hiện tập trung DIRE-map path; representation/robustness
-runner chưa hoàn chỉnh. Nếu chỉ chạy một phần, phải ghi `not run`/`null`, không
-điền kết quả phỏng đoán từ hình paper. Sai khác resize/JPEG/blur phải được khóa
-bằng test ảnh.
+Lệnh chạy, yêu cầu checkpoint và vị trí artefact ở `docs/table4-table5-figure4-runbook.md`. Các runner không được thực thi trong lần cập nhật code này; cho tới khi chạy đủ và kiểm ledger, trạng thái vẫn là `not run`.
 
-**Cổng:** từng ablation có protocol đã review và cùng cổng P4/P5; phần chưa cài
-đặt không được gọi là tái hiện.
+**Giới hạn:** Figure 4 hiện đối chiếu RGB ResNet-50 của dự án với DIRE, chưa có CNNDetection*/PatchForensics* của paper. Manuscript không nêu đủ chi tiết cho fusion RGB+DIRE và thời điểm perturbation; code khóa lựa chọn đang dùng trong metadata, không tuyên bố bitwise/exact reproduction. Optimizer/RNG chưa resume sau timeout.
+
+**Cổng:** đủ 4 giá trị S, 4 representations và 6 điều kiện robustness; mọi cell có count, provenance và artifact scores. Các baseline Figure 4 còn thiếu phải được đánh dấu riêng, không nội suy hay nhập số paper.
 
 ### Bước 11 — Generator mở rộng, chỉ sau khi protocol gốc đã khép
 

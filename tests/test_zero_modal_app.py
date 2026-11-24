@@ -32,8 +32,8 @@ def test_app_name_and_image():
 
 def test_documented_entrypoints_exist():
     for name in ("selfcheck", "bench", "gen", "dire", "relabel", "maps", "pruneemptyimages",
-                 "auditimages", "reconcilemanifest",
-                 "train", "evaluate", "report"):
+                 "auditimages", "reconcilemanifest", "table4", "table5_prepare",
+                 "table5_train", "figure4_robustness", "train", "evaluate", "report"):
         fn = getattr(modal_app, name)
         assert hasattr(fn, "local") or callable(fn), name
 
