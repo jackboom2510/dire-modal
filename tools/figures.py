@@ -807,6 +807,64 @@ def a3_roc(args) -> dict:
     })
 
 
+def f4_robustness(args) -> dict:
+    """F4 — plot measured AP under the paper's blur/JPEG conditions from ledger JSON."""
+    plt = _mpl()
+    _style(plt)
+    source = Path(args.results)
+    payload = json.loads(source.read_text(encoding="utf-8"))
+    conditions = payload.get("by_condition") or {}
+    expected = {"clean", "blur_sigma1", "blur_sigma2", "blur_sigma3", "jpeg_q65", "jpeg_q30"}
+    if set(conditions) != expected:
+        raise SystemExit(f"Figure 4 cần đủ điều kiện {sorted(expected)}; có {sorted(conditions)}")
+    models = ("DIRE", "RGB")
+    generators = ("adm", "ddpm", "iddpm", "pndm", "sdv1")
+    fig, ax = plt.subplots(figsize=(COL2, 2.8))
+    names = list(conditions)
+    x = list(range(len(names)))
+    seen = 0
+    for model in models:
+        for generator in generators:
+            vals = []
+            for name in names:
+                cell = (((conditions[name] or {}).get("by_model") or {}).get(model) or {}).get(generator)
+                if not cell or cell.get("n", 0) <= 0 or cell.get("ap") is None:
+                    raise SystemExit(f"thiếu AP: {name}/{model}/{generator}")
+                value = float(cell["ap"])
+                if not 0 <= value <= 1:
+                    raise SystemExit(f"AP ngoài [0,1]: {name}/{model}/{generator}={value}")
+                vals.append(value * 100)
+            ax.plot(x, vals, marker="o", ms=2.5, lw=1.0 if model == "DIRE" else 0.75,
+                    ls="-" if model == "DIRE" else "--",
+                    label=f"{model} · {generator}")
+            seen += 1
+    ax.set_xticks(x)
+    ax.set_xticklabels(("clean", "blur σ=1", "blur σ=2", "blur σ=3", "JPEG 65", "JPEG 30"), rotation=15)
+    ax.set_ylim(0, 102)
+    ax.set_ylabel("Average Precision (%)")
+    ax.set_title("Robustness theo điều kiện nhiễu loạn", fontsize=8)
+    ax.grid(axis="y", lw=0.35, alpha=0.4)
+    ax.legend(frameon=False, ncol=2, fontsize=5.2, loc="lower left")
+    fig.tight_layout()
+    _stamp(fig, plt, args.label, "DIRE tính lại sau perturbation; RGB là baseline ResNet-50 của dự án")
+    return _save(fig, plt, Path(args.out), "f4-robustness", {
+        "figure": "F4",
+        "kind": "measurement",
+        "claim_label": args.label,
+        "n": sum(int(cell.get("n", 0)) for c in conditions.values()
+                 for m in models for cell in (c.get("by_model", {}).get(m, {}).values())),
+        "seed": None,
+        "sources": {"results": str(source)},
+        "cmd": f"python tools/figures.py f4-robustness --out figs --results {source}",
+        "conditions": names,
+        "series": seen,
+        "warnings": [
+            "paper Figure 4 uses CNNDetection* and PatchForensics* baselines; this run plots project ResNet-50 RGB vs DIRE and is not an exact reproduction of those baselines",
+            "paper text leaves unclear whether DIRE is recomputed after perturbation; this run follows the explicit recompute policy in its input ledger",
+        ],
+    })
+
+
 # --------------------------------------------------------------------------- #
 # Registry + CLI
 # --------------------------------------------------------------------------- #
@@ -817,6 +875,7 @@ FIGURES = {
     "a1-provenance": (a1_provenance, "schematic", "—", "ô nào của tác giả ⇒ nhãn R0/R1+R2"),
     "f5-noise": (f5_noise, "R0 (từ map tác giả)", "--maps", "noise + phổ tần số + phổ radial"),
     "f1-teaser": (f1_teaser, "R0 hoặc R1+R2", "--images --maps", "ảnh gốc | DIRE"),
+    "f4-robustness": (f4_robustness, "R1+R2", "--results", "AP theo blur/JPEG"),
     "a6-audit": (a6_audit, "schematic", "--manifest", "audit dữ liệu: split × generator"),
     "a2-scores": (a2_scores, "R1+R2", "--scores --labels", "phân bố điểm theo generator"),
     "a3-roc": (a3_roc, "R1+R2", "--scores --labels", "ROC/PR theo generator"),
@@ -859,6 +918,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--split", default="test")
     sp.add_argument("--generator", default="adm")
     sp.add_argument("--n", type=int, default=3)
+    common(sp, "R1+R2")
+
+    sp = sub.add_parser("f4-robustness", help="F4 AP dưới blur/JPEG từ Figure 4 ledger")
+    sp.add_argument("--results", required=True, help="figure4.json do Modal runner sinh")
     common(sp, "R1+R2")
 
     sp = sub.add_parser("a6-audit", help="A6 audit dữ liệu")

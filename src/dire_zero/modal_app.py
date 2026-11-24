@@ -17,6 +17,10 @@ Lệnh::
     modal run -m dire_zero.modal_app::auditimages --splits train,val,test
     modal run -m dire_zero.modal_app::dire --n 500
     modal run -m dire_zero.modal_app::train --epochs 40
+    modal run -m dire_zero.modal_app::table4 --run-id t4 --steps 5  # also 10,20,50
+    modal run -m dire_zero.modal_app::table5_prepare --run-id t5
+    modal run -m dire_zero.modal_app::table5_train --run-id t5 --representation RGB
+    modal run -m dire_zero.modal_app::figure4_robustness --run-id t5
     modal run -m dire_zero.modal_app::report
 
 Đường dẫn trên Volume — **một volume, một gốc**, xem `dire_zero/volume.py`::
@@ -43,7 +47,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Mapping, Sequence
 
 import modal
 
@@ -63,6 +67,10 @@ MAPS = V.MAPS                 # <split>/<generator>/*.npy
 REBUILD_MAPS_ROOT = f"{V.MOUNT}/rebuild/maps"
 OUT = V.RUNS
 IMAGE_AUDITS = f"{OUT}/image-audits"
+#: Experiment artifacts are isolated from `/zero/maps` and existing run ledgers.
+EXPERIMENTS = f"{V.MOUNT}/experiments"
+EXPERIMENT_RUNS = f"{OUT}/experiments"
+PAPER_IMAGENET_CKPT = f"{V.MOUNT}/ckpt/resnet50_imagenet.pth"
 
 
 def _maps_root_for_run(run_id: str = "") -> str:
@@ -2218,7 +2226,556 @@ def glob_many(pattern: str) -> list[str]:
     return glob.glob(pattern)
 
 
-@app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
+def _experiment_root(run_id: str, table: str) -> str:
+    from .experiments import validate_run_id  # noqa: PLC0415
+
+    validate_run_id(run_id)
+    if table not in {"table4", "table5", "figure4"}:
+        raise ValueError(f"unknown experiment namespace: {table}")
+    return f"{EXPERIMENTS}/{table}/{run_id}"
+
+
+def _paper_image_rows(splits: Sequence[str], generators: Sequence[str]) -> list[dict]:
+    from .data import list_images  # noqa: PLC0415
+
+    rows = []
+    for split in splits:
+        for generator in dict.fromkeys(generators):
+            folder = f"{DATA}/{split}/{generator}"
+            if not os.path.isdir(folder):
+                continue
+            for path in list_images(folder):
+                rows.append({"path": str(path), "name": path.name, "split": split,
+                             "generator": generator, "label": 0 if generator == "real" else 1})
+    return rows
+
+
+def _require_paper_cells(rows: Sequence[dict], required: Mapping[str, Sequence[str]]) -> None:
+    present = {(str(r["split"]), str(r["generator"])) for r in rows}
+    missing = [(s, g) for s, gs in required.items() for g in gs if (s, g) not in present]
+    if missing:
+        pretty = ", ".join(f"{s}/{g}" for s, g in missing)
+        raise FileNotFoundError(f"thiếu cell ảnh bắt buộc cho experiment: {pretty}; không chạy GPU")
+
+
+def _experiment_config(root: str, config: dict) -> bool:
+    """Lock an experiment namespace. Return True when the same config can resume."""
+    import json  # noqa: PLC0415
+
+    os.makedirs(root, exist_ok=True)
+    path = f"{root}/_protocol.json"
+    if os.path.exists(path):
+        old = json.load(open(path, encoding="utf-8"))
+        if old != config:
+            raise ValueError(f"protocol namespace đã khóa khác cấu hình: {path}; chọn run_id mới")
+        return True
+    if any(os.scandir(root)):
+        raise ValueError(f"namespace có artefact nhưng thiếu _protocol.json: {root}; không ghi đè")
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(config, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    return False
+
+
+def _imagenet_model(in_channels: int, weights_path: str = PAPER_IMAGENET_CKPT):
+    import torch  # noqa: PLC0415
+
+    from .detector import ResNetDetector  # noqa: PLC0415
+
+    if not os.path.isfile(weights_path):
+        raise FileNotFoundError(
+            f"thiếu ImageNet ResNet-50 weights tại {weights_path}; upload weights torchvision "
+            "ResNet50_Weights.IMAGENET1K_V2 trước khi train Table 4/5/robustness"
+        )
+    raw = torch.load(weights_path, map_location="cpu", weights_only=True)
+    for key in ("state_dict", "model", "net"):
+        if isinstance(raw, dict) and isinstance(raw.get(key), dict):
+            raw = raw[key]
+            break
+    if not isinstance(raw, dict):
+        raise ValueError("ImageNet checkpoint không phải state_dict")
+    state = {str(k).removeprefix("module."): v for k, v in raw.items()}
+    if not any(k == "conv1.weight" for k in state):
+        raise KeyError("ImageNet checkpoint thiếu conv1.weight")
+    model = ResNetDetector(in_channels=in_channels)
+    skipped = model.backbone.load_imagenet(state)
+    # FC is intentionally random for the one-logit binary detector.
+    if "stem.0.weight" in skipped:
+        raise ValueError("không nạp được conv đầu tiên của ImageNet checkpoint")
+    return model
+
+
+def _materialize_paper_inputs(rows: Sequence[dict], root: str, *, steps: int,
+                              representations: Sequence[str], ckpt_sha256: str,
+                              resume: bool = False) -> dict:
+    import json  # noqa: PLC0415
+    import numpy as np  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    from .diffusion import Schedule, dire_map  # noqa: PLC0415
+    from .experiments import image_variant_metadata, make_representation  # noqa: PLC0415
+    from .pipeline import load_image  # noqa: PLC0415
+
+    manifest_sha = _sha256(MANIFEST)
+    if not manifest_sha:
+        raise FileNotFoundError(f"thiếu {MANIFEST}; chạy ingest/kiểm kê manifest trước")
+    imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
+    if not imagenet_sha:
+        raise FileNotFoundError(PAPER_IMAGENET_CKPT)
+    config = {"steps": steps, "nfe_per_image": 2 * steps,
+              "adm_ckpt_sha256": ckpt_sha256, "imagenet_weights_sha256": imagenet_sha,
+              "manifest_sha256": manifest_sha,
+              "representations": list(representations), "source": "zero/data manifest images",
+              "dtype": "float16", "image_size": 256}
+    existed = _experiment_config(root, config)
+    if existed and not resume:
+        raise FileExistsError(f"đã có experiment tại {root}; chọn run_id mới")
+    device = "cuda"
+    f, actual_adm_sha = _counter(device=device)
+    if actual_adm_sha != ckpt_sha256:
+        raise ValueError("ADM checkpoint sha256 đổi so với protocol; chọn namespace mới")
+    sched = Schedule(steps=steps, device=device)
+    names: set[tuple[str, str, str]] = set()
+    n_new = n_reused = 0
+    item_records = []
+    for i, item in enumerate(rows, start=1):
+        key = (item["split"], item["generator"], os.path.splitext(item["name"])[0])
+        if key in names:
+            raise ValueError(f"tên ảnh trùng trong cell {key[:2]}: {key[2]}")
+        names.add(key)
+        destinations = []
+        for rep in representations:
+            meta = image_variant_metadata(rep)
+            variant = meta["name"]
+            dst = f"{root}/{variant}/{item['split']}/{item['generator']}/{key[2]}.npy"
+            destinations.append((variant, meta, dst))
+        if all(os.path.exists(dst) for _, _, dst in destinations):
+            for _, meta, dst in destinations:
+                arr = np.load(dst, mmap_mode="r")
+                if tuple(arr.shape) != (meta["channels"], 256, 256):
+                    raise ValueError(f"artefact variant sai shape: {dst} {arr.shape}")
+                n_reused += 1
+            item_records.append({"source": item["path"], "split": item["split"],
+                                 "generator": item["generator"], "label": item["label"],
+                                 "stem": key[2], "representations": [v for v, _, _ in destinations]})
+            continue
+        img = load_image(item["path"])
+        if tuple(img.shape[-2:]) != (256, 256):
+            raise ValueError(f"ảnh không đúng 256x256: {item['path']} {tuple(img.shape[-2:])}")
+        img = img.to(device)
+        dmap, recon = dire_map(f, img, sched)
+        saved = []
+        for variant, meta, dst in destinations:
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.exists(dst):
+                arr = np.load(dst, mmap_mode="r")
+                if tuple(arr.shape) != (meta["channels"], 256, 256):
+                    raise ValueError(f"artefact variant sai shape: {dst} {arr.shape}")
+                n_reused += 1
+            else:
+                x = make_representation(img, recon, dmap, variant)
+                np.save(dst, x.detach().to("cpu", torch.float16).numpy())
+                n_new += 1
+            saved.append(variant)
+        item_records.append({"source": item["path"], "split": item["split"],
+                             "generator": item["generator"], "label": item["label"],
+                             "stem": key[2], "representations": saved})
+        if i % 200 == 0:
+            vol.commit()
+            print(f"[inputs] {i}/{len(rows)} · {n_new} mới · {n_reused} đã có", flush=True)
+    payload = {"protocol": config, "items": item_records, "n_items": len(item_records),
+               "n_new": n_new, "n_reused": n_reused, "nfe_total": f.nfe}
+    with open(f"{root}/inputs.json", "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    vol.commit()
+    return payload
+
+
+def _evaluate_experiment_matrix(model, rows: Sequence[dict], *, crop: int,
+                                target_generators: Sequence[str], seed: int = 3407) -> dict:
+    import torch  # noqa: PLC0415
+
+    from . import metrics as M  # noqa: PLC0415
+    from .pipeline import _score  # noqa: PLC0415
+
+    cells = {}
+    for generator in target_generators:
+        cell = [r for r in rows if r["split"] == "test" and
+                r["generator"] in ("real", generator)]
+        if len({r["label"] for r in cell}) != 2:
+            cells[generator] = {"status": "missing", "n": len(cell)}
+            continue
+        scores, labels = _score(model, [r["path"] for r in cell], [r["label"] for r in cell],
+                                crop, "cuda")
+        metric = M.evaluate(scores, labels, threshold=0.5, seed=seed)
+        # `_score` uses the same seeded random order as `_batch`; align IDs to its
+        # returned scores so every table cell remains independently auditable.
+        order = torch.randperm(len(cell), generator=torch.Generator().manual_seed(0)).tolist()
+        cells[generator] = {"status": "ran", "metrics": metric,
+                            "n_real": sum(r["label"] == 0 for r in cell),
+                            "n_fake": sum(r["label"] == 1 for r in cell),
+                            "scores": scores, "labels": labels,
+                            "sample_ids": [os.path.relpath(cell[i]["path"], DATA) for i in order]}
+    return cells
+
+
+def _train_paper_variant(rows: Sequence[dict], out_dir: str, *, in_channels: int,
+                         weights_path: str, epochs: int = 400, bs: int = 32,
+                         lr: float = 1e-4, crop: int = 224, seed: int = 3407,
+                         details: dict | None = None) -> tuple[dict, object]:
+    import json  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    from .pipeline import train as train_fn  # noqa: PLC0415
+
+    if epochs < 1 or bs < 1 or not 1 <= crop <= 256 or lr <= 0:
+        raise ValueError("epochs/batch/lr phải dương; crop phải trong [1,256]")
+    weights_sha = _sha256(weights_path)
+    if not weights_sha:
+        raise FileNotFoundError(weights_path)
+    os.makedirs(out_dir, exist_ok=True)
+    model_config = {"in_channels": in_channels, "weights_sha256": weights_sha,
+                    "epochs": epochs, "batch": bs, "lr": lr, "crop": crop,
+                    "seed": seed, "details": details or {}}
+    config_path = f"{out_dir}/_protocol.json"
+    if os.path.exists(config_path):
+        if json.load(open(config_path, encoding="utf-8")) != model_config:
+            raise ValueError(f"model namespace đã khóa protocol khác: {out_dir}; chọn run_id mới")
+    else:
+        if any(os.scandir(out_dir)):
+            raise ValueError(f"model folder có artefact nhưng thiếu protocol lock: {out_dir}")
+        with open(config_path, "w", encoding="utf-8") as fh:
+            json.dump(model_config, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+    train_json_path = f"{out_dir}/train.json"
+    detector_path = f"{out_dir}/detector.pth"
+    if os.path.exists(train_json_path) and os.path.exists(detector_path):
+        payload = json.load(open(train_json_path, encoding="utf-8"))
+        model = _imagenet_model(in_channels, weights_path)
+        state = torch.load(detector_path, map_location="cuda", weights_only=True)
+        model.load_state_dict(state, strict=True)
+        return payload, model.to("cuda").eval()
+    if os.path.exists(train_json_path) or os.path.exists(detector_path):
+        raise FileExistsError(f"model artifacts dở dang: {out_dir}; kiểm tra thủ công, không ghi đè")
+    train_rows = [r for r in rows if r["generator"] in ("real", "adm")]
+    real_splits = {(r["split"], r["generator"]) for r in train_rows}
+    required = {("train", "real"), ("train", "adm"), ("val", "real"), ("val", "adm"),
+                ("test", "real"), ("test", "adm")}
+    if not required.issubset(real_splits):
+        raise FileNotFoundError(f"cần real/ADM đủ train,val,test; thiếu {sorted(required-real_splits)}")
+    with open(f"{V.DATA_CARD}", encoding="utf-8") as fh:
+        data_label = (json.load(fh).get("label") or "R1+R2")
+    payload = train_fn(
+        lambda: _imagenet_model(in_channels, weights_path), train_rows, out_dir,
+        epochs=epochs, bs=bs, lr=lr, crop=crop, device="cuda", seed=seed,
+        init="imagenet", split_mode="author", label=data_label,
+        extra={"paper_protocol": True, "init_weights": weights_path,
+                "init_channels": in_channels, **(details or {})},
+    )
+    vol.commit()  # checkpoint + training ledger survive a timeout during matrix evaluation
+    model = _imagenet_model(in_channels, weights_path)
+    # Reload the selected detector, including the six-channel stem when needed.
+    state = torch.load(f"{out_dir}/detector.pth", map_location="cuda", weights_only=True)
+    model.load_state_dict(state, strict=True)
+    model = model.to("cuda").eval()
+    return payload, model
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
+def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
+           lr: float = 1e-4, crop: int = 224, seed: int = 3407) -> dict:
+    """Run one independent Table 4 cell-row at S∈{5,10,20,50}.
+
+    Each S has a disjoint feature namespace and its own ADM-trained detector.
+    Call once per S; results are merged into `table4.json` without overwriting.
+    """
+    import json  # noqa: PLC0415
+    from .experiments import PAPER_TEST_GENERATORS, TABLE4_STEPS, validate_run_id  # noqa: PLC0415
+
+    validate_run_id(run_id)
+    if int(steps) not in TABLE4_STEPS:
+        raise ValueError(f"Table 4 steps phải thuộc {TABLE4_STEPS}")
+    root = _experiment_root(run_id, "table4")
+    cell_root = f"{root}/S{int(steps)}"
+    rows = _paper_image_rows(("train", "val", "test"), ("real", "adm", *PAPER_TEST_GENERATORS))
+    required = {"train": ("real", "adm"), "val": ("real", "adm"),
+                "test": ("real", *PAPER_TEST_GENERATORS)}
+    _require_paper_cells(rows, required)
+    imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
+    adm_sha = _sha256(CKPT)
+    if not imagenet_sha:
+        raise FileNotFoundError(PAPER_IMAGENET_CKPT)
+    if not adm_sha:
+        raise FileNotFoundError(CKPT)
+    cfg = {"steps": int(steps), "adm_ckpt_sha256": adm_sha,
+           "imagenet_weights_sha256": imagenet_sha, "train_generators": ["adm"],
+           "test_generators": list(PAPER_TEST_GENERATORS), "epochs": epochs,
+           "batch": bs, "lr": lr, "crop": crop, "seed": seed, "init": "ImageNet"}
+    # Every S is its own immutable lock; resume only reuses validated per-image
+    # feature files. Model outputs themselves are never overwritten.
+    _experiment_config(cell_root, cfg)
+    input_root = f"{cell_root}/inputs"
+    _materialize_paper_inputs(rows, input_root, steps=int(steps), representations=("DIRE",),
+                              ckpt_sha256=adm_sha, resume=True)
+    from .pipeline import collect_maps  # noqa: PLC0415
+    data_rows = collect_maps(f"{input_root}/DIRE")
+    model_dir = f"{cell_root}/model"
+    train_meta, model = _train_paper_variant(
+        data_rows, model_dir, in_channels=3, weights_path=PAPER_IMAGENET_CKPT,
+        epochs=epochs, bs=bs, lr=lr, crop=crop, seed=seed,
+        details={"table": 4, "steps": int(steps), "nfe_per_image": 2 * int(steps)},
+    )
+    cells = _evaluate_experiment_matrix(model, data_rows, crop=crop,
+                                        target_generators=PAPER_TEST_GENERATORS, seed=seed)
+    result = {"protocol": cfg, "steps": int(steps), "train": train_meta,
+              "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
+              "by_test_generator": cells,
+              "status": "complete" if all(c.get("status") == "ran" for c in cells.values()) else "incomplete"}
+    ledger_path = f"{root}/table4.json"
+    ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {"by_steps": {}}
+    by_steps = dict(ledger.get("by_steps") or {})
+    key = str(int(steps))
+    if key in by_steps:
+        raise FileExistsError(f"Table 4 S={key} đã có kết quả; không ghi đè")
+    by_steps[key] = result
+    ledger = {"table": 4, "paper_steps": list(TABLE4_STEPS), "by_steps": by_steps,
+              "missing_steps": [s for s in TABLE4_STEPS
+                                if str(s) not in by_steps or by_steps[str(s)].get("status") != "complete"]}
+    with open(ledger_path, "w", encoding="utf-8") as fh:
+        json.dump(ledger, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    vol.commit()
+    return ledger
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
+def table5_prepare(run_id: str, crop: int = 224) -> dict:
+    """Create isolated S=20 REC/RGB/RGB+DIRE/DIRE tensors from the same triplets."""
+    import json  # noqa: PLC0415
+    from .experiments import PAPER_TEST_GENERATORS, TABLE5_REPRESENTATIONS, validate_run_id  # noqa: PLC0415
+
+    validate_run_id(run_id)
+    root = _experiment_root(run_id, "table5")
+    rows = _paper_image_rows(("train", "val", "test"), ("real", "adm", *PAPER_TEST_GENERATORS))
+    _require_paper_cells(rows, {"train": ("real", "adm"), "val": ("real", "adm"),
+                                "test": ("real", *PAPER_TEST_GENERATORS)})
+    imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
+    adm_sha = _sha256(CKPT)
+    if not imagenet_sha:
+        raise FileNotFoundError(PAPER_IMAGENET_CKPT)
+    if not adm_sha:
+        raise FileNotFoundError(CKPT)
+    payload = _materialize_paper_inputs(
+        rows, f"{root}/inputs", steps=20, representations=TABLE5_REPRESENTATIONS,
+        ckpt_sha256=adm_sha, resume=True,
+    )
+    payload["table"] = 5
+    payload["crop"] = crop
+    with open(f"{root}/inputs.json", "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    vol.commit()
+    return payload
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
+def table5_train(run_id: str, representation: str, epochs: int = 400,
+                 bs: int = 32, lr: float = 1e-4, crop: int = 224,
+                 seed: int = 3407) -> dict:
+    """Train one Table 5 representation on ADM and score all five paper columns."""
+    import json  # noqa: PLC0415
+    from .experiments import PAPER_TEST_GENERATORS, TABLE5_REPRESENTATIONS, image_variant_metadata  # noqa: PLC0415
+    from .pipeline import collect_maps  # noqa: PLC0415
+
+    rep = image_variant_metadata(representation)["name"]
+    if rep not in TABLE5_REPRESENTATIONS:
+        raise ValueError(f"Table 5 representation phải thuộc {TABLE5_REPRESENTATIONS}")
+    root = _experiment_root(run_id, "table5")
+    input_root = f"{root}/inputs/{rep}"
+    if not os.path.isfile(f"{root}/inputs.json"):
+        raise FileNotFoundError(f"chạy ::table5_prepare --run-id {run_id} trước")
+    rows = collect_maps(input_root)
+    model_dir = f"{root}/models/{rep}"
+    channels = 6 if rep == "RGB_DIRE" else 3
+    train_meta, model = _train_paper_variant(
+        rows, model_dir, in_channels=channels, weights_path=PAPER_IMAGENET_CKPT,
+        epochs=epochs, bs=bs, lr=lr, crop=crop, seed=seed,
+        details={"table": 5, "representation": rep},
+    )
+    cells = _evaluate_experiment_matrix(model, rows, crop=crop,
+                                        target_generators=PAPER_TEST_GENERATORS, seed=seed)
+    result = {"representation": rep, "input_contract": image_variant_metadata(rep),
+              "train": train_meta, "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
+              "by_test_generator": cells,
+              "status": "complete" if all(c.get("status") == "ran" for c in cells.values()) else "incomplete"}
+    ledger_path = f"{root}/table5.json"
+    ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {"by_representation": {}}
+    by_rep = dict(ledger.get("by_representation") or {})
+    if rep in by_rep:
+        raise FileExistsError(f"Table 5 {rep} đã có kết quả; không ghi đè")
+    by_rep[rep] = result
+    ledger = {"table": 5, "paper_representations": list(TABLE5_REPRESENTATIONS),
+              "by_representation": by_rep,
+              "missing_representations": [x for x in TABLE5_REPRESENTATIONS
+                                          if x not in by_rep or by_rep[x].get("status") != "complete"]}
+    with open(ledger_path, "w", encoding="utf-8") as fh:
+        json.dump(ledger, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    vol.commit()
+    return ledger
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
+def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all",
+                       generator_name: str = "all") -> dict:
+    """Figure 4 conditions: blur σ=1,2,3 and JPEG q=65,30 on test source images.
+
+    Loads the clean-trained Table 5 RGB and DIRE detectors. DIRE is recomputed
+    from each corrupted source image (not from a cached clean map). Conditions
+    are checkpointed one by one so retries keep completed conditions. This runner
+    does not claim to reproduce CNNDetection*/PatchForensics* baselines; it records
+    our paired ResNet-50 RGB-vs-DIRE comparison. `condition_name` and
+    `generator_name` accept one named shard or `all`; shards are resumable.
+    """
+    import json  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    from . import metrics as M  # noqa: PLC0415
+    from .diffusion import Schedule, dire_map  # noqa: PLC0415
+    from .experiments import (PAPER_TEST_GENERATORS, ROBUSTNESS_LEVELS,
+                              corrupt_image, image_variant_metadata, robustness_metadata)
+    from .pipeline import load_image
+
+    if not 1 <= crop <= 256:
+        raise ValueError("crop phải trong [1,256]")
+    root = _experiment_root(run_id, "figure4")
+    dire_dir = f"{EXPERIMENTS}/table5/{run_id}/models/DIRE"
+    rgb_dir = f"{EXPERIMENTS}/table5/{run_id}/models/RGB"
+    if not all(os.path.isfile(f"{d}/detector.pth") for d in (dire_dir, rgb_dir)):
+        raise FileNotFoundError(f"cần chạy Table 5 RGB và DIRE trước: {rgb_dir}, {dire_dir}")
+    rows = _paper_image_rows(("test",), ("real", *PAPER_TEST_GENERATORS))
+    _require_paper_cells(rows, {"test": ("real", *PAPER_TEST_GENERATORS)})
+    manifest_sha = _sha256(MANIFEST)
+    ckpt_sha = _sha256(CKPT)
+    if not manifest_sha:
+        raise FileNotFoundError(f"thiếu {MANIFEST}; chạy ingest/kiểm kê manifest trước")
+    if not ckpt_sha:
+        raise FileNotFoundError(CKPT)
+    config = {**robustness_metadata(), "run_id": run_id, "steps": 20,
+              "adm_ckpt_sha256": ckpt_sha, "manifest_sha256": manifest_sha,
+              "detectors": ["RGB", "DIRE"], "crop": crop,
+              "model_source": "clean-trained Table 5 models",
+              "detector_sha256": {"RGB": _sha256(f"{rgb_dir}/detector.pth"),
+                                  "DIRE": _sha256(f"{dire_dir}/detector.pth")}}
+    _experiment_config(root, config)
+    result_path = f"{root}/figure4.json"
+    condition_root = f"{root}/conditions"
+    os.makedirs(condition_root, exist_ok=True)
+    names = [str(c["name"]) for c in ROBUSTNESS_LEVELS]
+    if condition_name != "all" and condition_name not in names:
+        raise ValueError(f"condition phải thuộc {names} hoặc 'all'")
+    if generator_name != "all" and generator_name not in PAPER_TEST_GENERATORS:
+        raise ValueError(f"generator phải thuộc {PAPER_TEST_GENERATORS} hoặc 'all'")
+    selected_generators = list(PAPER_TEST_GENERATORS) if generator_name == "all" else [generator_name]
+    selected = [c for c in ROBUSTNESS_LEVELS
+                if condition_name == "all" or c["name"] == condition_name]
+    selected = [c for c in selected if any(
+        not os.path.isfile(f"{condition_root}/{c['name']}/{gen}.json")
+        for gen in selected_generators)]
+    ordered_rows = sorted(rows, key=lambda r: (r["generator"], r["path"]))
+    if selected:
+        models = {}
+        for rep, directory in (("RGB", rgb_dir), ("DIRE", dire_dir)):
+            model = _imagenet_model(3, PAPER_IMAGENET_CKPT)
+            state = torch.load(f"{directory}/detector.pth", map_location="cuda", weights_only=True)
+            model.load_state_dict(state, strict=True)
+            models[rep] = model.to("cuda").eval()
+        counter, _ = _counter(device="cuda")
+        schedule = Schedule(steps=20, device="cuda")
+    else:
+        models = {}
+
+    for condition in selected:
+        for generator in selected_generators:
+            shard_path = f"{condition_root}/{condition['name']}/{generator}.json"
+            if os.path.isfile(shard_path):
+                continue
+            cell_rows = [r for r in ordered_rows if r["generator"] in ("real", generator)]
+            per_source = {rep: {"scores": [], "labels": [], "sample_ids": []} for rep in models}
+            for index, item in enumerate(cell_rows, start=1):
+                source = load_image(item["path"])
+                perturbed = corrupt_image(source, condition)
+                dmap, _recon = dire_map(counter, perturbed.unsqueeze(0).to("cuda"), schedule)
+                rgb_x = ((perturbed.clamp(-1, 1) + 1) * 0.5).clamp(0, 1)
+                dire_x = dmap.squeeze(0).float().clamp(0, 2)
+                sample_id = os.path.relpath(item["path"], DATA)
+                for rep, x in (("RGB", rgb_x), ("DIRE", dire_x)):
+                    top, left = (x.shape[-2] - crop) // 2, (x.shape[-1] - crop) // 2
+                    x = x[:, top:top + crop, left:left + crop].unsqueeze(0).to("cuda")
+                    with torch.inference_mode():
+                        prob = float(torch.sigmoid(models[rep].logits(x)).item())
+                    per_source[rep]["scores"].append(prob)
+                    per_source[rep]["labels"].append(int(item["label"]))
+                    per_source[rep]["sample_ids"].append(sample_id)
+                if index % 200 == 0:
+                    vol.commit()
+                    print(f"[Figure 4] {condition['name']}/{generator}: {index}/{len(cell_rows)}", flush=True)
+            for rep in models:
+                if len(set(per_source[rep]["labels"])) != 2:
+                    raise ValueError(f"Figure 4 thiếu hai lớp ở cột {generator}")
+            shard = {"condition": dict(condition), "generator": generator, "by_model": {}}
+            for rep in models:
+                scores = per_source[rep]["scores"]
+                labels = per_source[rep]["labels"]
+                shard["by_model"][rep] = {
+                    "ap": M.average_precision(scores, labels), "n": len(labels),
+                    "n_real": sum(y == 0 for y in labels), "n_fake": sum(y == 1 for y in labels),
+                    "scores": scores, "labels": labels,
+                    "sample_ids": per_source[rep]["sample_ids"],
+                }
+            os.makedirs(os.path.dirname(shard_path), exist_ok=True)
+            with open(shard_path, "w", encoding="utf-8") as fh:
+                json.dump(shard, fh, ensure_ascii=False, indent=2)
+                fh.write("\n")
+            vol.commit()
+            print(f"[Figure 4] {condition['name']}/{generator} complete", flush=True)
+
+    by_condition = {}
+    missing_cells = []
+    for name in names:
+        by_model = {rep: {} for rep in ("RGB", "DIRE")}
+        missing_gens = []
+        for generator in PAPER_TEST_GENERATORS:
+            path = f"{condition_root}/{name}/{generator}.json"
+            if not os.path.isfile(path):
+                missing_gens.append(generator)
+                missing_cells.append(f"{name}/{generator}")
+                continue
+            with open(path, encoding="utf-8") as fh:
+                shard = json.load(fh)
+            for rep in by_model:
+                by_model[rep][generator] = shard["by_model"][rep]
+        if by_model["RGB"] or by_model["DIRE"]:
+            by_condition[name] = {"condition": next(c for c in ROBUSTNESS_LEVELS if c["name"] == name),
+                                  "by_model": by_model, "missing_generators": missing_gens}
+    payload = {"protocol": config, "adm_ckpt_sha256": ckpt_sha,
+               "normalization": image_variant_metadata("RGB"),
+               "by_condition": by_condition,
+               "missing_conditions": [name for name in names if name not in by_condition],
+               "missing_cells": missing_cells,
+               "baseline_note": "RGB is the project's ImageNet-initialized ResNet-50; this is not CNNDetection*/PatchForensics*."}
+    with open(result_path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    vol.commit()
+    return {"out": result_path, "conditions": list(by_condition),
+            "missing_conditions": payload["missing_conditions"],
+            "missing_cells": payload["missing_cells"],
+            "models": ["RGB", "DIRE"], "paper_baselines_reproduced": False}
+
+
+@app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def report(run_id: str = "") -> dict:
     """Gom gen/DIRE/train/eval thành báo cáo; run_id giữ namespace rebuild tách biệt."""
     import json  # noqa: PLC0415

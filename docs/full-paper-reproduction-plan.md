@@ -89,10 +89,10 @@ repo đã ghim, không suy diễn từ bảng tóm tắt trong tài liệu nội
 | M0 | Kiểm tra pipeline / đối chiếu R0 | So sánh preprocessing, điểm ảnh, metric và artefact phát hành; phát hiện sai trước khi tốn GPU |
 | M1 | Kết quả chính: train detector trên từng training generator, test trên từng generator trong cùng tập/domain | Toàn bộ hàng × cột của bảng tổng quát hoá chính (paper Table 2); mỗi model riêng, không gộp generator thành lớp giả chung |
 | M2 | Cross-dataset / cross-domain | Các cấu hình train LSUN ↔ ImageNet và các cặp paper nêu (Table 3); split/nhãn/nguồn ảnh tách biệt |
-| M3 | Số bước DDIM `S` | Đủ các giá trị bước được paper khảo sát; tính lại map cho từng S, không tái sử dụng map khác S (Table 4) |
-| M4 | Biểu diễn đầu vào | `REC`, `RGB`, `RGB & DIRE`, `DIRE` đúng preprocessing/nhánh của paper (Table 5) |
+| M3 | Số bước DDIM `S` | **Có runner, chưa chạy:** `::table4 --steps 5,10,20,50` (mỗi lần một S); map riêng và detector riêng; ledger báo ô còn thiếu (Table 4) |
+| M4 | Biểu diễn đầu vào | **Có runner, chưa chạy:** `::table5_prepare` + `::table5_train` cho REC/RGB/RGB_DIRE/DIRE trên cùng split (Table 5); exact fusion cần xác nhận với mã nguồn tác giả |
 | M5 | Trị tuyệt đối | So `x − x̂` với `|x − x̂|` cùng dữ liệu/model/protocol (Table 6) |
-| M6 | Robustness | Gaussian blur và JPEG đúng các mức ở hình paper; lưu metric từng mức và dữ liệu đã biến đổi, không chỉ vẽ biểu đồ |
+| M6 | Robustness | **Có runner, chưa chạy:** Figure 4 conditions clean/blur σ=1,2,3/JPEG q=65,30, AP và sample scores; CNNDetection*/PatchForensics* baselines vẫn thiếu |
 | M7 | Kiểm tra/ablation bổ sung của paper | Đọc danh mục bảng/hình trong paper và repo đã ghim; đưa từng protocol vào ma trận trước khi bắt đầu lượt đầy đủ |
 | X1 | Generator mới / tự train | Chỉ là mở rộng; bảng riêng, không thay thế generator gốc hoặc ô thiếu trong M1–M7 |
 
