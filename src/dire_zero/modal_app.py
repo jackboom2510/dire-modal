@@ -257,7 +257,8 @@ def _check_data(
     Kiểm bốn thứ mà một lần chạy GPU 3 tiếng sẽ không báo:
 
     1. manifest có trên Volume và sha256 từng PNG khớp (file bị sửa/xoá);
-    2. có đủ hai lớp, và tỉ lệ hai lớp không lệch quá 5:1 (ACC sẽ vô nghĩa);
+    2. có đủ hai lớp; train/val lệch quá 5:1 thì chặn, còn test lệch chỉ cảnh báo
+       vì đây là holdout cố định và cần diễn giải metric theo số lớp;
     3. `data_card.label` phù hợp với nguồn ảnh giả (`author` ⇒ không được `R3`);
     4. rò rỉ pixel giữa hai lớp (nếu ingest đã chạy, việc này đã chặn; ở đây
        kiểm lại trên bản đã đẩy lên vì Volume có thể bị ghi đè từ ngoài).
@@ -344,19 +345,24 @@ def _check_data(
     # là chặn oan đúng cấu trúc mà Table 2 cần để so từng dòng.
     reals = collections.Counter(r["split"] for r in rows if r["label"] == 0)
     gen_counts = collections.Counter((r["split"], r["generator"]) for r in rows if r["label"] == 1)
-    tasks, unbalanced, no_real = [], [], []
+    tasks, unbalanced, unbalanced_test, no_real = [], [], [], []
     for (split, gen), n_fake_gen in sorted(gen_counts.items()):
         n_real_gen = reals.get(split, 0)
         ratio = max(n_real_gen, n_fake_gen) / max(min(n_real_gen, n_fake_gen), 1)
+        balanced = ratio <= max_ratio
         entry = {"split": split, "generator": gen, "real": n_real_gen,
-                 "fake": n_fake_gen, "ratio": round(ratio, 2),
-                 "ok": n_real_gen > 0 and ratio <= max_ratio}
+                 "fake": n_fake_gen, "ratio": round(ratio, 2), "balanced": balanced,
+                 # Test imbalance affects interpretation, but must not block map/training readiness.
+                 "ok": n_real_gen > 0 and (balanced or split == "test")}
         tasks.append(entry)
         if n_real_gen == 0:
             no_real.append(f"{split}/{gen}")
         elif ratio > max_ratio:
-            unbalanced.append(f"{split}/{gen}: thật {n_real_gen} vs giả {n_fake_gen} "
-                              f"({ratio:.1f}:1)")
+            message = f"{split}/{gen}: thật {n_real_gen} vs giả {n_fake_gen} ({ratio:.1f}:1)"
+            if split == "test":
+                unbalanced_test.append(message)
+            else:
+                unbalanced.append(message)
 
     if not n_real or not n_fake:
         problems.append(f"thiếu một lớp (thật {n_real}, giả {n_fake})")
@@ -376,6 +382,10 @@ def _check_data(
     # Không phải lỗi: `::gen` ghi thêm `data/<split>/ours_adm` mà manifest (do
     # ingest tạo) không biết. Nhưng chênh lệch lớn thì phải nói ra.
     warnings = []
+    for message in unbalanced_test:
+        warnings.append(
+            f"test mất cân bằng ({message}); giữ nguyên holdout và diễn giải ACC cùng per-class metrics/AP/AUC"
+        )
     n_gen = len({g for (_sp, g) in gen_counts})
     if n_gen > 1:
         pooled = max(n_real, n_fake) / max(min(n_real, n_fake), 1)

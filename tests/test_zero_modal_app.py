@@ -566,13 +566,24 @@ def test_many_generators_against_one_real_class_is_not_an_imbalance(volume_gia: 
     assert any("Table 2" in w for w in report["warnings"])
 
 
-def test_one_unbalanced_task_is_still_caught(volume_gia: Path):
-    _write_multi(volume_gia, 20, {"adm": 20, "pndm": 400})
+def test_one_unbalanced_train_task_is_still_caught(volume_gia: Path):
+    _write_multi(volume_gia, 20, {"adm": 20, "pndm": 400}, split="train")
     with pytest.raises(RuntimeError) as exc:
         _run(skip_sha=True)
     msg = str(exc.value)
-    assert "test/pndm" in msg and "lệch quá 5:1" in msg
-    assert "test/adm" not in msg                      # bài toán cân vẫn ổn
+    assert "train/pndm" in msg and "lệch quá 5:1" in msg
+    assert "train/adm" not in msg                     # bài toán cân vẫn ổn
+
+
+def test_unbalanced_test_task_warns_but_does_not_block(volume_gia: Path):
+    """Test-only 10:1 là cảnh báo diễn giải, không được chặn bước train/map."""
+    _write_multi(volume_gia, 1000, {"midjourney": 100}, split="test")
+    report = _run(skip_sha=True)
+    assert report["problems"] == []
+    task = report["tasks"][0]
+    assert task["ok"] is True and task["balanced"] is False
+    assert any("test/midjourney" in warning and "10.0:1" in warning
+               for warning in report["warnings"])
 
 
 def test_generator_without_real_images_in_the_same_split_blocks(volume_gia: Path):
@@ -590,7 +601,7 @@ def test_generator_without_real_images_in_the_same_split_blocks(volume_gia: Path
 
 
 def test_max_ratio_is_configurable(volume_gia: Path):
-    _write_multi(volume_gia, 10, {"adm": 30})         # 3:1
+    _write_multi(volume_gia, 10, {"adm": 30}, split="train")  # 3:1
     assert _run(skip_sha=True)["problems"] == []
     with pytest.raises(RuntimeError):
         _run(skip_sha=True, max_ratio=2.0)
