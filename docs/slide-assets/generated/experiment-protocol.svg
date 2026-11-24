@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1293" height="534" viewBox="0 0 1293 534" role="img">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient></defs>
+<rect width="100%" height="100%" rx="24" fill="url(#bg)"/>
+<text x="44" y="48" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="14" font-weight="700" letter-spacing="1.4">DIRE · SLIDE DATA</text>
+<text x="44" y="87" fill="#fff" font-family="Inter,Arial,sans-serif" font-size="28" font-weight="700">Protocol matrix · implementation facts, not measurements</text>
+<text x="44" y="116" fill="#a6bbc7" font-family="Inter,Arial,sans-serif" font-size="14">Generated from checked-in sources · no experiment was run</text>
+<rect x="44" y="135" width="1205" height="54" rx="8" fill="#214253"/>
+<text x="60" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Experiment</text>
+<text x="190" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Varied factor</text>
+<text x="435" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Protocol encoded in repo</text>
+<text x="965" y="169" fill="#81d1c2" font-family="Inter,Arial,sans-serif" font-size="15" font-weight="800">Output / status</text>
+<rect x="44" y="189" width="1205" height="68" fill="#13283a"/>
+<path d="M44 257 H1249" stroke="#345168" stroke-width="1"/>
+<text x="60" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">Table 4</tspan></text>
+<text x="190" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="190" dy="0">DDIM S=5, 10, 20, 50</tspan></text>
+<text x="435" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="435" dy="0">ADM train; test per generator: adm, ddpm, iddpm, pndm,</tspan><tspan x="435" dy="22">sdv2</tspan></text>
+<text x="965" y="214" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="965" dy="0">One model/cache per S; no</tspan><tspan x="965" dy="22">subset result reported here</tspan></text>
+<rect x="44" y="257" width="1205" height="68" fill="#182f42"/>
+<path d="M44 325 H1249" stroke="#345168" stroke-width="1"/>
+<text x="60" y="282" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">Table 5</tspan></text>
+<text x="190" y="282" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="190" dy="0">Representation: REC,</tspan><tspan x="190" dy="22">RGB, RGB_DIRE, DIRE</tspan></text>
+<text x="435" y="282" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="435" dy="0">S=20; separate representation models; same selected</tspan><tspan x="435" dy="22">samples</tspan></text>
+<text x="965" y="282" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="965" dy="0">REC needs reconstruction; no</tspan><tspan x="965" dy="22">subset metrics supplied</tspan></text>
+<rect x="44" y="325" width="1205" height="137" fill="#13283a"/>
+<path d="M44 462 H1249" stroke="#345168" stroke-width="1"/>
+<text x="60" y="350" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="60" dy="0">Figure 4</tspan></text>
+<text x="190" y="350" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="190" dy="0">Clean; Gaussian blur</tspan><tspan x="190" dy="22">σ=1; Gaussian blur σ=2;</tspan><tspan x="190" dy="22">Gaussian blur σ=3; JPEG</tspan><tspan x="190" dy="22">quality=65; JPEG</tspan><tspan x="190" dy="22">quality=30</tspan></text>
+<text x="435" y="350" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="435" dy="0">AP by test generator; DIRE recomputed after each</tspan><tspan x="435" dy="22">corruption</tspan></text>
+<text x="965" y="350" fill="#e3edf1" font-family="Inter,Arial,sans-serif" font-size="17"><tspan x="965" dy="0">Project RGB vs DIRE; paper</tspan><tspan x="965" dy="22">baselines not reproduced</tspan></text>
+<text x="44" y="496" fill="#f2c66d" font-family="Inter,Arial,sans-serif" font-size="13">LSUN-Bedroom test data in this run uses sdv2; sdv1 is not present in that dataset tree.</text>
+</svg>

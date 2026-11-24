@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Correct comparison for DIRE map provenance</title>
+<desc id="desc">Compare a DIRE map recomputed from the original source image with the author's DIRE map. Do not compare raw RGB pixels directly with a DIRE map.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient>
+  <linearGradient id="heat" x2="1" y2="1"><stop stop-color="#172b49"/><stop offset=".42" stop-color="#27b4b2"/><stop offset=".72" stop-color="#f2b84b"/><stop offset="1" stop-color="#eb745d"/></linearGradient>
+  <linearGradient id="photo" x2="0" y2="1"><stop stop-color="#77cabc"/><stop offset="1" stop-color="#1b5265"/></linearGradient>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#8faabd"/></marker>
+  <style>.sans{font-family:Inter,Arial,sans-serif}.head{fill:#fff;font-size:30px;font-weight:700}.label{fill:#d9e7ec;font-size:18px;font-weight:700}.small{fill:#a6bbc7;font-size:15px}.tiny{fill:#8ea5b2;font-size:12px}.teal{fill:#81d1c2}.red{fill:#ff9584}</style>
+</defs>
+<rect width="1200" height="600" rx="28" fill="url(#bg)"/>
+<text x="56" y="57" class="sans teal" font-size="16" font-weight="700" letter-spacing="1.5">DATA PROVENANCE · IMPORTANT DISTINCTION</text>
+<text x="56" y="101" class="sans head">Compare map with map — not raw RGB with a map</text>
+<!-- original source image -->
+<g transform="translate(55 184)">
+ <rect width="145" height="145" rx="14" fill="#203a4b" stroke="#55758a" stroke-width="2"/>
+ <rect x="10" y="10" width="125" height="125" rx="7" fill="url(#photo)"/>
+ <path d="M10 100 L44 62 L70 86 L96 48 L135 99 V135 H10Z" fill="#1b455b"/>
+ <circle cx="105" cy="36" r="14" fill="#f3c46a"/>
+ <text x="72" y="176" text-anchor="middle" class="sans label">Original image</text>
+ <text x="72" y="198" text-anchor="middle" class="sans small">images/…</text>
+</g>
+<!-- recomputation path -->
+<path d="M207 255 H239" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<g transform="translate(250 207)">
+ <rect width="178" height="96" rx="15" fill="#163747" stroke="#4b968f" stroke-width="2"/>
+ <text x="89" y="33" text-anchor="middle" class="sans label">Recompute DIRE</text>
+ <text x="89" y="60" text-anchor="middle" class="sans teal" font-size="15" font-weight="700">DDIM I → R → |x−x̂|</text>
+ <text x="89" y="81" text-anchor="middle" class="sans tiny">match S / checkpoint / preprocessing</text>
+</g>
+<path d="M435 255 H459" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- recomputed map -->
+<g transform="translate(472 184)">
+ <rect width="145" height="145" rx="14" fill="#203a4b" stroke="#4b968f" stroke-width="2"/>
+ <rect x="10" y="10" width="125" height="125" rx="7" fill="url(#heat)"/>
+ <path d="M18 93 Q40 39 62 80 T101 59 T135 98" fill="none" stroke="#f9e3a6" stroke-width="7" opacity=".8"/>
+ <text x="72" y="176" text-anchor="middle" class="sans label">Recomputed map</text>
+ <text x="72" y="198" text-anchor="middle" class="sans small">from source image</text>
+</g>
+<!-- author map referenced by the same source -->
+<path d="M126 337 V397 H755 V337" fill="none" stroke="#d1a44d" stroke-width="2.5" stroke-dasharray="8 7" marker-end="url(#arrow)"/>
+<g transform="translate(657 184)">
+ <rect width="145" height="145" rx="14" fill="#203a4b" stroke="#d3a954" stroke-width="2"/>
+ <rect x="10" y="10" width="125" height="125" rx="7" fill="url(#heat)"/>
+ <path d="M18 83 Q42 50 63 87 T104 63 T135 101" fill="none" stroke="#f9e3a6" stroke-width="7" opacity=".76"/>
+ <text x="72" y="176" text-anchor="middle" class="sans label">Author DIRE map</text>
+ <text x="72" y="198" text-anchor="middle" class="sans small">dire/…</text>
+</g>
+<!-- map-to-map comparison -->
+<path d="M619 225 V151 H890 Q910 151 910 171 V235 H909" fill="none" stroke="#58b6a7" stroke-width="2.8" marker-end="url(#arrow)"/>
+<path d="M804 289 H909" fill="none" stroke="#e3bd6f" stroke-width="2.8" marker-end="url(#arrow)"/>
+<g transform="translate(927 205)">
+ <rect width="214" height="100" rx="16" fill="#332d23" stroke="#c99a45" stroke-width="2"/>
+ <text x="107" y="34" text-anchor="middle" class="sans label">Map-to-map audit</text>
+ <text x="107" y="62" text-anchor="middle" class="sans" fill="#f4cc73" font-size="15" font-weight="700">align · compare · report</text>
+ <text x="107" y="83" text-anchor="middle" class="sans tiny">verify encoding / scale first</text>
+</g>
+<!-- warning -->
+<rect x="55" y="445" width="1086" height="79" rx="15" fill="#321f2a" stroke="#8f4451" stroke-width="1.5"/>
+<text x="82" y="479" class="sans red" font-size="18" font-weight="800">DON’T:</text>
+<text x="166" y="479" class="sans" fill="#f1dfe1" font-size="17">pixel-compare raw RGB from images/ against the author’s DIRE map in dire/.</text>
+<text x="82" y="507" class="sans small">A PNG extension or a quick peek does not prove the map’s numeric encoding or scale.</text>
+<text x="1125" y="565" text-anchor="end" class="sans tiny">SCHEMATIC · thumbnails are abstract placeholders, not dataset images</text>
+</svg>

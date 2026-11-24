@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Table 4, Table 5 and Figure 4 experimental grid</title>
+<desc id="desc">Three experiment families share one immutable subset identity while each varies a different factor.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#89a9ba"/></marker>
+  <style>.sans{font-family:Inter,Arial,sans-serif}.title{fill:#fff;font-size:30px;font-weight:700}.label{fill:#e0edf0;font-size:21px;font-weight:700}.small{fill:#a6bbc7;font-size:15px}.tiny{fill:#8ea5b2;font-size:13px}.mint{fill:#81d1c2}.amber{fill:#f2c66d}.blue{fill:#87b9ea}</style>
+</defs>
+<rect width="1200" height="600" rx="28" fill="url(#bg)"/>
+<text x="56" y="57" class="sans mint" font-size="16" font-weight="700" letter-spacing="1.5">SHARED SAMPLE IDENTITY · THREE RUNNERS</text>
+<text x="56" y="101" class="sans title">One subset, three complementary questions</text>
+<!-- identity spine -->
+<rect x="446" y="127" width="308" height="58" rx="15" fill="#173c48" stroke="#58b6a7" stroke-width="2"/>
+<text x="600" y="163" text-anchor="middle" class="sans" fill="#e4f8f2" font-size="18" font-weight="800">subset_id · seed · manifest snapshot</text>
+<path d="M600 185 V208 M194 208 H1006 M194 208 V229 M600 208 V229 M1006 208 V229" fill="none" stroke="#89a9ba" stroke-width="2.5"/>
+<path d="M194 209 V226 M600 209 V226 M1006 209 V226" stroke="#89a9ba" stroke-width="2.5" marker-end="url(#arrow)"/>
+<!-- cards -->
+<g transform="translate(56 247)">
+ <rect width="350" height="240" rx="19" fill="#152d43" stroke="#456a83" stroke-width="2"/>
+ <rect x="20" y="18" width="94" height="31" rx="9" fill="#234b67"/>
+ <text x="67" y="39" text-anchor="middle" class="sans blue" font-size="15" font-weight="800">TABLE 4</text>
+ <text x="24" y="86" class="sans label">DDIM step count</text>
+ <text x="24" y="118" class="sans small">Train a separate detector for each S</text>
+ <g class="sans" font-size="18" font-weight="800" text-anchor="middle">
+  <rect x="23" y="147" width="64" height="47" rx="10" fill="#203c55"/><text x="55" y="177" fill="#cce2ed">5</text>
+  <rect x="101" y="147" width="64" height="47" rx="10" fill="#203c55"/><text x="133" y="177" fill="#cce2ed">10</text>
+  <rect x="179" y="147" width="64" height="47" rx="10" fill="#203c55"/><text x="211" y="177" fill="#cce2ed">20</text>
+  <rect x="257" y="147" width="64" height="47" rx="10" fill="#203c55"/><text x="289" y="177" fill="#cce2ed">50</text>
+ </g>
+ <text x="24" y="221" class="sans tiny">Each S has its own DIRE inputs / model stage</text>
+</g>
+<g transform="translate(425 247)">
+ <rect width="350" height="240" rx="19" fill="#15363d" stroke="#4a978e" stroke-width="2"/>
+ <rect x="20" y="18" width="94" height="31" rx="9" fill="#1d5555"/>
+ <text x="67" y="39" text-anchor="middle" class="sans mint" font-size="15" font-weight="800">TABLE 5</text>
+ <text x="24" y="86" class="sans label">Input representation</text>
+ <text x="24" y="118" class="sans small">Same triplets, S=20 · separate models</text>
+ <g class="sans" font-size="15" font-weight="800" text-anchor="middle">
+  <rect x="19" y="147" width="72" height="47" rx="10" fill="#205556"/><text x="55" y="176" fill="#ddf6ef">REC</text>
+  <rect x="101" y="147" width="72" height="47" rx="10" fill="#205556"/><text x="137" y="176" fill="#ddf6ef">RGB</text>
+  <rect x="183" y="147" width="72" height="47" rx="10" fill="#205556"/><text x="219" y="176" fill="#ddf6ef">RGB+D</text>
+  <rect x="265" y="147" width="68" height="47" rx="10" fill="#205556"/><text x="299" y="176" fill="#ddf6ef">DIRE</text>
+ </g>
+ <text x="24" y="221" class="sans tiny">REC · RGB · RGB_DIRE · DIRE</text>
+</g>
+<g transform="translate(794 247)">
+ <rect width="350" height="240" rx="19" fill="#392f24" stroke="#c29449" stroke-width="2"/>
+ <rect x="20" y="18" width="103" height="31" rx="9" fill="#695022"/>
+ <text x="71" y="39" text-anchor="middle" class="sans amber" font-size="15" font-weight="800">FIGURE 4</text>
+ <text x="24" y="86" class="sans label">Robustness conditions</text>
+ <text x="24" y="118" class="sans small">Apply corruption to test source image</text>
+ <g class="sans" font-size="13" font-weight="800" text-anchor="middle">
+  <rect x="18" y="147" width="77" height="47" rx="9" fill="#624923"/><text x="56" y="176" fill="#fff0cb">Clean</text>
+  <rect x="103" y="147" width="77" height="47" rx="9" fill="#624923"/><text x="141" y="176" fill="#fff0cb">Blur ×3</text>
+  <rect x="188" y="147" width="67" height="47" rx="9" fill="#624923"/><text x="221" y="176" fill="#fff0cb">JPEG ×2</text>
+  <rect x="263" y="147" width="70" height="47" rx="9" fill="#624923"/><text x="298" y="176" fill="#fff0cb">5 gens</text>
+ </g>
+ <text x="24" y="221" class="sans tiny">Project RGB-vs-DIRE models, not paper baselines</text>
+</g>
+<text x="600" y="540" text-anchor="middle" class="sans" fill="#d8e6eb" font-size="16" font-weight="700">Outputs: per-stage models + ledgers + sample IDs · no current measurements shown</text>
+<text x="1120" y="572" text-anchor="end" class="sans tiny">PROTOCOL OVERVIEW · schematic only</text>
+</svg>

@@ -1,0 +1,7 @@
+Item,State,Safe wording for slides
+Subset manifest workflow,Implemented,Code is available; snapshot must still be created on Volume
+Table 4 subset metrics,Not run,No project result to plot
+Table 5 subset metrics,Not run,No project result to plot
+Figure 4 subset metrics,Not run,No project result to plot
+Figure 4 paper baselines,Not implemented,Do not claim exact Figure 4 reproduction
+Author-map numeric encoding,Must verify,Do not infer PNG scale from extension or peek

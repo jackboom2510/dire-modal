@@ -1,0 +1,5 @@
+Detector trained by author,Mean ACC %,Mean AP %
+ADM,99.9,100.0
+PNDM,98.7,100.0
+iDDPM,98.6,100.0
+StyleGAN,97.9,100.0

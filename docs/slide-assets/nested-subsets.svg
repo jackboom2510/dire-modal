@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600" role="img" aria-labelledby="title desc">
+<title id="title">Nested, manifest-only experiment subsets</title>
+<desc id="desc">A shared immutable source image volume is referenced by nested 200 and 400 samples per cell, with a separate pilot namespace and cached per-image DIRE features.</desc>
+<defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1728"/><stop offset="1" stop-color="#14283c"/></linearGradient>
+  <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 Z" fill="#8faabd"/></marker>
+  <style>.sans{font-family:Inter,Arial,sans-serif}.title{fill:#fff;font-size:30px;font-weight:700}.label{fill:#d9e7ec;font-size:20px;font-weight:700}.small{fill:#a6bbc7;font-size:15px}.tiny{fill:#8ea5b2;font-size:13px}.mint{fill:#81d1c2}.amber{fill:#f2c66d}</style>
+</defs>
+<rect width="1200" height="600" rx="28" fill="url(#bg)"/>
+<text x="56" y="57" class="sans mint" font-size="16" font-weight="700" letter-spacing="1.5">INCREMENTAL EXPERIMENT DESIGN</text>
+<text x="56" y="101" class="sans title">Grow the sample — keep identity, reuse prior work</text>
+<!-- volume -->
+<g transform="translate(65 178)">
+ <rect width="235" height="210" rx="18" fill="#122c3f" stroke="#42647a" stroke-width="2"/>
+ <path d="M27 53 H207 M27 82 H207 M27 111 H207 M27 140 H207" stroke="#33546a" stroke-width="10" stroke-linecap="round"/>
+ <circle cx="194" cy="53" r="4" fill="#81d1c2"/><circle cx="194" cy="82" r="4" fill="#81d1c2"/><circle cx="194" cy="111" r="4" fill="#81d1c2"/><circle cx="194" cy="140" r="4" fill="#81d1c2"/>
+ <text x="117" y="178" text-anchor="middle" class="sans label">Source Volume</text>
+ <text x="117" y="201" text-anchor="middle" class="sans tiny">original images stay in place</text>
+</g>
+<!-- arrows -->
+<path d="M310 250 H369" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M310 317 H369" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- nested groups -->
+<g transform="translate(390 166)">
+ <rect width="344" height="126" rx="17" fill="#143c48" stroke="#5bb9aa" stroke-width="2"/>
+ <text x="24" y="37" class="sans mint" font-size="16" font-weight="800">STAGE A · SNAPSHOT</text>
+ <text x="24" y="72" class="sans label">200 images / cell</text>
+ <text x="24" y="101" class="sans small">10 required cells → up to 2,000 rows</text>
+ <rect x="251" y="47" width="66" height="48" rx="10" fill="#1d5c62"/>
+ <text x="284" y="78" text-anchor="middle" class="sans" fill="#dff8ef" font-size="20" font-weight="800">200</text>
+</g>
+<g transform="translate(390 309)">
+ <rect width="344" height="126" rx="17" fill="#3a3223" stroke="#c89c4d" stroke-width="2"/>
+ <text x="24" y="37" class="sans amber" font-size="16" font-weight="800">STAGE B · NESTED EXPANSION</text>
+ <text x="24" y="72" class="sans label">400 images / cell</text>
+ <text x="24" y="101" class="sans small">contains all Stage A IDs → up to 4,000</text>
+ <rect x="251" y="47" width="66" height="48" rx="10" fill="#73551f"/>
+ <text x="284" y="78" text-anchor="middle" class="sans" fill="#fff1c8" font-size="20" font-weight="800">400</text>
+</g>
+<path d="M413 291 V309" stroke="#e9bd65" stroke-width="3" marker-end="url(#arrow)"/>
+<!-- manifest/cache -->
+<path d="M744 230 H801" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<path d="M744 372 H801" stroke="#8faabd" stroke-width="3" marker-end="url(#arrow)"/>
+<g transform="translate(823 178)">
+ <rect width="313" height="112" rx="17" fill="#172d43" stroke="#527187" stroke-width="2"/>
+ <text x="22" y="37" class="sans label">Immutable manifest</text>
+ <text x="22" y="66" class="sans small">seed · algorithm · cell · sample_id</text>
+ <text x="22" y="91" class="sans tiny">relative IDs point back to original files</text>
+</g>
+<g transform="translate(823 321)">
+ <rect width="313" height="112" rx="17" fill="#172d43" stroke="#527187" stroke-width="2"/>
+ <text x="22" y="37" class="sans label">Per-image feature cache</text>
+ <text x="22" y="66" class="sans small">reuse existing DIRE inputs</text>
+ <text x="22" y="91" class="sans tiny">compute only newly selected rows</text>
+</g>
+<rect x="65" y="473" width="1071" height="61" rx="14" fill="#102234" stroke="#28465c"/>
+<text x="88" y="511" class="sans" fill="#d8e6eb" font-size="17" font-weight="700">Same subset_id + seed + algorithm</text>
+<text x="404" y="511" class="sans small">→ nested IDs</text>
+<text x="545" y="511" class="sans" fill="#d8e6eb" font-size="17" font-weight="700">Separate model / ledger per stage</text>
+<text x="1118" y="570" text-anchor="end" class="sans tiny">Pilot stages are not full-data paper results · schematic, not a result chart</text>
+</svg>

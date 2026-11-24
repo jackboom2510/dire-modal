@@ -1,0 +1,4 @@
+Experiment,Varied factor,Protocol encoded in repo,Output / status
+Table 4,"DDIM S=5, 10, 20, 50","ADM train; test per generator: adm, ddpm, iddpm, pndm, sdv2",One model/cache per S; no subset result reported here
+Table 5,"Representation: REC, RGB, RGB_DIRE, DIRE",S=20; separate representation models; same selected samples,REC needs reconstruction; no subset metrics supplied
+Figure 4,Clean; Gaussian blur σ=1; Gaussian blur σ=2; Gaussian blur σ=3; JPEG quality=65; JPEG quality=30,AP by test generator; DIRE recomputed after each corruption,Project RGB vs DIRE; paper baselines not reproduced
