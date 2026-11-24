@@ -359,6 +359,22 @@ generator có train/val. Train riêng từng detector với `real` và đúng ge
 Các generator chỉ có test không được train; không dùng `split-mode hash` để giả
 lập split paper.
 
+Với map đã sinh trong namespace rebuild, truyền cùng `--run-id` để train đọc
+đúng `/zero/rebuild/maps/<id>` và ghi checkpoint/ledger riêng dưới
+`/zero/runs/rebuild/<id>/` (không đụng `/zero/maps` hoặc kết quả train cũ):
+
+```bash
+modal run -m dire_zero.modal_app::train --run-id rebuild-2026-10-14 --generator stylegan --epochs 40
+modal run -m dire_zero.modal_app::evaluate --run-id rebuild-2026-10-14 --generator stylegan --split test
+modal run -m dire_zero.modal_app::report --run-id rebuild-2026-10-14
+```
+
+Trong inventory hiện tại, chỉ `stylegan` có train/val fake maps; `ddpm` và
+`midjourney` là test-only holdout. Không train chúng. Lệnh `::evaluate` hiện chấm
+real + generator đã train; nó **chưa** sinh ma trận đầy đủ StyleGAN-detector ×
+(DDPM, Midjourney, StyleGAN). Cần evaluator ma trận riêng trước khi tuyên bố
+cross-generator Table 2 hoàn chỉnh.
+
 **Kết quả mong đợi:** một checkpoint + history + `train.json` cho từng hàng
 train, gồm best epoch, val AP, threshold từ val, số mẫu và hash map. Không test
 trong lúc chọn epoch/hyperparameter.
