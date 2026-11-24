@@ -28,6 +28,9 @@ def test_render_table4_and_table5_only_from_complete_ledgers():
     assert len(out["table5"]) == 20
     assert out["table4"][0]["acc_percent"] == "90.0"
     assert out["table5"][-1]["ap_percent"] == "95.0"
+    noted = mod.build_tables({"by_steps": {str(s): _result() for s in mod.STEPS},
+                              "test_generator_scope_note": "Uses sdv2, not sdv1."}, None)
+    assert noted["protocol_notes"] == ["Uses sdv2, not sdv1."]
 
 
 def test_incomplete_results_are_rejected_by_default_but_explicitly_marked():

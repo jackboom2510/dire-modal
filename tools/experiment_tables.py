@@ -14,7 +14,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 STEPS = (5, 10, 20, 50)
-GENERATORS = ("adm", "ddpm", "iddpm", "pndm", "sdv1")
+GENERATORS = ("adm", "ddpm", "iddpm", "pndm", "sdv2")
 REPRESENTATIONS = ("REC", "RGB", "RGB_DIRE", "DIRE")
 
 
@@ -43,6 +43,11 @@ def _metric_values(cell: dict | None) -> tuple[str, str, str, str]:
 
 def build_tables(table4: dict | None, table5: dict | None, *, allow_partial: bool = False) -> dict:
     missing = []
+    protocol_notes = []
+    for ledger in (table4, table5):
+        note = (ledger or {}).get("test_generator_scope_note")
+        if note and note not in protocol_notes:
+            protocol_notes.append(str(note))
     t4_rows = []
     if table4 is not None:
         by_steps = table4.get("by_steps") or {}
@@ -76,7 +81,7 @@ def build_tables(table4: dict | None, table5: dict | None, *, allow_partial: boo
                                 "n_real": vals[2], "n_fake": vals[3]})
     if missing and not allow_partial:
         raise ValueError("chưa đủ cell để hoàn thiện bảng:\n  " + "\n  ".join(dict.fromkeys(missing)))
-    return {"table4": t4_rows, "table5": t5_rows,
+    return {"table4": t4_rows, "table5": t5_rows, "protocol_notes": protocol_notes,
             "missing": list(dict.fromkeys(missing)), "complete": not missing}
 
 
@@ -96,6 +101,8 @@ def write_tables(result: dict, out: str | Path, sources: dict[str, str]) -> Path
     dest.mkdir(parents=True, exist_ok=True)
     pieces = ["# Results from DIRE ablation ledgers", "",
               "ACC/AP are percentages. `—` marks missing cells; paper values are not inserted.", ""]
+    for note in result.get("protocol_notes", []):
+        pieces.extend([f"**Protocol note:** {note}", ""])
     if result["table4"]:
         pieces.append(_markdown("Table 4 — DDIM steps", result["table4"], "S"))
         pieces.append("")

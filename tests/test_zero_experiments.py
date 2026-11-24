@@ -3,7 +3,7 @@ import pytest
 torch = pytest.importorskip("torch")
 
 from dire_zero.experiments import (
-    PAPER_TEST_GENERATORS,
+    EXPERIMENT_TEST_GENERATORS,
     ROBUSTNESS_LEVELS,
     TABLE4_STEPS,
     TABLE5_REPRESENTATIONS,
@@ -20,7 +20,7 @@ def test_paper_experiment_grids_are_complete_and_explicit():
     assert TABLE5_REPRESENTATIONS == ("REC", "RGB", "RGB_DIRE", "DIRE")
     assert [x["value"] for x in ROBUSTNESS_LEVELS[1:4]] == [1.0, 2.0, 3.0]
     assert [x["value"] for x in ROBUSTNESS_LEVELS[4:]] == [65, 30]
-    assert PAPER_TEST_GENERATORS == ("adm", "ddpm", "iddpm", "pndm", "sdv1")
+    assert EXPERIMENT_TEST_GENERATORS == ("adm", "ddpm", "iddpm", "pndm", "sdv2")
 
 
 def test_table4_requires_all_paper_steps_without_duplicates():
