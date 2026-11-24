@@ -2258,11 +2258,11 @@ def _paper_matrix_rows() -> list[dict]:
     map generation; only real+ADM are used there, while test retains the full
     requested generator matrix.
     """
-    from .experiments import PAPER_TEST_GENERATORS  # noqa: PLC0415
+    from .experiments import EXPERIMENT_TEST_GENERATORS  # noqa: PLC0415
 
     candidates = _paper_image_rows(("train", "val", "test"),
-                                   ("real", "adm", *PAPER_TEST_GENERATORS))
-    test_generators = {"real", *PAPER_TEST_GENERATORS}
+                                   ("real", "adm", *EXPERIMENT_TEST_GENERATORS))
+    test_generators = {"real", *EXPERIMENT_TEST_GENERATORS}
     return [row for row in candidates
             if (row["split"] == "test" and row["generator"] in test_generators)
             or (row["split"] in ("train", "val") and row["generator"] in ("real", "adm"))]
@@ -2604,7 +2604,8 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
     overwritten; incomplete or mismatched source caches fail before training.
     """
     import json  # noqa: PLC0415
-    from .experiments import PAPER_TEST_GENERATORS, TABLE4_STEPS, validate_run_id  # noqa: PLC0415
+    from .experiments import (EXPERIMENT_TEST_GENERATORS, TABLE4_STEPS,
+                              TEST_GENERATOR_SCOPE_NOTE, validate_run_id)  # noqa: PLC0415
 
     validate_run_id(run_id)
     if int(steps) not in TABLE4_STEPS:
@@ -2613,7 +2614,7 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
     cell_root = f"{root}/S{int(steps)}"
     rows = _paper_matrix_rows()
     required = {"train": ("real", "adm"), "val": ("real", "adm"),
-                "test": ("real", *PAPER_TEST_GENERATORS)}
+                "test": ("real", *EXPERIMENT_TEST_GENERATORS)}
     _require_paper_cells(rows, required)
     imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
     adm_sha = _sha256(CKPT)
@@ -2626,7 +2627,8 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
     cfg = {"steps": int(steps), "adm_ckpt_sha256": adm_sha,
            "imagenet_weights_sha256": imagenet_sha,
            "manifest_sha256": _sha256(MANIFEST), "train_generators": ["adm"],
-           "test_generators": list(PAPER_TEST_GENERATORS), "epochs": epochs,
+           "test_generators": list(EXPERIMENT_TEST_GENERATORS),
+           "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE, "epochs": epochs,
            "batch": bs, "lr": lr, "crop": crop, "seed": seed, "init": "ImageNet",
            "input_source": (f"rebuild_maps:{source_map_run_id}" if source_map_run_id
                             else "materialized_experiment_inputs")}
@@ -2657,7 +2659,7 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
         details={"table": 4, "steps": int(steps), "nfe_per_image": 2 * int(steps)},
     )
     cells = _evaluate_experiment_matrix(model, data_rows, crop=crop,
-                                        target_generators=PAPER_TEST_GENERATORS, seed=seed)
+                                        target_generators=EXPERIMENT_TEST_GENERATORS, seed=seed)
     result = {"protocol": cfg, "steps": int(steps), "train": train_meta,
               "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
               "by_test_generator": cells,
@@ -2669,7 +2671,10 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
     if key in by_steps:
         raise FileExistsError(f"Table 4 S={key} đã có kết quả; không ghi đè")
     by_steps[key] = result
-    ledger = {"table": 4, "paper_steps": list(TABLE4_STEPS), "by_steps": by_steps,
+    ledger = {"table": 4, "paper_steps": list(TABLE4_STEPS),
+              "test_generators": list(EXPERIMENT_TEST_GENERATORS),
+              "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
+              "by_steps": by_steps,
               "missing_steps": [s for s in TABLE4_STEPS
                                 if str(s) not in by_steps or by_steps[str(s)].get("status") != "complete"]}
     with open(ledger_path, "w", encoding="utf-8") as fh:
@@ -2683,13 +2688,14 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
 def table5_prepare(run_id: str, crop: int = 224) -> dict:
     """Create isolated S=20 REC/RGB/RGB+DIRE/DIRE tensors from the same triplets."""
     import json  # noqa: PLC0415
-    from .experiments import PAPER_TEST_GENERATORS, TABLE5_REPRESENTATIONS, validate_run_id  # noqa: PLC0415
+    from .experiments import (EXPERIMENT_TEST_GENERATORS, TABLE5_REPRESENTATIONS,
+                              TEST_GENERATOR_SCOPE_NOTE, validate_run_id)  # noqa: PLC0415
 
     validate_run_id(run_id)
     root = _experiment_root(run_id, "table5")
     rows = _paper_matrix_rows()
     _require_paper_cells(rows, {"train": ("real", "adm"), "val": ("real", "adm"),
-                                "test": ("real", *PAPER_TEST_GENERATORS)})
+                                "test": ("real", *EXPERIMENT_TEST_GENERATORS)})
     imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
     adm_sha = _sha256(CKPT)
     if not imagenet_sha:
@@ -2702,6 +2708,8 @@ def table5_prepare(run_id: str, crop: int = 224) -> dict:
     )
     payload["table"] = 5
     payload["crop"] = crop
+    payload["test_generators"] = list(EXPERIMENT_TEST_GENERATORS)
+    payload["test_generator_scope_note"] = TEST_GENERATOR_SCOPE_NOTE
     with open(f"{root}/inputs.json", "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
         fh.write("\n")
@@ -2715,7 +2723,8 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
                  seed: int = 3407) -> dict:
     """Train one Table 5 representation on ADM and score all five paper columns."""
     import json  # noqa: PLC0415
-    from .experiments import PAPER_TEST_GENERATORS, TABLE5_REPRESENTATIONS, image_variant_metadata  # noqa: PLC0415
+    from .experiments import (EXPERIMENT_TEST_GENERATORS, TABLE5_REPRESENTATIONS,
+                              TEST_GENERATOR_SCOPE_NOTE, image_variant_metadata)  # noqa: PLC0415
     from .pipeline import collect_maps  # noqa: PLC0415
 
     rep = image_variant_metadata(representation)["name"]
@@ -2734,8 +2743,10 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
         details={"table": 5, "representation": rep},
     )
     cells = _evaluate_experiment_matrix(model, rows, crop=crop,
-                                        target_generators=PAPER_TEST_GENERATORS, seed=seed)
+                                        target_generators=EXPERIMENT_TEST_GENERATORS, seed=seed)
     result = {"representation": rep, "input_contract": image_variant_metadata(rep),
+              "test_generators": list(EXPERIMENT_TEST_GENERATORS),
+              "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
               "train": train_meta, "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
               "by_test_generator": cells,
               "status": "complete" if all(c.get("status") == "ran" for c in cells.values()) else "incomplete"}
@@ -2746,6 +2757,8 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
         raise FileExistsError(f"Table 5 {rep} đã có kết quả; không ghi đè")
     by_rep[rep] = result
     ledger = {"table": 5, "paper_representations": list(TABLE5_REPRESENTATIONS),
+              "test_generators": list(EXPERIMENT_TEST_GENERATORS),
+              "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
               "by_representation": by_rep,
               "missing_representations": [x for x in TABLE5_REPRESENTATIONS
                                           if x not in by_rep or by_rep[x].get("status") != "complete"]}
@@ -2773,8 +2786,9 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
 
     from . import metrics as M  # noqa: PLC0415
     from .diffusion import Schedule, dire_map  # noqa: PLC0415
-    from .experiments import (PAPER_TEST_GENERATORS, ROBUSTNESS_LEVELS,
-                              corrupt_image, image_variant_metadata, robustness_metadata)
+    from .experiments import (EXPERIMENT_TEST_GENERATORS, ROBUSTNESS_LEVELS,
+                              TEST_GENERATOR_SCOPE_NOTE, corrupt_image,
+                              image_variant_metadata, robustness_metadata)
     from .pipeline import load_image
 
     if not 1 <= crop <= 256:
@@ -2784,8 +2798,8 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
     rgb_dir = f"{EXPERIMENTS}/table5/{run_id}/models/RGB"
     if not all(os.path.isfile(f"{d}/detector.pth") for d in (dire_dir, rgb_dir)):
         raise FileNotFoundError(f"cần chạy Table 5 RGB và DIRE trước: {rgb_dir}, {dire_dir}")
-    rows = _paper_image_rows(("test",), ("real", *PAPER_TEST_GENERATORS))
-    _require_paper_cells(rows, {"test": ("real", *PAPER_TEST_GENERATORS)})
+    rows = _paper_image_rows(("test",), ("real", *EXPERIMENT_TEST_GENERATORS))
+    _require_paper_cells(rows, {"test": ("real", *EXPERIMENT_TEST_GENERATORS)})
     manifest_sha = _sha256(MANIFEST)
     ckpt_sha = _sha256(CKPT)
     if not manifest_sha:
@@ -2795,6 +2809,8 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
     config = {**robustness_metadata(), "run_id": run_id, "steps": 20,
               "adm_ckpt_sha256": ckpt_sha, "manifest_sha256": manifest_sha,
               "detectors": ["RGB", "DIRE"], "crop": crop,
+              "test_generators": list(EXPERIMENT_TEST_GENERATORS),
+              "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
               "model_source": "clean-trained Table 5 models",
               "detector_sha256": {"RGB": _sha256(f"{rgb_dir}/detector.pth"),
                                   "DIRE": _sha256(f"{dire_dir}/detector.pth")}}
@@ -2805,9 +2821,9 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
     names = [str(c["name"]) for c in ROBUSTNESS_LEVELS]
     if condition_name != "all" and condition_name not in names:
         raise ValueError(f"condition phải thuộc {names} hoặc 'all'")
-    if generator_name != "all" and generator_name not in PAPER_TEST_GENERATORS:
-        raise ValueError(f"generator phải thuộc {PAPER_TEST_GENERATORS} hoặc 'all'")
-    selected_generators = list(PAPER_TEST_GENERATORS) if generator_name == "all" else [generator_name]
+    if generator_name != "all" and generator_name not in EXPERIMENT_TEST_GENERATORS:
+        raise ValueError(f"generator phải thuộc {EXPERIMENT_TEST_GENERATORS} hoặc 'all'")
+    selected_generators = list(EXPERIMENT_TEST_GENERATORS) if generator_name == "all" else [generator_name]
     selected = [c for c in ROBUSTNESS_LEVELS
                 if condition_name == "all" or c["name"] == condition_name]
     selected = [c for c in selected if any(
@@ -2876,7 +2892,7 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
     for name in names:
         by_model = {rep: {} for rep in ("RGB", "DIRE")}
         missing_gens = []
-        for generator in PAPER_TEST_GENERATORS:
+        for generator in EXPERIMENT_TEST_GENERATORS:
             path = f"{condition_root}/{name}/{generator}.json"
             if not os.path.isfile(path):
                 missing_gens.append(generator)

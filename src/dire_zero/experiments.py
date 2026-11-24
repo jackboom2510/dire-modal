@@ -22,7 +22,10 @@ ROBUSTNESS_LEVELS = (
     {"name": "jpeg_q65", "kind": "jpeg", "value": 65},
     {"name": "jpeg_q30", "kind": "jpeg", "value": 30},
 )
-PAPER_TEST_GENERATORS = ("adm", "ddpm", "iddpm", "pndm", "sdv1")
+EXPERIMENT_TEST_GENERATORS = ("adm", "ddpm", "iddpm", "pndm", "sdv2")
+TEST_GENERATOR_SCOPE_NOTE = (
+    "LSUN-Bedroom test data in this run uses sdv2; sdv1 is not present in that dataset tree."
+)
 
 
 def validate_steps(steps: tuple[int, ...] | list[int]) -> tuple[int, ...]:

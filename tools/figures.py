@@ -818,7 +818,7 @@ def f4_robustness(args) -> dict:
     if set(conditions) != expected:
         raise SystemExit(f"Figure 4 cần đủ điều kiện {sorted(expected)}; có {sorted(conditions)}")
     models = ("DIRE", "RGB")
-    generators = ("adm", "ddpm", "iddpm", "pndm", "sdv1")
+    generators = ("adm", "ddpm", "iddpm", "pndm", "sdv2")
     fig, ax = plt.subplots(figsize=(COL2, 2.8))
     names = list(conditions)
     x = list(range(len(names)))
@@ -861,6 +861,8 @@ def f4_robustness(args) -> dict:
         "warnings": [
             "paper Figure 4 uses CNNDetection* and PatchForensics* baselines; this run plots project ResNet-50 RGB vs DIRE and is not an exact reproduction of those baselines",
             "paper text leaves unclear whether DIRE is recomputed after perturbation; this run follows the explicit recompute policy in its input ledger",
+            str((payload.get("protocol") or {}).get("test_generator_scope_note") or
+                "test generator scope is not recorded in the source ledger"),
         ],
     })
 

@@ -5,10 +5,12 @@
 
 ## Protocol được mã hóa
 
-- **Table 4:** `S = 5, 10, 20, 50`; mỗi S được tính map riêng và train detector mới trên ADM. Chấm riêng các cột `adm, ddpm, iddpm, pndm, sdv1`, với ngưỡng cố định `0.5` khi lập bảng ACC/AP.
+- **Table 4:** `S = 5, 10, 20, 50`; mỗi S được tính map riêng và train detector mới trên ADM. Chấm các cột `adm, ddpm, iddpm, pndm, sdv2`, với ngưỡng cố định `0.5` khi lập bảng ACC/AP. Generator tại LSUN-Bedroom test là `sdv2`, không phải `sdv1`.
 - **Table 5:** train riêng trên ADM cho `REC`, `RGB`, `RGB_DIRE`, `DIRE`, tất cả dùng cùng nguồn ảnh/split và `S=20`. RGB/REC ở `[0,1]`; DIRE giữ thang `[0,2]`; `RGB_DIRE` nối kênh theo thứ tự RGB rồi DIRE (6 kênh).
 - **Figure 4:** clean, Gaussian blur σ=`1,2,3`, JPEG quality=`65,30`. Mỗi condition bắt đầu từ ảnh nguồn sạch; DIRE được tính lại từ ảnh đã biến đổi. Report AP theo generator, không gộp các cột thành một điểm.
 - Detector khởi tạo ImageNet ResNet-50, mặc định 400 epochs, batch 32, learning rate `1e-4`, crop 224. Checkpoint ImageNet phải do người vận hành cung cấp và được hash vào protocol.
+
+**Chốt generator theo dữ liệu hiện có:** cột là `sdv2` từ `images/test/lsun_bedroom/sdv2.tar.gz`; không phải `sdv1` từ ImageNet hoặc archive DIRE đã xuất bản. Ledger và hình sẽ ghi `sdv2` rõ ràng. Nếu bảng tham chiếu bên ngoài yêu cầu SDv1, không diễn giải kết quả SDv2 thành kết quả SDv1.
 
 ## Preconditions — kiểm trước khi tốn GPU
 
@@ -45,7 +47,7 @@ Có thể truyền `--source-map-run-id` để Table 4 S=20 đọc DIRE map tr�
 modal run -m dire_zero.modal_app::table4 --run-id table4-<id> --steps 20 --source-map-run-id rebuild-2026-10-14
 ```
 
-Trước khi huấn luyện, runner khóa checkpoint ADM, manifest, `steps_mixed`, `_run_config.json` và đường dẫn nguồn trong `dire.json`. Nếu map nguồn chưa đủ mọi ảnh trong protocol hoặc provenance không khớp, runner dừng — không tự tính lại DIRE và không train trên tập con. **Inventory trước đó mới xác nhận mốc 1.000 ảnh mỗi ô** (ví dụ train/real và train/adm có 40.000 ảnh nhưng 1.000 map), nên chưa đủ cho full-dataset. Test hiện cũng thiếu `sdv1`; `sdv2` không thay thế được `sdv1`.
+Trước khi huấn luyện, runner khóa checkpoint ADM, manifest, `steps_mixed`, `_run_config.json` và đường dẫn nguồn trong `dire.json`. Nếu map nguồn chưa đủ mọi ảnh trong protocol hoặc provenance không khớp, runner dừng — không tự tính lại DIRE và không train trên tập con. **Inventory trước đó mới xác nhận mốc 1.000 ảnh mỗi ô** (ví dụ train/real và train/adm có 40.000 ảnh nhưng 1.000 map), nên cache hiện vẫn chưa đủ full-dataset. Trong protocol của run này, cột test là `sdv2` theo archive LSUN-Bedroom hiện có; không yêu cầu `sdv1` và không gán kết quả `sdv2` thành SDv1.
 
 Khi đủ, tải ledger và dựng CSV/Markdown:
 
@@ -82,7 +84,7 @@ Chạy mỗi condition × generator như shard độc lập để timeout không
 
 ```bash
 for c in clean blur_sigma1 blur_sigma2 blur_sigma3 jpeg_q65 jpeg_q30; do
-  for g in adm ddpm iddpm pndm sdv1; do
+  for g in adm ddpm iddpm pndm sdv2; do
     modal run -m dire_zero.modal_app::figure4_robustness --run-id table5-<id> --condition-name "$c" --generator-name "$g"
   done
 done

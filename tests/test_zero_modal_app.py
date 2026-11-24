@@ -58,7 +58,7 @@ def _write_map_cache_fixture(tmp_path: Path, monkeypatch):
 
 
 def test_paper_matrix_rows_uses_only_adm_for_train_and_val(monkeypatch):
-    generators = ("real", "adm", "iddpm", "pndm", "stylegan", "ddpm", "sdv1")
+    generators = ("real", "adm", "iddpm", "pndm", "stylegan", "ddpm", "sdv2")
     rows = [{"split": split, "generator": gen, "path": f"/{split}/{gen}/x.png"}
             for split in ("train", "val", "test") for gen in generators]
     monkeypatch.setattr(modal_app, "_paper_image_rows", lambda _splits, _generators: rows)
@@ -69,7 +69,7 @@ def test_paper_matrix_rows_uses_only_adm_for_train_and_val(monkeypatch):
         (split, gen) for split in ("train", "val") for gen in ("real", "adm")
     }
     assert {(r["split"], r["generator"]) for r in selected if r["split"] == "test"} == {
-        ("test", gen) for gen in ("real", "adm", "ddpm", "iddpm", "pndm", "sdv1")
+        ("test", gen) for gen in ("real", "adm", "ddpm", "iddpm", "pndm", "sdv2")
     }
 
 

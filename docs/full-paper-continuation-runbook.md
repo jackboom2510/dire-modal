@@ -438,9 +438,9 @@ chọn threshold/model.
 
 Đã thêm runner tách riêng cho các protocol được yêu cầu:
 
-- `::table4 --steps {5,10,20,50}`: mỗi S có input namespace riêng, map được tính lại, detector ImageNet khởi tạo riêng, năm generator test và ledger `missing_steps`.
-- `::table5_prepare` + `::table5_train`: REC, RGB, RGB_DIRE và DIRE từ cùng triplet/split tại S=20; train/eval từng representation riêng.
-- `::figure4_robustness`: clean, Gaussian blur σ=1,2,3 và JPEG q=65,30; lưu scores/labels/sample IDs/AP theo từng generator. `tools/figures.py f4-robustness` dựng hình từ ledger.
+- `::table4 --steps {5,10,20,50}`: mỗi S có input namespace riêng, map được tính lại hoặc tái sử dụng cache S=20 đã xác thực, detector ImageNet khởi tạo riêng, năm generator test và ledger `missing_steps`. Tập LSUN-Bedroom hiện dùng cột `sdv2` (không phải `sdv1`).
+- `::table5_prepare` + `::table5_train`: REC, RGB, RGB_DIRE và DIRE từ cùng triplet/split tại S=20; train/eval từng representation riêng, với `sdv2` là generator test cuối theo dữ liệu hiện có.
+- `::figure4_robustness`: clean, Gaussian blur σ=1,2,3 và JPEG q=65,30; lưu scores/labels/sample IDs/AP theo từng generator, gồm `sdv2`. `tools/figures.py f4-robustness` dựng hình từ ledger.
 
 Lệnh chạy, yêu cầu checkpoint và vị trí artefact ở `docs/table4-table5-figure4-runbook.md`. Các runner không được thực thi trong lần cập nhật code này; cho tới khi chạy đủ và kiểm ledger, trạng thái vẫn là `not run`.
 
