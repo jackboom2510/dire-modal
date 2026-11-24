@@ -1247,7 +1247,8 @@ def test_evaluate_writes_scores_in_the_format_make_gallery_reads(tmp_path, monke
 
     monkeypatch.setattr(modal_app, "OUT", str(out))
     monkeypatch.setattr(modal_app, "MAPS", str(maps))
-    monkeypatch.setattr(modal_app, "vol", _VolDem())
+    fake_volume = _VolDem()
+    monkeypatch.setattr(modal_app, "vol", fake_volume)
     monkeypatch.setattr("dire_zero.pipeline._score",
                         lambda model, paths, labels, crop, device, bs=32: ([2.0, 2.0, 2.0] + [-2.0] * 3, labels))
     monkeypatch.setattr("dire_zero.detector.ResNetDetector", lambda *a, **k: _FakeDet())
@@ -1272,6 +1273,7 @@ def test_evaluate_writes_scores_in_the_format_make_gallery_reads(tmp_path, monke
     ev = json.loads((out / "eval" / "gen-adm" / "eval.json").read_text(encoding="utf-8"))
     assert ev["metrics"]["acc"] == 1.0 and ev["metrics"]["n"] == 6
     assert ev["split"] == "test"
+    assert fake_volume.commits == 1
 
 
 def test_evaluate_marks_gate_failed_when_the_threshold_is_not_from_val(tmp_path, monkeypatch):

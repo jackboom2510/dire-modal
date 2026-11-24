@@ -1924,7 +1924,7 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
             continue
 
         model = ResNetDetector(resnet50()).to("cuda")
-        model.load_state_dict(torch.load(ckpt, map_location="cuda"))
+        model.load_state_dict(torch.load(ckpt, map_location="cuda", weights_only=True))
         detector_sha = _sha256(ckpt)
         logits, labels = _score(model, [m["path"] for m in rows], [m["label"] for m in rows],
                                 crop, "cuda")
@@ -1985,8 +1985,8 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
         print(f"[{tag}] {split}: acc {ev['acc']:.3f} "
               f"[{ev['acc_ci95'][0]:.3f}, {ev['acc_ci95'][1]:.3f}] · "
               f"AP {ev['ap']:.3f} · n {ev['n']} · gate {gate}", flush=True)
-    vol.commit()
     _write_eval_ledger(results, run_root=run_root)
+    vol.commit()
     return {"evaluated": sorted(results), "split": split, "by_tag": results,
             "run_id": run_id or None, "maps_root": maps_root}
 
