@@ -74,6 +74,14 @@ def _maps_root_for_run(run_id: str = "") -> str:
     return f"{REBUILD_MAPS_ROOT}/{run_id}"
 
 
+def _run_root_for_id(run_id: str = "") -> str:
+    """Tách output train/eval/report theo cùng ID, không ghi đè runs mặc định."""
+    if not run_id:
+        return OUT
+    _maps_root_for_run(run_id)  # share the same validation and namespace identity
+    return f"{OUT}/rebuild/{run_id}"
+
+
 def _lock_rebuild_namespace(maps_root: str, steps: int, ckpt_sha256: str | None,
                             splits: Sequence[str]) -> None:
     """Persist and enforce the protocol identity before writing any fresh maps."""
@@ -1588,7 +1596,8 @@ def _cell_generators(data_root: str) -> list[str]:
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
-          seed: int = 3407, generator: str = "auto", split_mode: str = "author") -> dict:
+          seed: int = 3407, generator: str = "auto", split_mode: str = "author",
+          run_id: str = "") -> dict:
     """R2 — train detector trên map **của mình**.
 
     ``generator``:
@@ -1599,8 +1608,13 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     * ``auto`` ⇒ gộp tất cả vào một bài toán `real vs bất kỳ fake` — **không** so
       được với Table 2, và `note_scope` trong `train.json` sẽ nói đúng như vậy.
 
-    Mỗi generator ghi vào **thư mục riêng** (`runs/train/<generator>/`), nên chạy
-    lần lượt 15 dòng của Table 2 không ghi đè nhau. Bản trước ghi tất cả vào
+    `--run-id` đọc map từ `/zero/rebuild/maps/<run_id>` và tách checkpoint/ledger
+    sang `/zero/runs/rebuild/<run_id>/`; không chép hay ghi đè `/zero/maps` hoặc
+    output train mặc định. Không ghi đè detector đã có trong cùng namespace.
+
+    Mỗi generator ghi vào **thư mục riêng** (`runs/train/<generator>/`, hoặc dưới
+    namespace rebuild nếu có `--run-id`), nên chạy lần lượt 15 dòng của Table 2
+    không ghi đè nhau. Bản trước ghi tất cả vào
     `runs/train.json` + `runs/detector.pth`: dòng thứ 15 là dòng duy nhất còn lại,
     và `::report` đọc đúng một dòng mà không nói rằng 14 dòng kia đã mất.
 
@@ -1612,9 +1626,12 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     from .detector import ResNetDetector, resnet50
     from .pipeline import SplitError, collect_maps, train as train_fn
 
-    maps = collect_maps(MAPS)
+    maps_root = _maps_root_for_run(run_id)
+    run_root = _run_root_for_id(run_id)
+    train_root = f"{run_root}/train"
+    maps = collect_maps(maps_root)
     if not maps:
-        raise FileNotFoundError(f"không có .npy trong {MAPS} — chạy `dire` trước")
+        raise FileNotFoundError(f"không có .npy trong {maps_root} — chạy `dire` trước")
 
     # `fake/` là thư mục map cũ (chưa relabel), không phải một generator. Train nó
     # cho ra một dòng `gen-fake` trong bảng — một dòng trông như Table 2 nhưng nhãn
@@ -1622,12 +1639,12 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
     leftover = sorted({m["generator"] for m in maps if m["generator"] == "fake"})
     available = sorted({m["generator"] for m in maps if m["generator"] not in ("real", "fake")})
     if leftover:
-        print(f"[bỏ qua] {MAPS}/*/fake: {sum(1 for m in maps if m['generator'] == 'fake')} map "
+        print(f"[bỏ qua] {maps_root}/*/fake: {sum(1 for m in maps if m['generator'] == 'fake')} map "
               "chưa có nhãn generator — chạy `::relabel --apply` trước; "
               "`fake` không phải một dòng của Table 2", flush=True)
     if not available:
-        raise FileNotFoundError(f"chỉ có map `real` trong {MAPS} — chưa có ảnh giả nào")
-    targets = _train_targets(generator, available)
+        raise FileNotFoundError(f"chỉ có map `real` trong {maps_root} — chưa có ảnh giả nào")
+    targets = _train_targets(generator, available, maps_root=maps_root)
 
     deadline = time.time() + WORK_TIMEOUT_S * SAFE_TIME_FRACTION
     results: dict[str, dict] = {}
@@ -1650,12 +1667,26 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
                   "và nó phản ánh số mẫu chứ không phải chất lượng DIRE", flush=True)
 
         tag = _train_tag(gen)
+        tag_dir = f"{train_root}/{tag}"
+        if run_id:
+            has_json = os.path.exists(f"{tag_dir}/train.json")
+            has_weights = os.path.exists(f"{tag_dir}/detector.pth")
+            if has_json and has_weights:
+                note = f"{tag}: output đã tồn tại trong namespace {run_id}; giữ nguyên, không ghi đè"
+                print(f"[bỏ qua] {note}", flush=True)
+                skipped.append(note)
+                continue
+            if has_json or has_weights:
+                raise FileExistsError(
+                    f"output train dở dang ở {tag_dir}; không ghi đè. Kiểm tra thủ công "
+                    "hoặc chọn run_id train mới"
+                )
         print(f"\n=== train {tag}: {real_n} real + {fake_n} fake = {len(subset)} map ===", flush=True)
         try:
             payload = train_fn(
                 lambda: ResNetDetector(resnet50()),
                 subset,
-                f"{OUT}/train/{tag}",
+                f"{train_root}/{tag}",
                 label=_read_json(DATA_CARD).get("label") or "R1+R2",
                 epochs=epochs,
                 lr=lr,
@@ -1666,6 +1697,8 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
                 init="scratch",
                 split_mode=split_mode,
                 extra={
+                "run_id": run_id or None,
+                "maps_root": maps_root,
                 "generators_used": [gen] if gen else available,
                 "generator_filter": gen or "auto",
                 "n_real": real_n,
@@ -1693,12 +1726,12 @@ def train(epochs: int = 40, bs: int = 32, lr: float = 1e-4, crop: int = 224,
         print(f"[{tag}] {payload['test']['acc']:.3f} acc · AP {payload['test']['ap']:.3f} · "
               f"{payload['seconds']:.0f} s", flush=True)
 
-    ledger = _write_train_ledger(OUT, results, skipped)
+    ledger = _write_train_ledger(run_root, results, skipped)
     return {"trained": sorted(results), "skipped": skipped, "stopped": stopped,
             "ledger": ledger}
 
 
-def _train_targets(spec: str, available: Sequence[str]) -> list[str | None]:
+def _train_targets(spec: str, available: Sequence[str], maps_root: str = MAPS) -> list[str | None]:
     """``--generator`` → danh sách việc; ``None`` nghĩa là gộp mọi generator."""
     spec = (spec or "auto").strip()
     if spec == "auto":
@@ -1709,7 +1742,7 @@ def _train_targets(spec: str, available: Sequence[str]) -> list[str | None]:
     missing = [g for g in picked if g not in available]
     if missing:
         raise ValueError(
-            f"không có map của generator {missing} trong {MAPS}. Có: {available}. "
+            f"không có map của generator {missing} trong {maps_root}. Có: {available}. "
             f"Chạy `::dire --generator {','.join(missing)}` trước."
         )
     return picked
@@ -1806,7 +1839,7 @@ def _write_train_ledger(out_root: str, results: dict[str, dict],
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
 def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
-             limit: int = 0) -> dict:
+             limit: int = 0, run_id: str = "") -> dict:
     """Chấm detector **đã train** trên map của split chấm, và xuất `scores.json`.
 
     Đây là bước còn thiếu giữa `::train` và trang 2 của demo: `tools/make_gallery.py
@@ -1819,9 +1852,11 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
         modal run -m dire_zero.modal_app::evaluate                       # mọi detector đã train
         modal run -m dire_zero.modal_app::evaluate --generator adm       # một cái
         modal run -m dire_zero.modal_app::evaluate --split val           # chấm trên val
+        modal run -m dire_zero.modal_app::evaluate --run-id rebuild-2026-10-14 --generator stylegan
 
     Ghi ra ``runs/eval/<tag>/eval.json`` (metric + CI) và ``.../scores.json``
-    (điểm từng ảnh, đúng định dạng `make_gallery` đọc).
+    (điểm từng ảnh, đúng định dạng `make_gallery` đọc); với `--run-id`, dùng
+    namespace tương ứng dưới ``runs/rebuild/<run_id>/``.
 
     **Ngưỡng**: dùng ngưỡng đã chốt trên val lúc train, đổi sang thang xác suất bằng
     sigmoid cho khớp `p_fake ∈ [0,1]`. Đổi thang không đổi ACC/AP/AUC (hàm đơn điệu
@@ -1841,12 +1876,15 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
     from .detector import ResNetDetector, resnet50  # noqa: PLC0415
     from .pipeline import _score, collect_maps, write_json  # noqa: PLC0415
 
-    ledger_path = f"{OUT}/train.json"
+    maps_root = _maps_root_for_run(run_id)
+    run_root = _run_root_for_id(run_id)
+    ledger_path = f"{run_root}/train.json"
     ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {}
     tags = sorted(ledger.get("by_generator") or {})
     if not tags:
-        raise FileNotFoundError(f"chưa có detector nào trong {OUT}/train.json — chạy `::train` trước")
-    want = _train_targets(generator, [t[4:] if t.startswith("gen-") else t for t in tags])
+        raise FileNotFoundError(f"chưa có detector nào trong {ledger_path} — chạy `::train` trước")
+    want = _train_targets(generator, [t[4:] if t.startswith("gen-") else t for t in tags],
+                          maps_root=maps_root)
     if want and want[0] is None:                      # `auto` ⇒ mọi detector đã train
         chosen = tags
     else:
@@ -1855,10 +1893,10 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
         if missing:
             raise FileNotFoundError(f"chưa train {missing}. Có: {tags}")
 
-    all_maps = collect_maps(MAPS)
+    all_maps = collect_maps(maps_root)
     results: dict[str, dict] = {}
     for tag in chosen:
-        tdir = f"{OUT}/train/{tag}"
+        tdir = f"{run_root}/train/{tag}"
         tpath = f"{tdir}/train.json"
         ckpt = f"{tdir}/detector.pth"
         if not (os.path.exists(tpath) and os.path.exists(ckpt)):
@@ -1905,6 +1943,8 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
 
         payload = {
             "tag": tag,
+            "run_id": run_id or None,
+            "maps_root": maps_root,
             "split": split,
             # Dấu vân tay của detector **đã chấm**. `::report` so với `detector.pth`
             # hiện tại; lệch nghĩa là `train` đã chạy lại sau `evaluate`, và điểm
@@ -1926,8 +1966,8 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
                 "(khác init, khác số ảnh train, khác generator)."
             ),
         }
-        write_json(f"{OUT}/eval/{tag}/eval.json", payload)
-        write_json(f"{OUT}/eval/{tag}/scores.json", {"samples": samples})
+        write_json(f"{run_root}/eval/{tag}/eval.json", payload)
+        write_json(f"{run_root}/eval/{tag}/scores.json", {"samples": samples})
         results[tag] = {"acc": ev["acc"], "ap": ev["ap"], "auc": ev["auc"],
                         "acc_ci95": ev["acc_ci95"], "n": ev["n"], "gate": gate,
                         "detector_sha256": detector_sha, "split": split,
@@ -1936,17 +1976,18 @@ def evaluate(generator: str = "all", split: str = "test", crop: int = 224,
               f"[{ev['acc_ci95'][0]:.3f}, {ev['acc_ci95'][1]:.3f}] · "
               f"AP {ev['ap']:.3f} · n {ev['n']} · gate {gate}", flush=True)
     vol.commit()
-    _write_eval_ledger(results)
-    return {"evaluated": sorted(results), "split": split, "by_tag": results}
+    _write_eval_ledger(results, run_root=run_root)
+    return {"evaluated": sorted(results), "split": split, "by_tag": results,
+            "run_id": run_id or None, "maps_root": maps_root}
 
 
-def _write_eval_ledger(results: dict[str, dict]) -> None:
+def _write_eval_ledger(results: dict[str, dict], run_root: str = OUT) -> None:
     """Gộp điểm đã chấm vào `runs/eval.json` — dùng cho `::report` và cho bảng báo cáo."""
     import json  # noqa: PLC0415
 
     from .pipeline import write_json  # noqa: PLC0415
 
-    path = f"{OUT}/eval.json"
+    path = f"{run_root}/eval.json"
     old = json.load(open(path, encoding="utf-8")) if os.path.exists(path) else {}
     by_tag = dict(old.get("by_tag") or {})
     by_tag.update(results)
@@ -2168,23 +2209,34 @@ def glob_many(pattern: str) -> list[str]:
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=1800)
-def report() -> dict:
-    """Gom `gen/dire/train` thành một báo cáo có nhãn mức tái lập và cảnh báo."""
+def report(run_id: str = "") -> dict:
+    """Gom gen/DIRE/train/eval thành báo cáo; run_id giữ namespace rebuild tách biệt."""
     import json  # noqa: PLC0415
 
     from .pipeline import write_json
 
+    maps_root = _maps_root_for_run(run_id)
+    run_root = _run_root_for_id(run_id)
+
     def read(name: str) -> dict:
-        p = f"{MAPS}/{name}.json" if name == "dire" else f"{OUT}/{name}.json"
+        if name == "dire":
+            p = f"{maps_root}/dire.json"
+        elif name == "bench":
+            p = f"{OUT}/bench.json"
+        else:
+            p = f"{run_root}/{name}.json"
         return json.load(open(p, encoding="utf-8")) if os.path.exists(p) else {}
 
     dire_json = read("dire")
     train_json = read("train")
-    eval_json = _read_json(f"{OUT}/eval.json") or {}
-    inventory = _map_inventory(MAPS)
+    eval_json = _read_json(f"{run_root}/eval.json") or {}
+    inventory = _map_inventory(maps_root)
     train_by_gen = train_json.get("by_generator", {})
     eval_by_gen = eval_json.get("by_tag", {})
     payload = {
+        "run_id": run_id or None,
+        "maps_root": maps_root,
+        "run_root": run_root,
         "label": _read_json(DATA_CARD).get("label", "R1+R2"),
         "what_is_ours": ["DIRE map", "detector", "ảnh sinh"],
         "what_is_not": ["trọng số ADM (OpenAI)", "LSUN-Bedroom (dữ liệu thật)", "kiến trúc U-Net/ResNet"],
@@ -2223,7 +2275,7 @@ def report() -> dict:
         "warnings": _report_warnings(inventory, dire_json, train_by_gen, eval_by_gen,
                                      skipped=train_json.get("skipped") or {}),
     }
-    write_json(f"{OUT}/report.json", payload)
+    write_json(f"{run_root}/report.json", payload)
     vol.commit()
     print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
     return payload

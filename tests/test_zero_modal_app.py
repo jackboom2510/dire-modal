@@ -258,6 +258,8 @@ def test_checkpoint_keeps_its_filename_so_nothing_has_to_be_downloaded_again():
 
 def test_rebuild_run_id_uses_a_separate_safe_maps_namespace():
     assert modal_app._maps_root_for_run() == modal_app.MAPS
+    assert modal_app._run_root_for_id() == modal_app.OUT
+    assert modal_app._run_root_for_id("rebuild-2026-10-14") == f"{modal_app.OUT}/rebuild/rebuild-2026-10-14"
     root = modal_app._maps_root_for_run("recompute-2026-11")
     assert root == "/zero/rebuild/maps/recompute-2026-11"
     assert not root.startswith(modal_app.MAPS + "/")
@@ -913,7 +915,9 @@ def test_train_writes_each_generator_to_its_own_directory():
     src = Path(modal_app.__file__).read_text(encoding="utf-8")
     body = src[src.index("def train(epochs"):]
     body = body[: body.index("def _train_targets(")]
-    assert 'f"{OUT}/train/{tag}"' in body
+    assert 'train_root = f"{run_root}/train"' in body
+    assert 'f"{train_root}/{tag}"' in body
+    assert 'run_root = _run_root_for_id(run_id)' in body
     assert '"runs/train.json"' not in body
 
 
