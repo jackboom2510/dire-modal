@@ -15,6 +15,7 @@ Lệnh::
     modal run -m dire_zero.modal_app::pruneemptyimages --splits train,val,test
     modal run -m dire_zero.modal_app::reconcilemanifest --report-id empty-images-delete-2026-10-14
     modal run -m dire_zero.modal_app::auditimages --splits train,val,test
+    modal run -m dire_zero.modal_app::subset --subset-id lsun-pilot --per-cell 200
     modal run -m dire_zero.modal_app::dire --n 500
     modal run -m dire_zero.modal_app::train --epochs 40
     modal run -m dire_zero.modal_app::table4 --run-id t4 --steps 5  # also 10,20,50
@@ -70,6 +71,7 @@ IMAGE_AUDITS = f"{OUT}/image-audits"
 #: Experiment artifacts are isolated from `/zero/maps` and existing run ledgers.
 EXPERIMENTS = f"{V.MOUNT}/experiments"
 EXPERIMENT_RUNS = f"{OUT}/experiments"
+SUBSETS = f"{V.MOUNT}/subsets"
 PAPER_IMAGENET_CKPT = f"{V.MOUNT}/ckpt/resnet50_imagenet.pth"
 
 
@@ -2268,6 +2270,227 @@ def _paper_matrix_rows() -> list[dict]:
             or (row["split"] in ("train", "val") and row["generator"] in ("real", "adm"))]
 
 
+def _subset_dir(subset_id: str) -> str:
+    from .experiments import validate_run_id  # noqa: PLC0415
+
+    validate_run_id(subset_id)
+    return f"{SUBSETS}/{subset_id}"
+
+
+def _required_subset_cells() -> tuple[tuple[str, str], ...]:
+    from .experiments import EXPERIMENT_TEST_GENERATORS  # noqa: PLC0415
+
+    return (("train", "real"), ("train", "adm"), ("val", "real"), ("val", "adm"),
+            *( ("test", g) for g in ("real", *EXPERIMENT_TEST_GENERATORS) ))
+
+
+def _load_paper_subset(subset_id: str, per_cell: int) -> tuple[list[dict], dict]:
+    """Load a pre-created, deterministic sample manifest that references DATA in place."""
+    import json  # noqa: PLC0415
+
+    from .subsets import ALGORITHM  # noqa: PLC0415
+
+    if per_cell <= 0:
+        raise ValueError("subset_id yêu cầu per_cell > 0")
+    root = _subset_dir(subset_id)
+    protocol_path = os.path.join(root, "_protocol.json")
+    snapshot_path = os.path.join(root, f"per-cell-{per_cell:06d}.json")
+    if not os.path.isfile(protocol_path) or not os.path.isfile(snapshot_path):
+        raise FileNotFoundError(
+            f"chưa tạo subset {subset_id}/per-cell-{per_cell}; chạy trước "
+            f"`modal run -m dire_zero.modal_app::subset --subset-id {subset_id} --per-cell {per_cell}`"
+        )
+    with open(protocol_path, encoding="utf-8") as fh:
+        protocol = json.load(fh)
+    expected_manifest = _sha256(MANIFEST)
+    if protocol.get("algorithm") != ALGORITHM or protocol.get("base_manifest_sha256") != expected_manifest:
+        raise ValueError("subset được tạo từ manifest khác hoặc thuật toán khác; tạo subset_id mới")
+    with open(snapshot_path, encoding="utf-8") as fh:
+        snapshot = json.load(fh)
+    if snapshot.get("subset_id") != subset_id or snapshot.get("per_cell") != per_cell:
+        raise ValueError(f"snapshot subset không khớp định danh/size: {snapshot_path}")
+    if snapshot.get("base_manifest_sha256") != expected_manifest or snapshot.get("seed") != protocol.get("seed"):
+        raise ValueError("subset snapshot lệch protocol nguồn; không dùng")
+
+    rows = snapshot.get("rows") or []
+    if len(rows) != int(snapshot.get("n_rows", -1)) or int(snapshot.get("n_available", 0)) < len(rows):
+        raise ValueError("subset snapshot hỏng: n_rows/n_available không khớp")
+    seen = set()
+    data_root = Path(DATA).resolve()
+    for row in rows:
+        path = Path(str(row.get("path", ""))).resolve()
+        try:
+            sample_id = path.relative_to(data_root).as_posix()
+        except ValueError as exc:
+            raise ValueError(f"subset path nằm ngoài DATA: {path}") from exc
+        if sample_id != row.get("sample_id"):
+            raise ValueError(f"sample_id không khớp source path: {sample_id} != {row.get('sample_id')}")
+        if not path.is_file():
+            raise FileNotFoundError(f"ảnh trong subset không còn trên Volume: {path}")
+        key = (row.get("split"), row.get("generator"), sample_id)
+        if key in seen:
+            raise ValueError(f"sample ID trùng trong subset: {key}")
+        if str(row.get("split")) not in {"train", "val", "test"}:
+            raise ValueError(f"split không hợp lệ trong subset: {row.get('split')}")
+        expected_label = 0 if row.get("generator") == "real" else 1
+        if int(row.get("label", -1)) != expected_label:
+            raise ValueError(f"label không khớp generator trong subset: {key}")
+        seen.add(key)
+    # Verify monotone growth against all earlier immutable snapshots.
+    for name in os.listdir(root):
+        if not (name.startswith("per-cell-") and name.endswith(".json")):
+            continue
+        try:
+            previous_n = int(name[len("per-cell-"):-len(".json")])
+        except ValueError:
+            continue
+        if previous_n >= per_cell:
+            continue
+        with open(os.path.join(root, name), encoding="utf-8") as fh:
+            previous = json.load(fh)
+        previous_ids = {(r["split"], r["generator"], r["sample_id"]) for r in previous.get("rows", [])}
+        if not previous_ids.issubset(seen):
+            raise ValueError(f"subset {per_cell} không mở rộng lồng nhau snapshot {previous_n}")
+    return [dict(row) for row in rows], snapshot
+
+
+@app.function(volumes=VOLUMES, cpu=2, timeout=1800)
+def subset(subset_id: str, per_cell: int, seed: int = 3407) -> dict:
+    """Create an immutable, manifest-only nested subset snapshot (no image copies)."""
+    import json  # noqa: PLC0415
+
+    from .experiments import validate_run_id  # noqa: PLC0415
+    from .subsets import ALGORITHM, select_nested_rows  # noqa: PLC0415
+
+    validate_run_id(subset_id)
+    if per_cell < 1:
+        raise ValueError("per_cell phải lớn hơn 0")
+    rows = _paper_matrix_rows()
+    _require_paper_cells(rows, {"train": ("real", "adm"), "val": ("real", "adm"),
+                                "test": ("real", *_required_subset_generators())})
+    manifest_sha = _sha256(MANIFEST)
+    if not manifest_sha:
+        raise FileNotFoundError(MANIFEST)
+    selected, counts = select_nested_rows(rows, per_cell=per_cell, seed=seed,
+                                          source_root=DATA, required_cells=_required_subset_cells())
+    root = Path(_subset_dir(subset_id))
+    root.mkdir(parents=True, exist_ok=True)
+    protocol = {"subset_id": subset_id, "algorithm": ALGORITHM, "seed": seed,
+                "base_manifest_sha256": manifest_sha,
+                "source_root": DATA,
+                "selection": "first per_cell rows by deterministic SHA-256 rank per split/generator",
+                "image_storage": "manifest-only references; source images are not copied or modified"}
+    protocol_path = root / "_protocol.json"
+    if protocol_path.exists():
+        actual = json.loads(protocol_path.read_text(encoding="utf-8"))
+        if actual != protocol:
+            raise ValueError(f"subset namespace đã khóa protocol khác: {actual}; chọn subset_id mới")
+    else:
+        if any(root.iterdir()):
+            raise ValueError(f"subset namespace có artefact nhưng thiếu _protocol.json: {root}")
+        with protocol_path.open("x", encoding="utf-8") as fh:
+            json.dump(protocol, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+    snapshot = {**protocol, "per_cell": per_cell, "n_rows": len(selected),
+                "n_available": len(rows), "cell_counts": counts, "rows": selected}
+    snapshot_path = root / f"per-cell-{per_cell:06d}.json"
+    if snapshot_path.exists():
+        actual = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        if actual != snapshot:
+            raise FileExistsError(f"snapshot subset đã tồn tại nhưng khác nội dung: {snapshot_path}")
+    else:
+        with snapshot_path.open("x", encoding="utf-8") as fh:
+            json.dump(snapshot, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+    # Use the same validation, including nested growth, as experiment consumers.
+    _load_paper_subset(subset_id, per_cell)
+    vol.commit()
+    print(f"[subset] {subset_id}: {per_cell}/cell · {len(selected)} ảnh · seed={seed}", flush=True)
+    for cell, count in sorted(counts.items()):
+        print(f"  {cell}: {count}", flush=True)
+    return {"subset_id": subset_id, "per_cell": per_cell, "n_rows": len(selected),
+            "n_available": len(rows), "subset_status": _subset_scope(snapshot),
+            "seed": seed, "manifest": str(snapshot_path), "cell_counts": counts,
+            "image_storage": "manifest-only; source image files unchanged"}
+
+
+def _required_subset_generators() -> tuple[str, ...]:
+    from .experiments import EXPERIMENT_TEST_GENERATORS  # noqa: PLC0415
+
+    return EXPERIMENT_TEST_GENERATORS
+
+
+def _subset_scope(snapshot: dict) -> str:
+    return "full-data" if int(snapshot.get("n_rows", 0)) == int(snapshot.get("n_available", -1)) else "pilot"
+
+
+def _lock_subset_experiment(root: str, subset_id: str, snapshot: dict) -> None:
+    """Bind one experiment run ID to a stable subset identity while allowing growth."""
+    import json  # noqa: PLC0415
+
+    protocol = {"subset_id": subset_id, "seed": snapshot["seed"],
+                "algorithm": snapshot["algorithm"],
+                "base_manifest_sha256": snapshot["base_manifest_sha256"],
+                "nested_stages": "per-cell cap may increase; selection seed/algorithm stay fixed"}
+    os.makedirs(root, exist_ok=True)
+    path = os.path.join(root, "_subset_protocol.json")
+    if not os.path.isfile(path) and any(os.scandir(root)):
+        raise ValueError(f"run_id có artefact nhưng thiếu subset protocol lock: {root}; chọn run_id mới")
+    if os.path.isfile(path):
+        actual = json.load(open(path, encoding="utf-8"))
+        if actual != protocol:
+            raise ValueError(f"run_id đã khóa subset khác: {path}; chọn run_id mới")
+    else:
+        with open(path, "x", encoding="utf-8") as fh:
+            json.dump(protocol, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
+
+
+def _rows_for_subset(rows: Sequence[dict], subset_id: str = "", per_cell: int = 0) -> tuple[list[dict], dict | None]:
+    if not subset_id:
+        if per_cell:
+            raise ValueError("per_cell chỉ được truyền cùng subset_id")
+        return [dict(row) for row in rows], None
+    subset_rows, snapshot = _load_paper_subset(subset_id, per_cell)
+    from .subsets import select_nested_rows  # noqa: PLC0415
+
+    expected, counts = select_nested_rows(
+        rows, per_cell=per_cell, seed=int(snapshot["seed"]), source_root=DATA,
+        required_cells=_required_subset_cells(),
+    )
+    def signature(row: Mapping) -> tuple[str, str, str, int, str]:
+        return (str(row["split"]), str(row["generator"]), str(row["sample_id"]),
+                int(row["label"]), os.path.abspath(str(row["path"])))
+
+    if (len(rows) != int(snapshot.get("n_available", -1)) or
+            counts != snapshot.get("cell_counts") or
+            {signature(row) for row in expected} != {signature(row) for row in subset_rows}):
+        raise ValueError("subset snapshot không khớp lựa chọn/provenance từ manifest hiện tại")
+    return subset_rows, snapshot
+
+
+def _collect_maps_for_rows(root: str, rows: Sequence[dict]) -> list[dict]:
+    """Filter a resumable cache union back to exactly this immutable subset stage."""
+    from .pipeline import collect_maps  # noqa: PLC0415
+
+    wanted = {(r["split"], r["generator"], Path(r["path"]).stem): r for r in rows}
+    if len(wanted) != len(rows):
+        raise ValueError("tên file map không duy nhất trong subset")
+    collected = collect_maps(root)
+    selected = []
+    for item in collected:
+        key = (item["split"], item["generator"], Path(item["name"]).stem)
+        source = wanted.get(key)
+        if source is not None:
+            item["sample_id"] = source.get("sample_id") or os.path.relpath(source["path"], DATA).replace(os.sep, "/")
+            selected.append(item)
+    if len(selected) != len(wanted):
+        found = {(r["split"], r["generator"], Path(r["name"]).stem) for r in selected}
+        missing = sorted(wanted.keys() - found)
+        raise FileNotFoundError(f"DIRE inputs chưa đủ cho subset; thiếu {missing[:10]} ({len(missing)} total)")
+    return selected
+
+
 def _require_paper_cells(rows: Sequence[dict], required: Mapping[str, Sequence[str]]) -> None:
     present = {(str(r["split"]), str(r["generator"])) for r in rows}
     missing = [(s, g) for s, gs in required.items() for g in gs if (s, g) not in present]
@@ -2596,7 +2819,8 @@ def _train_paper_variant(rows: Sequence[dict], out_dir: str, *, in_channels: int
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
            lr: float = 1e-4, crop: int = 224, seed: int = 3407,
-           source_map_run_id: str = "") -> dict:
+           source_map_run_id: str = "", subset_id: str = "",
+           per_cell: int = 0) -> dict:
     """Run one independent Table 4 row at S∈{5,10,20,50}.
 
     Pass ``source_map_run_id`` only for S=20 to train directly from a fully
@@ -2612,10 +2836,14 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
         raise ValueError(f"Table 4 steps phải thuộc {TABLE4_STEPS}")
     root = _experiment_root(run_id, "table4")
     cell_root = f"{root}/S{int(steps)}"
-    rows = _paper_matrix_rows()
+    rows, subset_snapshot = _rows_for_subset(_paper_matrix_rows(), subset_id, per_cell)
+    if subset_snapshot is not None:
+        _lock_subset_experiment(root, subset_id, subset_snapshot)
     required = {"train": ("real", "adm"), "val": ("real", "adm"),
                 "test": ("real", *EXPERIMENT_TEST_GENERATORS)}
     _require_paper_cells(rows, required)
+    if source_map_run_id and subset_id:
+        raise ValueError("subset và source_map_run_id chưa thể kết hợp; không dùng cache map ngoài subset")
     imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
     adm_sha = _sha256(CKPT)
     if not imagenet_sha:
@@ -2632,6 +2860,9 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
            "batch": bs, "lr": lr, "crop": crop, "seed": seed, "init": "ImageNet",
            "input_source": (f"rebuild_maps:{source_map_run_id}" if source_map_run_id
                             else "materialized_experiment_inputs")}
+    if subset_snapshot is not None:
+        cfg["subset"] = {"subset_id": subset_id, "seed": subset_snapshot["seed"],
+                         "algorithm": subset_snapshot["algorithm"]}
     # Validate an optional source namespace before creating new experiment files.
     # Every S is then locked independently; cached S=20 maps stay read-only in place.
     if source_map_run_id:
@@ -2642,17 +2873,10 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
         input_root = f"{cell_root}/inputs"
         _materialize_paper_inputs(rows, input_root, steps=int(steps), representations=("DIRE",),
                                   ckpt_sha256=adm_sha, resume=True)
-        from .pipeline import collect_maps  # noqa: PLC0415
-        data_rows = collect_maps(f"{input_root}/DIRE")
-        # Keep scores traceable to the original data paths, not private cache paths.
-        sources = {(r["split"], r["generator"], os.path.splitext(r["name"])[0]): r
-                   for r in rows}
-        for item in data_rows:
-            key = (item["split"], item["generator"], os.path.splitext(item["name"])[0])
-            if key not in sources:
-                raise ValueError(f"materialized input không có source row: {key}")
-            item["sample_id"] = os.path.relpath(sources[key]["path"], DATA).replace(os.sep, "/")
-    model_dir = f"{cell_root}/model"
+        data_rows = _collect_maps_for_rows(f"{input_root}/DIRE", rows)
+    stage_root = (f"{root}/subsets/per-cell-{per_cell:06d}" if subset_snapshot is not None else "")
+    model_dir = (f"{cell_root}/subsets/per-cell-{per_cell:06d}/model"
+                 if subset_snapshot is not None else f"{cell_root}/model")
     train_meta, model = _train_paper_variant(
         data_rows, model_dir, in_channels=3, weights_path=PAPER_IMAGENET_CKPT,
         epochs=epochs, bs=bs, lr=lr, crop=crop, seed=seed,
@@ -2664,16 +2888,27 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
               "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
               "by_test_generator": cells,
               "status": "complete" if all(c.get("status") == "ran" for c in cells.values()) else "incomplete"}
-    ledger_path = f"{root}/table4.json"
+    if subset_snapshot is not None:
+        result["subset"] = {"subset_id": subset_id, "per_cell": per_cell,
+                            "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                            "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json",
+                            "subset_status": _subset_scope(subset_snapshot)}
+        os.makedirs(stage_root, exist_ok=True)
+        ledger_path = f"{stage_root}/table4.json"
+    else:
+        ledger_path = f"{root}/table4.json"
     ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {"by_steps": {}}
     by_steps = dict(ledger.get("by_steps") or {})
     key = str(int(steps))
     if key in by_steps:
-        raise FileExistsError(f"Table 4 S={key} đã có kết quả; không ghi đè")
+        raise FileExistsError(f"Table 4 S={key} đã có kết quả trong ledger này; không ghi đè")
     by_steps[key] = result
     ledger = {"table": 4, "paper_steps": list(TABLE4_STEPS),
               "test_generators": list(EXPERIMENT_TEST_GENERATORS),
               "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
+              **({"subset_id": subset_id, "per_cell": per_cell,
+                  "sample_seed": subset_snapshot["seed"], "subset_status": _subset_scope(subset_snapshot)}
+                 if subset_snapshot is not None else {}),
               "by_steps": by_steps,
               "missing_steps": [s for s in TABLE4_STEPS
                                 if str(s) not in by_steps or by_steps[str(s)].get("status") != "complete"]}
@@ -2685,7 +2920,8 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
 
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
-def table5_prepare(run_id: str, crop: int = 224) -> dict:
+def table5_prepare(run_id: str, crop: int = 224, subset_id: str = "",
+                   per_cell: int = 0) -> dict:
     """Create isolated S=20 REC/RGB/RGB+DIRE/DIRE tensors from the same triplets."""
     import json  # noqa: PLC0415
     from .experiments import (EXPERIMENT_TEST_GENERATORS, TABLE5_REPRESENTATIONS,
@@ -2693,7 +2929,9 @@ def table5_prepare(run_id: str, crop: int = 224) -> dict:
 
     validate_run_id(run_id)
     root = _experiment_root(run_id, "table5")
-    rows = _paper_matrix_rows()
+    rows, subset_snapshot = _rows_for_subset(_paper_matrix_rows(), subset_id, per_cell)
+    if subset_snapshot is not None:
+        _lock_subset_experiment(root, subset_id, subset_snapshot)
     _require_paper_cells(rows, {"train": ("real", "adm"), "val": ("real", "adm"),
                                 "test": ("real", *EXPERIMENT_TEST_GENERATORS)})
     imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
@@ -2710,9 +2948,25 @@ def table5_prepare(run_id: str, crop: int = 224) -> dict:
     payload["crop"] = crop
     payload["test_generators"] = list(EXPERIMENT_TEST_GENERATORS)
     payload["test_generator_scope_note"] = TEST_GENERATOR_SCOPE_NOTE
-    with open(f"{root}/inputs.json", "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
+    if subset_snapshot is not None:
+        payload["subset"] = {"subset_id": subset_id, "per_cell": per_cell,
+                              "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                              "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json"}
+        stage_root = f"{root}/subsets/per-cell-{per_cell:06d}"
+        os.makedirs(stage_root, exist_ok=True)
+        stage_inputs = f"{stage_root}/inputs.json"
+        if os.path.exists(stage_inputs):
+            previous = json.load(open(stage_inputs, encoding="utf-8"))
+            if previous.get("subset") != payload["subset"]:
+                raise FileExistsError(f"Table 5 subset input ledger không khớp: {stage_inputs}")
+        else:
+            with open(stage_inputs, "x", encoding="utf-8") as fh:
+                json.dump(payload, fh, ensure_ascii=False, indent=2)
+                fh.write("\n")
+    else:
+        with open(f"{root}/inputs.json", "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2)
+            fh.write("\n")
     vol.commit()
     return payload
 
@@ -2720,7 +2974,7 @@ def table5_prepare(run_id: str, crop: int = 224) -> dict:
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def table5_train(run_id: str, representation: str, epochs: int = 400,
                  bs: int = 32, lr: float = 1e-4, crop: int = 224,
-                 seed: int = 3407) -> dict:
+                 seed: int = 3407, subset_id: str = "", per_cell: int = 0) -> dict:
     """Train one Table 5 representation on ADM and score all five paper columns."""
     import json  # noqa: PLC0415
     from .experiments import (EXPERIMENT_TEST_GENERATORS, TABLE5_REPRESENTATIONS,
@@ -2732,10 +2986,28 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
         raise ValueError(f"Table 5 representation phải thuộc {TABLE5_REPRESENTATIONS}")
     root = _experiment_root(run_id, "table5")
     input_root = f"{root}/inputs/{rep}"
-    if not os.path.isfile(f"{root}/inputs.json"):
-        raise FileNotFoundError(f"chạy ::table5_prepare --run-id {run_id} trước")
-    rows = collect_maps(input_root)
-    model_dir = f"{root}/models/{rep}"
+    if subset_id:
+        subset_rows, subset_snapshot = _rows_for_subset(_paper_matrix_rows(), subset_id, per_cell)
+        _lock_subset_experiment(root, subset_id, subset_snapshot)
+        stage_root = f"{root}/subsets/per-cell-{per_cell:06d}"
+        input_ledger = f"{stage_root}/inputs.json"
+        if not os.path.isfile(input_ledger):
+            raise FileNotFoundError(f"chạy ::table5_prepare --run-id {run_id} --subset-id {subset_id} --per-cell {per_cell} trước")
+        prep = json.load(open(input_ledger, encoding="utf-8"))
+        wanted_subset = {"subset_id": subset_id, "per_cell": per_cell,
+                         "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                         "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json"}
+        if prep.get("subset") != wanted_subset:
+            raise ValueError("Table 5 prepared inputs không khớp subset stage")
+        rows = _collect_maps_for_rows(input_root, subset_rows)
+        model_dir = f"{root}/subsets/per-cell-{per_cell:06d}/models/{rep}"
+    else:
+        if per_cell:
+            raise ValueError("per_cell chỉ được truyền cùng subset_id")
+        if not os.path.isfile(f"{root}/inputs.json"):
+            raise FileNotFoundError(f"chạy ::table5_prepare --run-id {run_id} trước")
+        rows = collect_maps(input_root)
+        model_dir = f"{root}/models/{rep}"
     channels = 6 if rep == "RGB_DIRE" else 3
     train_meta, model = _train_paper_variant(
         rows, model_dir, in_channels=channels, weights_path=PAPER_IMAGENET_CKPT,
@@ -2750,15 +3022,25 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
               "train": train_meta, "detector_sha256": _sha256(f"{model_dir}/detector.pth"),
               "by_test_generator": cells,
               "status": "complete" if all(c.get("status") == "ran" for c in cells.values()) else "incomplete"}
-    ledger_path = f"{root}/table5.json"
+    if subset_id:
+        result["subset"] = {"subset_id": subset_id, "per_cell": per_cell,
+                            "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                            "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json",
+                            "subset_status": _subset_scope(subset_snapshot)}
+        ledger_path = f"{stage_root}/table5.json"
+    else:
+        ledger_path = f"{root}/table5.json"
     ledger = json.load(open(ledger_path, encoding="utf-8")) if os.path.exists(ledger_path) else {"by_representation": {}}
     by_rep = dict(ledger.get("by_representation") or {})
     if rep in by_rep:
-        raise FileExistsError(f"Table 5 {rep} đã có kết quả; không ghi đè")
+        raise FileExistsError(f"Table 5 {rep} đã có kết quả trong ledger này; không ghi đè")
     by_rep[rep] = result
     ledger = {"table": 5, "paper_representations": list(TABLE5_REPRESENTATIONS),
               "test_generators": list(EXPERIMENT_TEST_GENERATORS),
               "test_generator_scope_note": TEST_GENERATOR_SCOPE_NOTE,
+              **({"subset_id": subset_id, "per_cell": per_cell,
+                  "sample_seed": subset_snapshot["seed"], "subset_status": _subset_scope(subset_snapshot)}
+                 if subset_id else {}),
               "by_representation": by_rep,
               "missing_representations": [x for x in TABLE5_REPRESENTATIONS
                                           if x not in by_rep or by_rep[x].get("status") != "complete"]}
@@ -2771,7 +3053,8 @@ def table5_train(run_id: str, representation: str, epochs: int = 400,
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all",
-                       generator_name: str = "all") -> dict:
+                       generator_name: str = "all", subset_id: str = "",
+                       per_cell: int = 0) -> dict:
     """Figure 4 conditions: blur σ=1,2,3 and JPEG q=65,30 on test source images.
 
     Loads the clean-trained Table 5 RGB and DIRE detectors. DIRE is recomputed
@@ -2794,11 +3077,45 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
     if not 1 <= crop <= 256:
         raise ValueError("crop phải trong [1,256]")
     root = _experiment_root(run_id, "figure4")
-    dire_dir = f"{EXPERIMENTS}/table5/{run_id}/models/DIRE"
-    rgb_dir = f"{EXPERIMENTS}/table5/{run_id}/models/RGB"
+    if subset_id:
+        subset_rows, subset_snapshot = _rows_for_subset(_paper_matrix_rows(), subset_id, per_cell)
+        _lock_subset_experiment(root, subset_id, subset_snapshot)
+        stage_root = f"{root}/subsets/per-cell-{per_cell:06d}"
+        table5_stage = f"{EXPERIMENTS}/table5/{run_id}/subsets/per-cell-{per_cell:06d}"
+        wanted_subset = {"subset_id": subset_id, "per_cell": per_cell,
+                         "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                         "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json"}
+        inputs_path = f"{table5_stage}/inputs.json"
+        ledger_path = f"{table5_stage}/table5.json"
+        if not os.path.isfile(inputs_path) or not os.path.isfile(ledger_path):
+            raise FileNotFoundError("Figure 4 subset cần Table 5 prepare/train ledger đúng stage trước")
+        with open(inputs_path, encoding="utf-8") as fh:
+            prepared = json.load(fh)
+        with open(ledger_path, encoding="utf-8") as fh:
+            table5_ledger = json.load(fh)
+        if prepared.get("subset") != wanted_subset or (
+                table5_ledger.get("subset_id") != subset_id or
+                table5_ledger.get("per_cell") != per_cell):
+            raise ValueError("Figure 4 Table 5 inputs/ledger không khớp subset stage")
+        for rep in ("RGB", "DIRE"):
+            trained = (table5_ledger.get("by_representation") or {}).get(rep) or {}
+            if trained.get("status") != "complete" or trained.get("subset") != {
+                    **wanted_subset, "subset_status": _subset_scope(subset_snapshot)}:
+                raise ValueError(f"Figure 4 cần Table 5 {rep} hoàn tất trên subset đã chọn")
+        dire_dir = f"{table5_stage}/models/DIRE"
+        rgb_dir = f"{table5_stage}/models/RGB"
+        rows = [r for r in subset_rows if r["split"] == "test" and
+                r["generator"] in ("real", *EXPERIMENT_TEST_GENERATORS)]
+    else:
+        if per_cell:
+            raise ValueError("per_cell chỉ được truyền cùng subset_id")
+        subset_snapshot = None
+        stage_root = root
+        dire_dir = f"{EXPERIMENTS}/table5/{run_id}/models/DIRE"
+        rgb_dir = f"{EXPERIMENTS}/table5/{run_id}/models/RGB"
+        rows = _paper_image_rows(("test",), ("real", *EXPERIMENT_TEST_GENERATORS))
     if not all(os.path.isfile(f"{d}/detector.pth") for d in (dire_dir, rgb_dir)):
         raise FileNotFoundError(f"cần chạy Table 5 RGB và DIRE trước: {rgb_dir}, {dire_dir}")
-    rows = _paper_image_rows(("test",), ("real", *EXPERIMENT_TEST_GENERATORS))
     _require_paper_cells(rows, {"test": ("real", *EXPERIMENT_TEST_GENERATORS)})
     manifest_sha = _sha256(MANIFEST)
     ckpt_sha = _sha256(CKPT)
@@ -2814,9 +3131,13 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
               "model_source": "clean-trained Table 5 models",
               "detector_sha256": {"RGB": _sha256(f"{rgb_dir}/detector.pth"),
                                   "DIRE": _sha256(f"{dire_dir}/detector.pth")}}
-    _experiment_config(root, config)
-    result_path = f"{root}/figure4.json"
-    condition_root = f"{root}/conditions"
+    if subset_snapshot is not None:
+        config["subset"] = {"subset_id": subset_id, "per_cell": per_cell,
+                            "seed": subset_snapshot["seed"],
+                            "algorithm": subset_snapshot["algorithm"]}
+    _experiment_config(stage_root, config)
+    result_path = f"{stage_root}/figure4.json"
+    condition_root = f"{stage_root}/conditions"
     os.makedirs(condition_root, exist_ok=True)
     names = [str(c["name"]) for c in ROBUSTNESS_LEVELS]
     if condition_name != "all" and condition_name not in names:
@@ -2855,7 +3176,7 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
                 dmap, _recon = dire_map(counter, perturbed.unsqueeze(0).to("cuda"), schedule)
                 rgb_x = ((perturbed.clamp(-1, 1) + 1) * 0.5).clamp(0, 1)
                 dire_x = dmap.squeeze(0).float().clamp(0, 2)
-                sample_id = os.path.relpath(item["path"], DATA)
+                sample_id = item.get("sample_id") or os.path.relpath(item["path"], DATA).replace(os.sep, "/")
                 for rep, x in (("RGB", rgb_x), ("DIRE", dire_x)):
                     top, left = (x.shape[-2] - crop) // 2, (x.shape[-1] - crop) // 2
                     x = x[:, top:top + crop, left:left + crop].unsqueeze(0).to("cuda")
@@ -2911,6 +3232,11 @@ def figure4_robustness(run_id: str, crop: int = 224, condition_name: str = "all"
                "missing_conditions": [name for name in names if name not in by_condition],
                "missing_cells": missing_cells,
                "baseline_note": "RGB is the project's ImageNet-initialized ResNet-50; this is not CNNDetection*/PatchForensics*."}
+    if subset_snapshot is not None:
+        payload["subset"] = {"subset_id": subset_id, "per_cell": per_cell,
+                             "n_rows": subset_snapshot["n_rows"], "seed": subset_snapshot["seed"],
+                             "manifest": f"{_subset_dir(subset_id)}/per-cell-{per_cell:06d}.json",
+                             "subset_status": _subset_scope(subset_snapshot)}
     with open(result_path, "w", encoding="utf-8") as fh:
         json.dump(payload, fh, ensure_ascii=False, indent=2)
         fh.write("\n")

@@ -33,6 +33,19 @@ def test_render_table4_and_table5_only_from_complete_ledgers():
     assert noted["protocol_notes"] == ["Uses sdv2, not sdv1."]
 
 
+def test_pilot_subset_is_never_marked_as_full_paper_result():
+    t4 = {"by_steps": {str(s): _result() for s in mod.STEPS},
+          "subset_status": "pilot", "per_cell": 200}
+    with pytest.raises(ValueError, match="pilot subset.*not a full-data paper result"):
+        mod.build_tables(t4, None)
+    partial = mod.build_tables(t4, None, allow_partial=True)
+    assert partial["complete"] is False
+    assert any("pilot subset" in item for item in partial["missing"])
+
+    full = mod.build_tables({"subset_status": "full-data"}, None, allow_partial=True)
+    assert any("covers all source rows" in note for note in full["protocol_notes"])
+
+
 def test_incomplete_results_are_rejected_by_default_but_explicitly_marked():
     with pytest.raises(ValueError, match="chưa đủ cell"):
         mod.build_tables({"by_steps": {"5": _result()}}, None)

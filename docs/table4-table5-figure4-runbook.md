@@ -77,6 +77,17 @@ modal volume get dire-zero experiments/table5/table5-<id>/table5.json ./table5.j
 python tools/experiment_tables.py --table5 ./table5.json --out ./paper-tables
 ```
 
+## Subset pilot và tăng dần theo mốc lồng nhau
+
+Nếu muốn chạy thử trước khi xử lý toàn bộ dữ liệu, hãy tạo snapshot riêng **trước**
+Table 4/5/Figure 4. Subset là index trỏ tới ảnh gốc trên Volume, không copy ảnh;
+chi tiết lệnh và cách chạy tăng dần 2.000 → 4.000 ảnh nằm trong
+[`incremental-paper-subsets.md`](incremental-paper-subsets.md). Cùng `subset_id`,
+seed và run ID được khóa xuyên suốt ba runner; mỗi cỡ subset có ledger/model riêng.
+Cache tensor/DIRE Table 5 dùng chung trong run và chỉ bổ sung biểu diễn cho ảnh
+mới. Kết quả pilot được gắn nhãn, và bảng chuẩn không chấp nhận pilot như kết quả
+full-data; dùng `--allow-partial` chỉ để kiểm tra, không để trích dẫn kết quả.
+
 ## Figure 4 — dùng model RGB và DIRE đã train sạch
 
 ```bash
