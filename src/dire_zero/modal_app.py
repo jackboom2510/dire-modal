@@ -2250,12 +2250,121 @@ def _paper_image_rows(splits: Sequence[str], generators: Sequence[str]) -> list[
     return rows
 
 
+def _paper_matrix_rows() -> list[dict]:
+    """Rows actually consumed by the encoded ADM-train/test-generator protocol.
+
+    The dataset may contain other fake generators in train/val. They are not
+    detector-training sources for these experiments and must not trigger needless
+    map generation; only real+ADM are used there, while test retains the full
+    requested generator matrix.
+    """
+    from .experiments import PAPER_TEST_GENERATORS  # noqa: PLC0415
+
+    candidates = _paper_image_rows(("train", "val", "test"),
+                                   ("real", "adm", *PAPER_TEST_GENERATORS))
+    test_generators = {"real", *PAPER_TEST_GENERATORS}
+    return [row for row in candidates
+            if (row["split"] == "test" and row["generator"] in test_generators)
+            or (row["split"] in ("train", "val") and row["generator"] in ("real", "adm"))]
+
+
 def _require_paper_cells(rows: Sequence[dict], required: Mapping[str, Sequence[str]]) -> None:
     present = {(str(r["split"]), str(r["generator"])) for r in rows}
     missing = [(s, g) for s, gs in required.items() for g in gs if (s, g) not in present]
     if missing:
         pretty = ", ".join(f"{s}/{g}" for s, g in missing)
         raise FileNotFoundError(f"thiếu cell ảnh bắt buộc cho experiment: {pretty}; không chạy GPU")
+
+
+def _rows_from_cached_dire_maps(rows: Sequence[dict], source_run_id: str, *,
+                                steps: int, ckpt_sha256: str) -> list[dict]:
+    """Use a complete, provenance-matched rebuild map namespace without copying it.
+
+    This is intentionally fail-closed: the S=20 Table 4 path can consume existing
+    DIRE maps, but it may not silently fall back to recomputation or train on a
+    partial image subset. The source namespace and its original report must match
+    the current ADM checkpoint, manifest, step count, split set, and indexed source
+    image paths before any model/GPU work begins.
+    """
+    import json  # noqa: PLC0415
+
+    from .experiments import validate_run_id  # noqa: PLC0415
+    from .pipeline import map_rel_path  # noqa: PLC0415
+
+    validate_run_id(source_run_id)
+    maps_root = _maps_root_for_run(source_run_id)
+    config_path = os.path.join(maps_root, "_run_config.json")
+    index_path = os.path.join(maps_root, "dire.json")
+    report_path = os.path.join(_run_root_for_id(source_run_id), "report.json")
+    for path in (config_path, index_path, report_path):
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"map-cache provenance thiếu {path}; không dùng cache")
+
+    with open(config_path, encoding="utf-8") as fh:
+        config = json.load(fh)
+    with open(index_path, encoding="utf-8") as fh:
+        index = json.load(fh)
+    with open(report_path, encoding="utf-8") as fh:
+        source_report = json.load(fh)
+
+    expected_splits = sorted({str(row["split"]) for row in rows})
+    expected_config = {"steps": steps, "dtype": "float16", "scale": "[0, 2]",
+                       "splits": expected_splits, "ckpt_sha256": ckpt_sha256}
+    mismatched = {key: {"expected": value, "actual": config.get(key)}
+                  for key, value in expected_config.items() if config.get(key) != value}
+    if mismatched:
+        raise ValueError(f"map-cache _run_config không khớp: {mismatched}; không dùng cache")
+
+    current_manifest_sha = _sha256(MANIFEST)
+    source_manifest_sha = (source_report.get("data") or {}).get("manifest_sha256")
+    if not current_manifest_sha or source_manifest_sha != current_manifest_sha:
+        raise ValueError("manifest hiện tại khác report nguồn của map cache; không dùng cache")
+
+    if index.get("steps_mixed") != [steps]:
+        raise ValueError(f"dire.json không xác nhận duy nhất S={steps}: "
+                         f"steps_mixed={index.get('steps_mixed')}")
+    runs = index.get("runs") or [{"steps": index.get("steps"),
+                                   "ckpt_sha256": index.get("ckpt_sha256")}]
+    invalid_runs = [r for r in runs
+                    if r.get("steps") != steps or r.get("ckpt_sha256") != ckpt_sha256]
+    if invalid_runs:
+        raise ValueError(f"dire.json có run khác S={steps}/checkpoint hiện tại: "
+                         f"{invalid_runs[:3]}")
+
+    indexed = {str(item.get("path")): item for item in index.get("items", [])
+               if isinstance(item, dict) and item.get("path")}
+    out, missing, provenance_mismatch = [], {}, []
+    seen = set()
+    for row in rows:
+        rel = map_rel_path(row).as_posix()
+        if rel in seen:
+            raise ValueError(f"trùng đường dẫn map trong input: {rel}")
+        seen.add(rel)
+        record = indexed.get(rel)
+        expected_source = os.path.abspath(str(row["path"]))
+        if record is None or os.path.abspath(str(record.get("source", ""))) != expected_source:
+            provenance_mismatch.append(rel)
+            continue
+        map_path = os.path.join(maps_root, *rel.split("/"))
+        if not os.path.isfile(map_path) or os.path.getsize(map_path) == 0:
+            cell = f"{row['split']}/{row['generator']}"
+            missing[cell] = missing.get(cell, 0) + 1
+            continue
+        out.append({"name": os.path.basename(map_path), "path": map_path,
+                    "label": int(row["label"]), "split": row["split"],
+                    "generator": row["generator"],
+                    "sample_id": os.path.relpath(row["path"], DATA).replace(os.sep, "/")})
+
+    if provenance_mismatch:
+        raise ValueError("dire.json thiếu hoặc lệch source path cho map, ví dụ: "
+                         f"{provenance_mismatch[:10]}; không dùng cache")
+    if missing:
+        detail = ", ".join(f"{cell}: thiếu {count}" for cell, count in sorted(missing.items()))
+        raise FileNotFoundError(f"map cache {source_run_id} chưa đủ toàn bộ ảnh Table 4 S={steps} "
+                                f"({detail}); không train trên subset và không tự tính lại")
+    if len(out) != len(rows):
+        raise RuntimeError(f"map cache trả {len(out)}/{len(rows)} item; dừng an toàn")
+    return out
 
 
 def _experiment_config(root: str, config: dict) -> bool:
@@ -2416,7 +2525,9 @@ def _evaluate_experiment_matrix(model, rows: Sequence[dict], *, crop: int,
                             "n_real": sum(r["label"] == 0 for r in cell),
                             "n_fake": sum(r["label"] == 1 for r in cell),
                             "scores": scores, "labels": labels,
-                            "sample_ids": [os.path.relpath(cell[i]["path"], DATA) for i in order]}
+                            "sample_ids": [cell[i].get("sample_id") or
+                                           os.path.relpath(cell[i]["path"], DATA).replace(os.sep, "/")
+                                           for i in order]}
     return cells
 
 
@@ -2484,11 +2595,13 @@ def _train_paper_variant(rows: Sequence[dict], out_dir: str, *, in_channels: int
 
 @app.function(volumes=VOLUMES, gpu="A10G", timeout=WORK_TIMEOUT_S)
 def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
-           lr: float = 1e-4, crop: int = 224, seed: int = 3407) -> dict:
-    """Run one independent Table 4 cell-row at S∈{5,10,20,50}.
+           lr: float = 1e-4, crop: int = 224, seed: int = 3407,
+           source_map_run_id: str = "") -> dict:
+    """Run one independent Table 4 row at S∈{5,10,20,50}.
 
-    Each S has a disjoint feature namespace and its own ADM-trained detector.
-    Call once per S; results are merged into `table4.json` without overwriting.
+    Pass ``source_map_run_id`` only for S=20 to train directly from a fully
+    validated existing rebuild namespace. Maps are read in place, never copied or
+    overwritten; incomplete or mismatched source caches fail before training.
     """
     import json  # noqa: PLC0415
     from .experiments import PAPER_TEST_GENERATORS, TABLE4_STEPS, validate_run_id  # noqa: PLC0415
@@ -2498,7 +2611,7 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
         raise ValueError(f"Table 4 steps phải thuộc {TABLE4_STEPS}")
     root = _experiment_root(run_id, "table4")
     cell_root = f"{root}/S{int(steps)}"
-    rows = _paper_image_rows(("train", "val", "test"), ("real", "adm", *PAPER_TEST_GENERATORS))
+    rows = _paper_matrix_rows()
     required = {"train": ("real", "adm"), "val": ("real", "adm"),
                 "test": ("real", *PAPER_TEST_GENERATORS)}
     _require_paper_cells(rows, required)
@@ -2508,18 +2621,35 @@ def table4(run_id: str, steps: int, epochs: int = 400, bs: int = 32,
         raise FileNotFoundError(PAPER_IMAGENET_CKPT)
     if not adm_sha:
         raise FileNotFoundError(CKPT)
+    if source_map_run_id and int(steps) != 20:
+        raise ValueError("map cache của run S=20 chỉ được dùng cho Table 4 --steps 20")
     cfg = {"steps": int(steps), "adm_ckpt_sha256": adm_sha,
-           "imagenet_weights_sha256": imagenet_sha, "train_generators": ["adm"],
+           "imagenet_weights_sha256": imagenet_sha,
+           "manifest_sha256": _sha256(MANIFEST), "train_generators": ["adm"],
            "test_generators": list(PAPER_TEST_GENERATORS), "epochs": epochs,
-           "batch": bs, "lr": lr, "crop": crop, "seed": seed, "init": "ImageNet"}
-    # Every S is its own immutable lock; resume only reuses validated per-image
-    # feature files. Model outputs themselves are never overwritten.
+           "batch": bs, "lr": lr, "crop": crop, "seed": seed, "init": "ImageNet",
+           "input_source": (f"rebuild_maps:{source_map_run_id}" if source_map_run_id
+                            else "materialized_experiment_inputs")}
+    # Validate an optional source namespace before creating new experiment files.
+    # Every S is then locked independently; cached S=20 maps stay read-only in place.
+    if source_map_run_id:
+        data_rows = _rows_from_cached_dire_maps(rows, source_map_run_id,
+                                                 steps=20, ckpt_sha256=adm_sha)
     _experiment_config(cell_root, cfg)
-    input_root = f"{cell_root}/inputs"
-    _materialize_paper_inputs(rows, input_root, steps=int(steps), representations=("DIRE",),
-                              ckpt_sha256=adm_sha, resume=True)
-    from .pipeline import collect_maps  # noqa: PLC0415
-    data_rows = collect_maps(f"{input_root}/DIRE")
+    if not source_map_run_id:
+        input_root = f"{cell_root}/inputs"
+        _materialize_paper_inputs(rows, input_root, steps=int(steps), representations=("DIRE",),
+                                  ckpt_sha256=adm_sha, resume=True)
+        from .pipeline import collect_maps  # noqa: PLC0415
+        data_rows = collect_maps(f"{input_root}/DIRE")
+        # Keep scores traceable to the original data paths, not private cache paths.
+        sources = {(r["split"], r["generator"], os.path.splitext(r["name"])[0]): r
+                   for r in rows}
+        for item in data_rows:
+            key = (item["split"], item["generator"], os.path.splitext(item["name"])[0])
+            if key not in sources:
+                raise ValueError(f"materialized input không có source row: {key}")
+            item["sample_id"] = os.path.relpath(sources[key]["path"], DATA).replace(os.sep, "/")
     model_dir = f"{cell_root}/model"
     train_meta, model = _train_paper_variant(
         data_rows, model_dir, in_channels=3, weights_path=PAPER_IMAGENET_CKPT,
@@ -2557,7 +2687,7 @@ def table5_prepare(run_id: str, crop: int = 224) -> dict:
 
     validate_run_id(run_id)
     root = _experiment_root(run_id, "table5")
-    rows = _paper_image_rows(("train", "val", "test"), ("real", "adm", *PAPER_TEST_GENERATORS))
+    rows = _paper_matrix_rows()
     _require_paper_cells(rows, {"train": ("real", "adm"), "val": ("real", "adm"),
                                 "test": ("real", *PAPER_TEST_GENERATORS)})
     imagenet_sha = _sha256(PAPER_IMAGENET_CKPT)
