@@ -24,6 +24,89 @@ modal = pytest.importorskip("modal")
 from dire_zero import modal_app  # noqa: E402
 
 
+def _write_map_cache_fixture(tmp_path: Path, monkeypatch):
+    import hashlib
+
+    data = tmp_path / "data"
+    source = data / "train" / "adm" / "sample.png"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"source placeholder")
+    manifest = data / "manifest.tsv"
+    manifest.write_text("png\\tlabel\\ntrain/adm/sample.png\\t1\\n", encoding="utf-8")
+    maps_root = tmp_path / "rebuild" / "maps" / "map-source"
+    map_path = maps_root / "train" / "adm" / "sample.npy"
+    map_path.parent.mkdir(parents=True)
+    map_path.write_bytes(b"cached map")
+    monkeypatch.setattr(modal_app, "DATA", str(data))
+    monkeypatch.setattr(modal_app, "MANIFEST", str(manifest))
+    monkeypatch.setattr(modal_app, "REBUILD_MAPS_ROOT", str(tmp_path / "rebuild" / "maps"))
+    monkeypatch.setattr(modal_app, "OUT", str(tmp_path / "runs"))
+    (maps_root / "_run_config.json").write_text(json.dumps({
+        "steps": 20, "dtype": "float16", "scale": "[0, 2]",
+        "splits": ["train"], "ckpt_sha256": "adm-sha",
+    }), encoding="utf-8")
+    (maps_root / "dire.json").write_text(json.dumps({
+        "steps": 20, "steps_mixed": [20], "ckpt_sha256": "adm-sha",
+        "runs": [{"steps": 20, "ckpt_sha256": "adm-sha"}],
+        "items": [{"path": "train/adm/sample.npy", "source": str(source)}],
+    }), encoding="utf-8")
+    report_path = tmp_path / "runs" / "rebuild" / "map-source" / "report.json"
+    report_path.parent.mkdir(parents=True)
+    report_path.write_text(json.dumps({"data": {"manifest_sha256": hashlib.sha256(
+        manifest.read_bytes()).hexdigest()}}), encoding="utf-8")
+    return source, map_path, manifest
+
+
+def test_paper_matrix_rows_uses_only_adm_for_train_and_val(monkeypatch):
+    generators = ("real", "adm", "iddpm", "pndm", "stylegan", "ddpm", "sdv1")
+    rows = [{"split": split, "generator": gen, "path": f"/{split}/{gen}/x.png"}
+            for split in ("train", "val", "test") for gen in generators]
+    monkeypatch.setattr(modal_app, "_paper_image_rows", lambda _splits, _generators: rows)
+
+    selected = modal_app._paper_matrix_rows()
+
+    assert {(r["split"], r["generator"]) for r in selected if r["split"] != "test"} == {
+        (split, gen) for split in ("train", "val") for gen in ("real", "adm")
+    }
+    assert {(r["split"], r["generator"]) for r in selected if r["split"] == "test"} == {
+        ("test", gen) for gen in ("real", "adm", "ddpm", "iddpm", "pndm", "sdv1")
+    }
+
+
+def test_cached_dire_maps_are_reused_read_only_with_matching_provenance(tmp_path: Path, monkeypatch):
+    source, map_path, _manifest = _write_map_cache_fixture(tmp_path, monkeypatch)
+    result = modal_app._rows_from_cached_dire_maps([{
+        "path": str(source), "name": source.name, "split": "train",
+        "generator": "adm", "label": 1,
+    }], "map-source", steps=20, ckpt_sha256="adm-sha")
+
+    assert result == [{
+        "name": "sample.npy", "path": str(map_path), "label": 1, "split": "train",
+        "generator": "adm", "sample_id": "train/adm/sample.png",
+    }]
+    assert map_path.read_bytes() == b"cached map"
+
+
+def test_cached_dire_maps_fail_closed_on_manifest_mismatch(tmp_path: Path, monkeypatch):
+    source, _map_path, manifest = _write_map_cache_fixture(tmp_path, monkeypatch)
+    manifest.write_text("changed manifest", encoding="utf-8")
+    with pytest.raises(ValueError, match="manifest hiện tại khác"):
+        modal_app._rows_from_cached_dire_maps([{
+            "path": str(source), "name": source.name, "split": "train",
+            "generator": "adm", "label": 1,
+        }], "map-source", steps=20, ckpt_sha256="adm-sha")
+
+
+def test_cached_dire_maps_refuse_incomplete_full_dataset(tmp_path: Path, monkeypatch):
+    source, map_path, _manifest = _write_map_cache_fixture(tmp_path, monkeypatch)
+    map_path.unlink()
+    with pytest.raises(FileNotFoundError, match="không train trên subset"):
+        modal_app._rows_from_cached_dire_maps([{
+            "path": str(source), "name": source.name, "split": "train",
+            "generator": "adm", "label": 1,
+        }], "map-source", steps=20, ckpt_sha256="adm-sha")
+
+
 def test_app_name_and_image():
     assert modal_app.APP_NAME == "dire-zero"
     # Một volume, một gốc — bố cục cũ hai volume đã bị thay (xem dire_zero/volume.py).

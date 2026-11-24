@@ -35,7 +35,19 @@ modal run -m dire_zero.modal_app::table4 --run-id table4-<id> --steps 20
 modal run -m dire_zero.modal_app::table4 --run-id table4-<id> --steps 50
 ```
 
-Mỗi S có thư mục riêng `experiments/table4/<id>/S<S>/`; ledger `table4.json` liệt kê `missing_steps` tới khi đủ bốn S. Mỗi S cần tự tính map cho train/val `real+ADM` và test `real+5 generator`, rồi train detector riêng. Không dùng map S=20 cho S khác. Khi đủ, tải ledger và dựng CSV/Markdown:
+Mỗi S có thư mục riêng `experiments/table4/<id>/S<S>/`; ledger `table4.json` liệt kê `missing_steps` tới khi đủ bốn S. S=5/10/50 cần map riêng; tuyệt đối không dùng map S=20 cho các S đó. Với Table 4/5, map train/val chỉ cần `real+ADM`; các generator khác chỉ cần map ở test. Không cần tạo train map cho `iddpm`, `pndm`, `stylegan` nếu chúng không nằm trong train protocol.
+
+### Tái sử dụng map S=20 đã có
+
+Có thể truyền `--source-map-run-id` để Table 4 S=20 đọc DIRE map trực tiếp trong namespace rebuild, không copy và không ghi đè map cũ:
+
+```bash
+modal run -m dire_zero.modal_app::table4 --run-id table4-<id> --steps 20 --source-map-run-id rebuild-2026-10-14
+```
+
+Trước khi huấn luyện, runner khóa checkpoint ADM, manifest, `steps_mixed`, `_run_config.json` và đường dẫn nguồn trong `dire.json`. Nếu map nguồn chưa đủ mọi ảnh trong protocol hoặc provenance không khớp, runner dừng — không tự tính lại DIRE và không train trên tập con. **Inventory trước đó mới xác nhận mốc 1.000 ảnh mỗi ô** (ví dụ train/real và train/adm có 40.000 ảnh nhưng 1.000 map), nên chưa đủ cho full-dataset. Test hiện cũng thiếu `sdv1`; `sdv2` không thay thế được `sdv1`.
+
+Khi đủ, tải ledger và dựng CSV/Markdown:
 
 ```bash
 modal volume get dire-zero experiments/table4/table4-<id>/table4.json ./table4.json
@@ -52,7 +64,11 @@ modal run -m dire_zero.modal_app::table5_train --run-id table5-<id> --representa
 modal run -m dire_zero.modal_app::table5_train --run-id table5-<id> --representation DIRE
 ```
 
-`table5_prepare` tính triplet một lần ở S=20 rồi lưu tensor riêng theo representation. Mỗi detector train chỉ trên ảnh thật + ADM; evaluator chấm từng generator test riêng. `table5.json` báo representation/cột còn thiếu. RGB+DIRE dùng stem ResNet 6 kênh; ImageNet conv1 được khởi tạo bằng cách lặp hai nhánh RGB và chia đôi trọng số, chi tiết này được ghi lại trong source và cần xác nhận theo implementation tác giả nếu yêu cầu đối chiếu chính xác. Tải ledger rồi kết xuất bảng:
+`table5_prepare` tính triplet một lần ở S=20 rồi lưu tensor riêng theo representation. Mỗi detector train chỉ trên ảnh thật + ADM; evaluator chấm từng generator test riêng. `table5.json` báo representation/cột còn thiếu. RGB+DIRE dùng stem ResNet 6 kênh; ImageNet conv1 được khởi tạo bằng cách lặp hai nhánh RGB và chia đôi trọng số, chi tiết này được ghi lại trong source và cần xác nhận theo implementation tác giả nếu yêu cầu đối chiếu chính xác.
+
+Lưu ý: map `.npy` chỉ giữ `|RGB − reconstruction|`, không có reconstruction để tạo representation REC. Do đó chỉ inventory map cũ không đủ để dựng REC; nếu không có reconstruction đã lưu đúng protocol thì `table5_prepare` vẫn phải chạy phép tính diffusion để lấy reconstruction (không ghi vào namespace map cũ). Không gọi đây là “tái sử dụng hoàn toàn không tính DIRE”.
+
+Tải ledger rồi kết xuất bảng:
 
 ```bash
 modal volume get dire-zero experiments/table5/table5-<id>/table5.json ./table5.json
