@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-r"""Compare a small sample of published DIRE maps with this repo's DIRE pipeline.
+r"""Recompute DIRE from source images and compare the results against the author's
+published DIRE maps. Raw image pixels are never compared directly with DIRE maps.
 
 This is a LOCAL verification tool. It never extracts archives to disk, writes maps,
-starts Modal, or modifies input files. It only reads the image/map tarballs and ADM
-checkpoint; an optional JSON report is created with exclusive (no-overwrite) mode.
+starts Modal, or modifies input files. It only reads source-image/map tarballs and
+ADM checkpoint; an optional JSON report is created with exclusive (no-overwrite) mode.
 
 Pairing is deliberately strict: by default image and map members must have unique
 matching filename stems. Use --pairing order only when independent evidence shows
@@ -16,8 +17,8 @@ unless archive metadata/source confirms it.
 
 Example (PowerShell):
   python tools/check_published_dire.py `
-    --images 'F:\DiffusionForensics\images\train\lsun_bedroom\adm.tar.gz' `
-    --maps 'F:\DiffusionForensics\dire\train\lsun_bedroom\adm.tar.gz' `
+    --source-images 'F:\DiffusionForensics\images\train\lsun_bedroom\adm.tar.gz' `
+    --published-maps 'F:\DiffusionForensics\dire\train\lsun_bedroom\adm.tar.gz' `
     --checkpoint 'F:\DiffusionForensics\checkpoints\256x256_diffusion_uncond.pt' `
     --sample 8 --steps 20 --device cuda
 
@@ -179,7 +180,7 @@ def run(args: argparse.Namespace) -> dict:
     from dire_zero.checkpoint import load_adm
     from dire_zero.diffusion import ModelCounter, Schedule, dire_map, from_uint8
 
-    for key in ("images", "maps", "checkpoint"):
+    for key in ("source_images", "published_maps", "checkpoint"):
         p = Path(getattr(args, key)).expanduser()
         if not p.is_file():
             raise FileNotFoundError(f"Không thấy --{key}: {p}")
@@ -193,7 +194,7 @@ def run(args: argparse.Namespace) -> dict:
     dtype = "float16" if device == "cuda" else "float32"
     started = time.time()
 
-    with tarfile.open(args.images, "r:*") as image_tar, tarfile.open(args.maps, "r:*") as map_tar:
+    with tarfile.open(args.source_images, "r:*") as image_tar, tarfile.open(args.published_maps, "r:*") as map_tar:
         image_members = _image_members(image_tar, IMAGE_EXTS)
         map_members = _image_members(map_tar, MAP_EXTS)
         pairs, pairing_info = _pair_members(image_members, map_members, args.pairing)
@@ -226,21 +227,23 @@ def run(args: argparse.Namespace) -> dict:
             with torch.inference_mode():
                 computed, _recon = dire_map(counter, image_tensor, schedule)
             nfe = counter.nfe
-            computed_np = computed.squeeze(0).detach().float().cpu().permute(1, 2, 0).numpy()
-            # Repository stores maps as float16 after DIRE computation.
-            computed_np = computed_np.astype(np.float16).astype(np.float32)
-            archived_np = map_arr
+            recomputed_map = computed.squeeze(0).detach().float().cpu().permute(1, 2, 0).numpy()
+            # ::dire stores its freshly computed map as float16.
+            recomputed_map = recomputed_map.astype(np.float16).astype(np.float32)
+            published_map = map_arr
             record = {
-                "image_member": image_member.name,
-                "map_member": map_member.name,
+                "source_image_member": image_member.name,
+                "published_map_member": map_member.name,
+                "comparison_target": "recomputed_DIRE_map_vs_published_DIRE_map",
                 "map_storage": map_info,
                 "nfe": nfe,
                 "expected_nfe": 2 * args.steps,
-                "comparison": _metrics(computed_np, archived_np, args.atol, args.rtol),
+                "comparison": _metrics(recomputed_map, published_map, args.atol, args.rtol),
             }
             records.append(record)
             print(
-                f"[{index}/{args.sample}] {image_member.name} ↔ {map_member.name} | "
+                f"[{index}/{args.sample}] source {image_member.name} → DIRE mới ↔ "
+                f"DIRE tác giả {map_member.name} | "
                 f"MAE={record['comparison']['mae']:.6g}, "
                 f"max={record['comparison']['max_abs_error']:.6g}, "
                 f"within={record['comparison']['fraction_within_atol_rtol']:.2%}, NFE={nfe}"
@@ -252,8 +255,9 @@ def run(args: argparse.Namespace) -> dict:
             "Kết quả chỉ áp dụng cho các archive, checkpoint, steps, encoding và mẫu đã kiểm tra; "
             "không chứng minh toàn bộ archive khớp hoặc tái lập protocol Table 4/5."
         ),
-        "images_archive": str(args.images),
-        "maps_archive": str(args.maps),
+        "source_images_archive": str(args.source_images),
+        "published_dire_maps_archive": str(args.published_maps),
+        "comparison_target": "recomputed_DIRE_map_vs_published_DIRE_map",
         "checkpoint": str(args.checkpoint),
         "checkpoint_sha256": _sha256(args.checkpoint),
         "steps": args.steps,
@@ -271,8 +275,10 @@ def run(args: argparse.Namespace) -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--images", required=True, help="archive ảnh gốc, ví dụ images/train/lsun_bedroom/adm.tar.gz")
-    parser.add_argument("--maps", required=True, help="archive DIRE tương ứng, ví dụ dire/train/lsun_bedroom/adm.tar.gz")
+    parser.add_argument("--source-images", "--images", dest="source_images", required=True,
+                        metavar="TAR", help="archive ẢNH GỐC, chỉ làm đầu vào để tính DIRE mới")
+    parser.add_argument("--published-maps", "--maps", dest="published_maps", required=True,
+                        metavar="TAR", help="archive DIRE_MAP CỦA TÁC GIẢ để so với map vừa tính")
     parser.add_argument("--checkpoint", required=True, help="ADM-LSUN checkpoint 256x256 dùng với ::dire")
     parser.add_argument("--sample", type=int, default=8, help="số cặp ngẫu nhiên có seed (mặc định: 8)")
     parser.add_argument("--seed", type=int, default=3407)
