@@ -44,10 +44,14 @@ def _metric_values(cell: dict | None) -> tuple[str, str, str, str]:
 def build_tables(table4: dict | None, table5: dict | None, *, allow_partial: bool = False) -> dict:
     missing = []
     protocol_notes = []
-    for ledger in (table4, table5):
+    for name, ledger in (("Table 4", table4), ("Table 5", table5)):
         note = (ledger or {}).get("test_generator_scope_note")
         if note and note not in protocol_notes:
             protocol_notes.append(str(note))
+        if ledger and ledger.get("subset_status") == "pilot":
+            missing.append(f"{name} uses a pilot subset ({ledger.get('per_cell')} per cell); not a full-data paper result")
+        elif ledger and ledger.get("subset_status") == "full-data":
+            protocol_notes.append(f"{name} subset snapshot covers all source rows (full-data stage)")
     t4_rows = []
     if table4 is not None:
         by_steps = table4.get("by_steps") or {}

@@ -846,7 +846,12 @@ def f4_robustness(args) -> dict:
     ax.grid(axis="y", lw=0.35, alpha=0.4)
     ax.legend(frameon=False, ncol=2, fontsize=5.2, loc="lower left")
     fig.tight_layout()
-    _stamp(fig, plt, args.label, "DIRE tính lại sau perturbation; RGB là baseline ResNet-50 của dự án")
+    subset = payload.get("subset") or {}
+    subset_status = str(subset.get("subset_status", "full-data"))
+    subtitle = "DIRE tính lại sau perturbation; RGB là baseline ResNet-50 của dự án"
+    if subset_status == "pilot":
+        subtitle = f"PILOT SUBSET · {subset.get('per_cell')} / cell · " + subtitle
+    _stamp(fig, plt, args.label, subtitle)
     return _save(fig, plt, Path(args.out), "f4-robustness", {
         "figure": "F4",
         "kind": "measurement",
@@ -858,7 +863,10 @@ def f4_robustness(args) -> dict:
         "cmd": f"python tools/figures.py f4-robustness --out figs --results {source}",
         "conditions": names,
         "series": seen,
-        "warnings": [
+        "subset": subset or None,
+        "subset_status": subset_status,
+        "warnings": (["Figure 4 uses a pilot subset; this is not a full-data paper result"]
+                     if subset_status == "pilot" else []) + [
             "paper Figure 4 uses CNNDetection* and PatchForensics* baselines; this run plots project ResNet-50 RGB vs DIRE and is not an exact reproduction of those baselines",
             "paper text leaves unclear whether DIRE is recomputed after perturbation; this run follows the explicit recompute policy in its input ledger",
             str((payload.get("protocol") or {}).get("test_generator_scope_note") or
