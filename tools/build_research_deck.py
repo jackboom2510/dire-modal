@@ -39,6 +39,7 @@ from reportlab.platypus import Paragraph
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "platforms/site"
+ILLUSTRATIONS = SITE / "illustrations"
 OUT_PPTX = SITE / "dire-research-complete.pptx"
 OUT_PDF = SITE / "dire-research-complete.pdf"
 EQ_SOURCE = SITE / "dire-research-equations.tex"
@@ -383,6 +384,14 @@ VI_COPY = {
     "R1+R2 means self-computed maps and self-trained detector — not self-generated images": "R1+R2 nghĩa là tự tính map và tự huấn luyện detector — không phải tự sinh ảnh",
     "An archived ADM test pair links an original image to a display-only DIRE map": "Một cặp ADM đã lưu nối ảnh gốc với DIRE map chỉ dùng để hiển thị",
     "Pilot protocol shares a fixed 200-per-cell subset across S settings": "Giao thức pilot dùng chung tập con 200 ảnh/ô cho các mức S",
+    "The reverse step is not an algebraically exact inverse after finite-step discretization, clipping, or finite precision. That non-zero reconstruction error is the representation being measured.": "Bước ngược không phải phép đảo đại số chính xác khi số bước hữu hạn, có clipping hoặc sai số số học. Sai số tái tạo khác không chính là biểu diễn được đo.",
+    "Paper's qualitative claim: DIRE changes little; RGB baselines degrade more. The plot's pixel values are not tabulated in the cited paper copy, so this deck does not invent exact AP points.": "Nhận định định tính của bài báo: DIRE thay đổi ít, baseline RGB suy giảm nhiều hơn. Bản bài báo trích dẫn không công bố số pixel của đồ thị nên slide không tự đặt điểm AP.",
+    "R1+R2 means self-computed maps and self-trained detector — not self-generated images": "R1+R2 nghĩa là tự tính map và tự huấn luyện bộ phân loại — không phải tự sinh ảnh",
+    "Paper Table 4 and project Table 4 are not directly comparable experiments": "Table 4 bài báo và pilot dự án không phải thí nghiệm so sánh trực tiếp",
+    "The strongest deliverable today is a transparent evidence system — not a full reproduction": "Sản phẩm vững nhất hiện nay là hệ thống bằng chứng minh bạch — chưa phải tái lập toàn bộ",
+    "High paper scores do not close the mechanism, domain and deployment questions": "Điểm cao trong bài báo chưa giải đáp câu hỏi về cơ chế, miền dữ liệu và triển khai",
+    "A completed scientific cell requires metrics, labels, counts and compatible provenance": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích",
+    "DIRE ResNet emits one logit; sigmoid converts it to P(fake)": "ResNet DIRE tạo một logit; sigmoid chuyển thành P(fake)",
     "Recorded test AP remains high at S=5/10/20; S=50 is absent, not extrapolated": "AP kiểm thử đã ghi nhận tại S=5/10/20; không vẽ ngoại suy",
     "Pooled cells reveal weaker PNDM AP as S rises in this pilot snapshot": "Trong pilot này, AP của PNDM giảm khi S tăng",
     "Paper Table 4 and project Table 4 are not directly comparable experiments": "Table 4 bài báo và Table 4 dự án không phải hai thí nghiệm so sánh trực tiếp",
@@ -417,18 +426,611 @@ VI_COPY = {
     "Per cell": "Theo ô",
     "After": "Sau",
     "For claims": "Khi kết luận",
+    "The project's representation ablation is available; this project's Table 5 remains unmeasured": "Bài báo có ablation biểu diễn; Table 5 của dự án chưa được đo",
+    "The paper's representation ablation is available; this project's Table 5 remains unmeasured": "Bài báo có ablation biểu diễn; Table 5 của dự án chưa được đo",
+    "Table 2 source values: complete 4 × 8 DIRE block (ACC / AP, %)": "Số liệu nguồn Table 2: đầy đủ khối DIRE 4 × 8 (ACC / AP, %)",
+    "Author-reported mean ACC ranges from 97.9% to 99.9% across training generators": "ACC trung bình do tác giả báo cáo nằm trong khoảng 97,9%–99,9% theo bộ sinh huấn luyện",
+    "Changing dataset domain can be harder than changing generator family": "Đổi miền dữ liệu có thể khó hơn đổi họ bộ sinh",
+    "The paper's qualitative claim: DIRE changes little; RGB baselines degrade more.": "Nhận định định tính của bài báo: DIRE thay đổi ít; baseline RGB suy giảm nhiều hơn.",
+    "The paper's qualitative claim: DIRE changes little; RGB baselines degrade more. The plot's pixel values are not tabulated in the cited paper copy, so this deck does not invent exact AP points.": "Nhận định định tính của bài báo: DIRE thay đổi ít; baseline RGB suy giảm nhiều hơn. Bài báo không công bố số pixel trong đồ thị nên slide không tự đặt điểm AP.",
+    "The paper's representation ablation is available; this project's Table 5 remains unmeasured": "Bài báo có ablation biểu diễn; Table 5 của dự án chưa được đo",
+    "Paper Table 4 and project Table 4 are not directly comparable experiments": "Table 4 bài báo và pilot dự án không phải thí nghiệm so sánh trực tiếp",
+    "Table 5 inputs are staged; this checkout contains no project result ledger": "Đầu vào Table 5 đã chuẩn bị; checkout này chưa có sổ kết quả dự án",
+    "The project has a robustness protocol, but no Figure 4 results ledger": "Dự án có giao thức độ bền vững nhưng chưa có sổ kết quả Hình 4",
+    "AEROBLADE shares the reconstruction-error intuition but uses an autoencoder": "AEROBLADE cùng trực giác sai số tái tạo nhưng dùng autoencoder",
+    "DIRE ResNet emits one logit; sigmoid converts it to P(fake)": "ResNet DIRE tạo một logit; sigmoid chuyển thành P(fake)",
+    "Paper Table 2 reports strong cross-generator results for four DIRE detectors": "Table 2 báo cáo khả năng tổng quát hóa chéo bộ sinh cao ở bốn detector DIRE",
+    "Paper Table 5 supports DIRE over RGB or reconstruction alone": "Table 5 bài báo ủng hộ DIRE hơn RGB hoặc ảnh tái tạo riêng lẻ",
+    "Paper Figure 4 reports qualitative robustness to blur and JPEG compression": "Hình 4 báo cáo định tính độ bền vững trước làm mờ và nén JPEG",
+    "A deterministic diffusion round trip yields a structured residual.": "Vòng khuếch tán tất định tạo ra sai số tái tạo có cấu trúc.",
+    "Paper results and repo results must stay in separate lanes.": "Kết quả bài báo và số đo repo phải được trình bày riêng.",
+    "Resolve dates, live state and metrics before more compute.": "Đối chiếu nguồn, trạng thái và metric trước khi diễn giải thêm.",
+    "Property": "Thuộc tính",
+    "Model family": "Họ mô hình",
+    "Dataset / scale": "Tập dữ liệu / quy mô",
+    "Detector training": "Huấn luyện bộ phân loại",
+    "Train source": "Nguồn huấn luyện",
+    "Test generator": "Bộ sinh kiểm thử",
+    "Test generators": "Các bộ sinh kiểm thử",
+    "Train generator": "Bộ sinh huấn luyện",
+    "Steps": "Số bước",
+    "Dimension": "Khía cạnh",
+    "Value": "Giá trị",
+    "Interpretation": "Diễn giải",
+    "Setting": "Thiết lập",
+    "Transform": "Phép biến đổi",
+    "Domain / score": "Miền / điểm số",
+    "Compute": "Tính toán",
+    "Decision": "Quyết định",
+    "Stage": "Giai đoạn",
+    "Epochs run": "Epoch đã chạy",
+    "Best epoch": "Epoch tốt nhất",
+    "Val AP": "AP trên tập xác thực",
+    "Val threshold": "Ngưỡng trên tập xác thực",
+    "Threshold": "Ngưỡng",
+    "Current purpose": "Mục đích hiện tại",
+    "Boundary": "Giới hạn",
+    "Source": "Nguồn",
+    "Artifact": "Hiện vật",
+    "Reported": "Được báo cáo",
+    "results": "kết quả",
+    "metrics": "metric",
+    "training": "huấn luyện",
+    "evaluation": "đánh giá",
+    "threshold": "ngưỡng",
+    "generator": "bộ sinh",
+    "model": "mô hình",
+    "layers": "các lớp",
+    "layer": "lớp",
+    "blocks": "các khối",
+    "block": "khối",
+    "attention": "attention",
+    "features": "đặc trưng",
+    "feature": "đặc trưng",
+    "image": "ảnh",
+    "images": "ảnh",
+    "input": "đầu vào",
+    "output": "đầu ra",
+    "reconstruction": "tái tạo",
+    "residual": "sai số tái tạo",
+    "source": "nguồn",
+    "result": "kết quả",
+    "report": "báo cáo",
+    "project": "dự án",
+    "paper": "bài báo",
+    "current": "hiện tại",
+    "missing": "chưa có",
+    "complete": "đầy đủ",
+    "full": "toàn bộ",
+    "only": "chỉ",
+    "with": "với",
+    "without": "không có",
+    "across": "xuyên",
+    "between": "giữa",
+    "per": "mỗi",
+    "clean": "sạch",
+    "blur": "làm mờ",
+    "compression": "nén",
+    "baseline": "đối chứng",
+    "representation": "biểu diễn",
+    "sample": "mẫu",
+    "samples": "mẫu",
+    "records": "bản ghi",
+    "average": "trung bình",
+    "accuracy": "độ chính xác",
+    "score": "điểm số",
+    "robustness": "độ bền vững",
+    "references": "tài liệu tham khảo",
+    "implementation": "triển khai",
+    "independent": "độc lập",
+    "identity": "đồng nhất",
+    "shortcut": "nhánh tắt",
+    "global": "toàn cục",
+    "local": "cục bộ",
+    "stochastic": "ngẫu nhiên",
+    "deterministic": "tất định",
+    "trained": "được huấn luyện",
+    "train": "huấn luyện",
+    "Train": "Huấn luyện",
+    "test": "kiểm thử",
+    "Test": "Kiểm thử",
+    "tested": "được kiểm thử",
+    "uses": "dùng",
+    "use": "dùng",
+    "used": "được dùng",
+    "learns": "học",
+    "learned": "đã học",
+    "emits": "tạo ra",
+    "converts": "chuyển thành",
+    "reports": "báo cáo",
+    "reported": "được báo cáo",
+    "remains": "vẫn",
+    "remain": "vẫn",
+    "requires": "cần",
+    "supports": "hỗ trợ",
+    "compares": "so sánh",
+    "compare": "so sánh",
+    "degrade": "suy giảm",
+    "degrades": "suy giảm",
+    "include": "bao gồm",
+    "includes": "bao gồm",
+    "available": "có sẵn",
+    "currently": "hiện nay",
+    "actual": "thực tế",
+    "author": "tác giả",
+    "authors": "các tác giả",
+    "Report": "Báo cáo",
+    "results": "kết quả",
+    "scores": "điểm số",
+    "score": "điểm số",
+    "metric": "chỉ số",
+    "metrics": "các chỉ số",
+    "maps": "bản đồ",
+    "reconstruct": "tái tạo",
+    "inversion": "phép đảo",
+    "architecture": "kiến trúc",
+    "protocol": "giao thức",
+    "evaluation": "đánh giá",
+    "detector": "bộ phân loại",
+    "detectors": "các bộ phân loại",
+    "models": "các mô hình",
+    "dataset": "tập dữ liệu",
+    "datasets": "các tập dữ liệu",
+    "domain": "miền",
+    "reference": "tham chiếu",
+    "references": "tài liệu tham khảo",
+    "property": "thuộc tính",
+    "properties": "các thuộc tính",
+    "dimension": "khía cạnh",
+    "dimensions": "các khía cạnh",
+    "setting": "thiết lập",
+    "settings": "các thiết lập",
+    "value": "giá trị",
+    "values": "các giá trị",
+    "inputs": "đầu vào",
+    "outputs": "đầu ra",
+    "layers": "các lớp",
+    "blocks": "các khối",
+    "step": "bước",
+    "steps": "các bước",
+    "samples": "mẫu",
+    "records": "bản ghi",
+    "record": "bản ghi",
+    "cell": "ô",
+    "cells": "các ô",
+    "scale": "quy mô",
+    "execution": "thực thi",
+    "maximum": "tối đa",
+    "about": "khoảng",
+    "real": "thật",
+    "fake": "giả",
+    "unmeasured": "chưa đo",
+    "measured": "được đo",
+    "baseline": "đối chứng",
+    "mild": "nhẹ",
+    "medium": "vừa",
+    "strong": "mạnh",
+    "heavy": "mạnh",
+    "compression": "nén",
+    "Global": "Toàn cục",
+    "and": "và",
+    "or": "hoặc",
+    "of": "của",
+    "the": "",
+    "a": "",
+    "an": "",
+    "in": "trong",
+    "on": "trên",
+    "at": "tại",
+    "from": "từ",
+    "with": "với",
+    "without": "không có",
+    "for": "cho",
+    "by": "theo",
+    "across": "qua",
+    "between": "giữa",
+    "under": "dưới",
+    "over": "trên",
+    "to": "tới",
+    "than": "hơn",
+    "as": "như",
+    "each": "mỗi",
+    "all": "toàn bộ",
+    "only": "chỉ",
+    "not": "không",
+    "is": "là",
+    "are": "là",
+    "was": "đã",
+    "were": "đã",
+    "has": "có",
+    "have": "có",
+    "can": "có thể",
+    "does": "làm",
+    "this": "này",
+    "these": "này",
+    "those": "đó",
+    "their": "của chúng",
+    "its": "của nó",
+    "into": "thành",
+    "where": "nơi",
+    "when": "khi",
+    "because": "vì",
+    "while": "trong khi",
+    "but": "nhưng",
+    "yet": "tuy nhiên",
+    "instead": "thay vào đó",
+    "higher": "cao hơn",
+    "lower": "thấp hơn",
+    "complete": "hoàn chỉnh",
+    "full": "đầy đủ",
+    "qualitative": "định tính",
+    "quantitative": "định lượng",
+    "one": "một",
+    "two": "hai",
+    "first": "đầu tiên",
+    "second": "thứ hai",
+    "means": "có nghĩa là",
+    "range": "khoảng",
+    "Diffusion Reconstruction Error · nền tảng toán học, kiến trúc mô hình,\\nđối chiếu paper và trạng thái pilot theo artifacts trong repo": "Sai số tái tạo khuếch tán (DIRE) · nền tảng toán học, kiến trúc mô hình,\\nđối chiếu bài báo và trạng thái thử nghiệm theo hiện vật trong kho mã",
+    "Editable PPTX + PDF  ·  equations typeset from LaTeX source": "PPTX + PDF có thể chỉnh sửa · công thức được dàn trang từ mã LaTeX",
+    "Train and test can differ in p_g: recognizing one generator's fingerprint is not the same as general synthetic-image detection.": "Phân phối bộ sinh p_g có thể khác giữa huấn luyện và kiểm thử: nhận diện dấu vết của một bộ sinh không đồng nghĩa phát hiện ảnh tổng hợp nói chung.",
+    "A model may learn generator fingerprints rather than a robust cue.": "Mô hình có thể học dấu vân tay của bộ sinh thay vì dấu hiệu bền vững.",
+    "Find a representation that remains useful when test generator ≠ train generator.": "Tìm biểu diễn vẫn hữu ích khi bộ sinh kiểm thử khác bộ sinh huấn luyện.",
+    "VAE latent diffusion": "Khuếch tán trong không gian ẩn VAE",
+    "Pixel diffusion / ADM": "Khuếch tán trên pixel / ADM",
+    "Autoregressive, EBM and flow-matching models are outside the HTML survey's scope; do not generalize from this table.": "Mô hình tự hồi quy, EBM và flow-matching nằm ngoài phạm vi tài liệu HTML; không khái quát hóa từ bảng này.",
+    "Better reconstruction ↔ posterior in latent space is close to the prior; the encoder only approximates the posterior.": "Tái tạo tốt hơn ↔ hậu nghiệm trong không gian ẩn gần với phân phối tiên nghiệm; bộ mã hóa chỉ xấp xỉ hậu nghiệm.",
+    "VAE is the latent-space encoder/decoder inside latent diffusion models.": "VAE là bộ mã hóa/giải mã không gian ẩn bên trong mô hình khuếch tán tiềm ẩn.",
+    "GAN learns an adversarial generator; it has no explicit image-to-latent inverse.": "GAN học bộ sinh đối kháng, không có phép nghịch đảo ảnh–không gian ẩn tường minh.",
+    "A basic GAN has no integrated likelihood or inverse; latent recovery requires separate optimization.": "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để tìm không gian ẩn.",
+    "An ideal normalizing flow is exactly invertible — eliminating DIRE reconstruction-error signal.": "Dòng chuẩn hóa lý tưởng có phép nghịch đảo chính xác — làm mất tín hiệu sai số tái tạo DIRE.",
+    "IDEAL CONSEQUENCE / Choose I=f and R=f⁻¹ (or vice versa): R(I(x))=x for all x, so DIRE(x)=0. This is a mathematical implication of exact invertibility — not an experimental result in the DIRE paper.": "HỆ QUẢ LÝ TƯỞNG / Chọn I=f và R=f⁻¹ (hoặc ngược lại): R(I(x))=x với mọi x, nên DIRE(x)=0. Đây là hệ quả toán học của khả năng nghịch đảo chính xác, không phải kết quả thực nghiệm trong bài DIRE.",
+    "VQ-Diffusion and latent diffusion move the diffusion trajectory into a different space.": "VQ-Diffusion và khuếch tán tiềm ẩn đưa quỹ đạo khuếch tán sang không gian khác.",
+    "LDM diffuses continuously in VAE latent space.": "LDM khuếch tán liên tục trong không gian ẩn VAE.",
+    "Discrete diffusion over codebook tokens; quantization error belongs to the representation. This model is in the paper's generator benchmark.": "Khuếch tán rời rạc trên token codebook; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này có trong benchmark bộ sinh của bài báo.",
+    "VAE encoder → latent-space DDIM trajectory → VAE decoder. The DIRE paper still uses pixel-space ADM as its reconstruction reference.": "Bộ mã hóa VAE → quỹ đạo DDIM trong không gian ẩn → bộ giải mã VAE. Bài DIRE vẫn dùng ADM trên pixel làm tham chiếu tái tạo.",
+    "The model-space difference matters: the detected generator is not the reconstruction backbone.": "Khác biệt về không gian mô hình rất quan trọng: bộ sinh được phát hiện không phải backbone tái tạo.",
+    "Same backbone, schedule and timesteps; inversion is approximate, not stochastic.": "Giữ nguyên backbone, lịch khuếch tán và timestep; phép đảo là xấp xỉ, không phải ngẫu nhiên.",
+    "The residual distributions of real and generated images must differ; this must be measured.": "Phân phối sai số tái tạo của ảnh thật và ảnh tổng hợp phải khác nhau; cần đo kiểm.",
+    "ADM uses a linear β_t schedule; cumulative ᾱ_t gradually reduces the signal.": "ADM dùng lịch β_t tuyến tính; ᾱ_t tích lũy làm tín hiệu suy giảm dần.",
+    "ε in the forward process explains the noise target during diffusion training; DDIM inference chooses a deterministic path.": "ε trong quá trình thuận là mục tiêu nhiễu khi huấn luyện diffusion; suy luận DDIM chọn quỹ đạo tất định.",
+    "ADM uses epsilon prediction. Timestep embedding supplies t to every block; the simplified loss is a practical training form related to ELBO.": "ADM dự đoán epsilon. Nhúng timestep cung cấp t cho mọi khối; hàm mất mát rút gọn là dạng huấn luyện thực dụng liên hệ với ELBO.",
+    "ADM uses an encoder–bottleneck–decoder with multi-scale skip connections": "ADM dùng bộ mã hóa–nút thắt–giải mã với các kết nối tắt đa tỉ lệ",
+    "Timestep embedding enters each stage; attention is placed at 32×32, 16×16 and 8×8 feature maps.": "Nhúng timestep đi vào từng tầng; attention được đặt tại bản đồ đặc trưng 32×32, 16×16 và 8×8.",
+    "SKIP CONNECTIONS · preserve shallow detail across the bottleneck": "KẾT NỐI TẮT · giữ chi tiết tầng nông qua nút thắt",
+    "Down: reduce resolution, increase representation capacity. Bottleneck: global context. Up: restore detail through skips. This is an architecture diagram, not a tensor visualization.": "Đi xuống: giảm độ phân giải, tăng năng lực biểu diễn. Nút thắt: ngữ cảnh toàn cục. Đi lên: khôi phục chi tiết qua kết nối tắt. Đây là sơ đồ kiến trúc, không phải trực quan hóa tensor.",
+    "Block errors learn local transforms; attention exchanges global information.": "Các khối sai số học phép biến đổi cục bộ; attention trao đổi thông tin toàn cục.",
+    "Q, K, V projections / across spatial positions": "Phép chiếu Q, K, V / trên các vị trí không gian",
+    "Local filters highlight vertical edges, horizontal edges and detail; each kernel produces a different feature map.": "Bộ lọc cục bộ làm nổi cạnh dọc, cạnh ngang và chi tiết; mỗi kernel tạo một bản đồ đặc trưng khác nhau.",
+    "The main path transforms features; the shortcut adds them back before ReLU to preserve information and gradient flow.": "Nhánh chính biến đổi đặc trưng; nhánh tắt cộng lại trước ReLU để duy trì luồng thông tin và gradient.",
+    "Toy-image illustration; not a feature map or attention score extracted from ADM/ResNet.": "Minh họa trên ảnh tổng hợp; không phải bản đồ đặc trưng hay điểm attention trích từ ADM/ResNet.",
+    "The reverse step is not an algebraically exact inverse after finite-step discretization, clipping, or finite precision. That non-zero reconstruction error is the representation being measured.": "Bước ngược không phải phép đảo đại số chính xác khi rời rạc hóa số bước hữu hạn, clipping hoặc sai số số học. Sai số tái tạo khác không chính là biểu diễn được đo.",
+    "The listed largest change: SD-v1 ACC 87.0 → 99.7 (percentage points).": "Mức thay đổi lớn nhất được liệt kê: ACC của SD-v1 tăng từ 87,0 lên 99,7 (điểm phần trăm).",
+    "The result supports the chosen representation; it does not establish a universal mechanism.": "Kết quả ủng hộ biểu diễn được chọn, nhưng không chứng minh một cơ chế phổ quát.",
+    "Gallery PNG is display-only: [0,2] → uint8 with gamma 0.5, RGB channels preserved. Do not feed that PNG back as authoritative data or infer source-map encoding from an extension.": "PNG trong gallery chỉ dùng để hiển thị: [0,2] → uint8 với gamma 0,5, giữ nguyên kênh RGB. Không dùng PNG này làm dữ liệu chuẩn hoặc suy đoán cách mã hóa map nguồn từ phần mở rộng tệp.",
+    "Bottleneck counts [3, 4, 6, 3]; final pooled feature vector has 2,048 components. The DIRE checkpoint convention is fc: 2,048 → 1 logit.": "Các khối bottleneck có số lượng [3, 4, 6, 3]; vector đặc trưng sau pooling có 2.048 thành phần. Quy ước checkpoint DIRE: fc 2.048 → 1 logit.",
+    "Projection W_s is used when stride or channel count changes.": "Dùng phép chiếu W_s khi stride hoặc số kênh thay đổi.",
+    "The residual path supports gradient flow; it does not itself guarantee generalization.": "Đường residual hỗ trợ luồng gradient nhưng không tự bảo đảm khả năng tổng quát hóa.",
+    "Label convention: y=1 denotes generated/fake in the binary detector.": "Quy ước nhãn: y=1 chỉ ảnh tổng hợp/giả trong bộ phân loại nhị phân.",
+    "Training uses BCEWithLogitsLoss for numerical stability.": "Huấn luyện dùng BCEWithLogitsLoss để ổn định số học.",
+    "Why one logit matters": "Vì sao một logit quan trọng",
+    "The published head shape is [1, 2048]; a 2-logit softmax head is not interchangeable.": "Đầu ra được công bố có kích thước [1, 2048]; không thể thay bằng head softmax 2 logit.",
+    "Why ImageNet initialization": "Vì sao khởi tạo ImageNet",
+    "Transfer learning initializes visual features; the pilot protocol records ImageNet initialization and an independent detector for each S.": "Học chuyển giao khởi tạo đặc trưng thị giác; giao thức pilot ghi nhận khởi tạo ImageNet và một bộ phân loại riêng cho mỗi S.",
+    "Area / discrete sum along precision–recall; threshold-free ranking summary.": "Diện tích / tổng rời rạc theo đường precision–recall; tóm tắt thứ hạng không phụ thuộc ngưỡng.",
+    "Area under ROC; compare cautiously under domain shift.": "Diện tích dưới ROC; cần thận trọng khi so sánh nếu miền dữ liệu thay đổi.",
+    "Protocol guard: choose epoch and threshold on validation; test is only for final evaluation.": "Ràng buộc giao thức: chọn epoch và ngưỡng trên tập xác thực; tập kiểm thử chỉ dùng đánh giá cuối.",
+    "self-computed DIRE": "DIRE tự tính",
+    "self-trained classifier": "bộ phân loại tự huấn luyện",
+    "own generator / data": "bộ sinh / dữ liệu tự sở hữu",
+    "Repo label reported: R1+R2. The diffusion checkpoint and dataset source are not project-trained; fake images are marked author-sourced, so do not claim R3.": "Nhãn ghi trong repo: R1+R2. Checkpoint diffusion và nguồn tập dữ liệu không do dự án huấn luyện; ảnh giả được đánh dấu là lấy từ tác giả, vì vậy không tuyên bố R3.",
+    "RGB + DIRE can underperform DIRE alone: extra features may invite shortcut learning.": "RGB + DIRE có thể kém hơn DIRE riêng: đặc trưng bổ sung có thể khuyến khích học lối tắt.",
+    "CLEAN · ADM inversion + reconstruction": "ADM · phép đảo và tái tạo",
+    "LDM · VAE encode + decode": "LDM · mã hóa và giải mã VAE",
+    "2S diffusion network evaluations": "2S lượt đánh giá mạng khuếch tán",
+    "Broad generated-image benchmark": "Benchmark ảnh tổng hợp đa dạng",
+    "Related work; not a result or feature implemented in the prototype.": "Công trình liên quan; không phải kết quả hay tính năng đã triển khai trong bản thử nghiệm.",
+    "Recorded value": "Giá trị ghi nhận",
+    "ImageNet ResNet-50 · seed 3407": "ResNet-50 ImageNet · seed 3407",
+    "batch 32 · lr 1e−4 · crop 224 · early stopping": "batch 32 · lr 1e−4 · crop 224 · dừng sớm",
+    "Different: SD-v1 vs SD-v2; paper full data vs pilot; paper vs 200-per-cell; documented training protocol differs. No delta = reproduction claim.": "Khác biệt: SD-v1 so với SD-v2; dữ liệu đầy đủ của bài báo so với pilot; bài báo so với 200 ảnh mỗi ô; giao thức huấn luyện được ghi nhận cũng khác. Không diễn giải chênh lệch thành tuyên bố tái lập.",
+    "six-channel paired input": "đầu vào ghép cặp sáu kênh",
+    "three-channel reconstruction-error map": "bản đồ sai số tái tạo ba kênh",
+    "Repo protocol: S=20 · 40 NFE/image · 256×256 · float16 input. Inputs materialized; no Table 5 training/evaluation ledger found. REC needs reconstruction data, not only a reconstruction-error .npy.": "Giao thức repo: S=20 · 40 NFE/ảnh · 256×256 · đầu vào float16. Đầu vào đã được chuẩn bị; chưa tìm thấy sổ huấn luyện/đánh giá Table 5. REC cần dữ liệu tái tạo, không chỉ tệp sai số tái tạo .npy.",
+    "The source protocol uses SD-v2, unlike SD-v1 in the paper table; these columns are intentionally not merged.": "Giao thức nguồn dùng SD-v2, khác SD-v1 trong bảng bài báo; hai cột này được giữ riêng.",
+    "A manifest locks shared sample identities for Table 4, Table 5 and Figure 4": "Một manifest khóa định danh mẫu dùng chung cho Table 4, Table 5 và Hình 4",
+    "NESTED SNAPSHOT 400 / CELL": "ẢNH CHỤP LỒNG 400 / Ô",
+    "increase cap, keep IDs": "Tăng giới hạn, giữ ID",
+    "Manifest-only: source images stay unchanged; seed 3407 · sha256-ranked-cell-v1 · cell counts in ledger.": "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · sha256-ranked-cell-v1 · số mẫu mỗi ô được ghi trong sổ.",
+    "REC · RGB · RGB_DIRE · DIRE": "REC · RGB · RGB_DIRE · DIRE",
+    "Paper and pilot use different generators and execution scales": "Bài báo và pilot dùng bộ sinh cùng quy mô thực thi khác nhau",
+    "ImageNet init, batch 32, LR 1e−4, early stopped": "Khởi tạo ImageNet, batch 32, LR 1e−4, dừng sớm",
 }
 
+# Additional standalone scientific/report vocabulary; phrase translations above take priority.
+VI_COPY.update({
+    "generated": "tạo sinh", "generators": "các bộ sinh", "fingerprint": "dấu vân tay", "fingerprints": "dấu vân tay",
+    "robust": "bền vững", "cue": "dấu hiệu", "same": "cùng", "different": "khác", "useful": "hữu ích",
+    "Gaussian": "Gauss", "sampling": "lấy mẫu", "noise": "nhiễu", "noisy": "nhiễu", "path": "quỹ đạo",
+    "schedule": "lịch", "timestep": "bước thời gian", "timesteps": "các bước thời gian", "inference": "suy luận",
+    "forward": "thuận", "reverse": "ngược", "deterministic": "tất định", "determinist": "tất định",
+    "supervision": "giám sát", "target": "mục tiêu", "embedding": "nhúng", "loss": "hàm mất mát",
+    "resolution": "độ phân giải", "stage": "tầng", "stages": "các tầng", "bottleneck": "nút thắt",
+    "context": "ngữ cảnh", "projection": "phép chiếu", "projections": "các phép chiếu", "positions": "vị trí",
+    "kernel": "kernel", "main": "chính", "information": "thông tin", "preserve": "duy trì", "preserves": "duy trì",
+    "extracted": "trích xuất", "selected": "được chọn", "absolute": "tuyệt đối", "signed": "có dấu",
+    "largest": "lớn nhất", "change": "mức thay đổi", "percentage": "phần trăm", "points": "điểm",
+    "depends": "phụ thuộc", "fixed": "cố định", "ranking": "xếp hạng", "summary": "tóm tắt",
+    "cautiously": "thận trọng", "caution": "thận trọng", "shift": "dịch chuyển", "guard": "ràng buộc",
+    "choose": "chọn", "chosen": "được chọn", "epoch": "epoch", "validation": "xác thực", "final": "cuối",
+    "published": "được công bố", "head": "đầu ra", "shape": "kích thước", "interchangeable": "có thể thay thế",
+    "initialization": "khởi tạo", "transfer": "chuyển giao", "visual": "thị giác", "independent": "độc lập",
+    "binary": "nhị phân", "denotes": "chỉ", "numerical": "số học", "stability": "ổn định",
+    "area": "diện tích", "discrete": "rời rạc", "along": "theo", "recall": "recall", "carefully": "thận trọng",
+    "related": "liên quan", "supports": "ủng hộ", "checkpoint": "checkpoint", "dataset": "tập dữ liệu",
+    "source": "nguồn", "fake": "giả", "marked": "được đánh dấu", "claim": "tuyên bố", "includes": "bao gồm",
+    "tests": "kiểm thử", "blur": "làm mờ", "conditions": "điều kiện", "transformations": "phép biến đổi",
+    "untested": "chưa được kiểm thử", "adaptive": "thích ứng", "attacker": "đối thủ", "optimization": "tối ưu hóa",
+    "current": "hiện nay", "closed": "đóng", "models": "mô hình", "multiple": "nhiều", "seeds": "seed",
+    "comparisons": "so sánh", "overread": "diễn giải quá mức", "tenths": "phần mười", "point": "điểm",
+    "patience": "patience", "stopped": "dừng", "early": "sớm", "executed": "đã thực thi", "planned": "dự kiến",
+    "matrix": "ma trận", "condition": "điều kiện", "shards": "phân mảnh", "comparing": "so sánh",
+    "output": "đầu ra", "found": "được tìm thấy", "runner": "trình chạy", "reproduction": "tái lập",
+    "observed": "đã quan sát", "split": "cách chia", "weights": "trọng số", "reference": "tham chiếu",
+    "specific": "đặc thù", "headline": "kết quả chính", "roles": "vai trò", "prompt": "prompt", "specified": "được quy định",
+    "inventory": "danh mục", "adds": "bổ sung", "hybrids": "mô hình lai", "tags": "nhãn", "assignments": "phân loại",
+    "uncertain": "chưa chắc chắn", "names": "tên gọi", "evidence": "bằng chứng", "exact": "chính xác",
+    "folder": "thư mục", "name": "tên", "merge": "gộp", "mean": "trung bình", "many": "nhiều", "don't": "không",
+    "classes": "lớp", "repeatability": "khả năng lặp lại", "checks": "kiểm tra", "labels": "nhãn",
+    "caveat": "lưu ý", "missingness": "dữ liệu thiếu", "status": "trạng thái", "config": "cấu hình",
+    "materialized": "đã chuẩn bị", "epochs": "epoch", "full-data": "toàn bộ dữ liệu", "early-stopped": "dừng sớm",
+    "clean": "sạch", "raw": "thô", "preserved": "được giữ nguyên", "authoritative": "chuẩn", "infer": "suy ra",
+    "encoding": "mã hóa", "extension": "phần mở rộng", "counts": "số lượng", "pooled": "sau pooling",
+    "vector": "vector", "components": "thành phần", "convention": "quy ước", "stride": "stride", "changes": "thay đổi",
+    "flow": "luồng", "itself": "tự thân", "guarantee": "bảo đảm", "generalization": "khả năng tổng quát hóa",
+    "records": "ghi nhận", "every": "mỗi", "ROC": "ROC", "domain": "miền", "underperform": "kém hơn",
+    "extra": "bổ sung", "may": "có thể", "invite": "dẫn đến", "learning": "việc học", "shortcut": "lối tắt",
+    "listed": "được liệt kê", "establish": "xác lập", "universal": "phổ quát", "mechanism": "cơ chế",
+    "gamma": "gamma", "feed": "đưa", "back": "ngược", "denominator": "mẫu số", "reconciled": "đối soát",
+    "definitions": "định nghĩa", "separate": "riêng", "inconsistent": "không nhất quán", "centered": "tập trung",
+    "near": "gần", "corrected": "được sửa", "separately": "riêng", "per-generator": "theo bộ sinh",
+    "recorded": "được ghi nhận", "threshold": "ngưỡng", "size": "kích thước", "protocol": "giao thức",
+    "documented": "được ghi nhận", "delta": "độ chênh", "paired": "ghép cặp", "needs": "cần",
+    "none": "không có", "such": "như", "projected": "chiếu", "model-closed": "đóng mô hình",
+    "family": "họ mô hình", "record": "bản ghi", "actual": "thực tế", "reconstruct": "tái tạo",
+    "token": "token", "density": "mật độ", "likelihood": "hợp lý", "integrated": "tích hợp", "trajectory": "quỹ đạo",
+    "continuous": "liên tục", "quantization": "lượng tử hóa", "diffuses": "khuếch tán", "encoder": "bộ mã hóa",
+    "decoder": "bộ giải mã", "encode": "mã hóa", "decode": "giải mã", "difference": "khác biệt",
+    "matters": "quan trọng", "detected": "được phát hiện", "measurement": "phép đo", "measurements": "các phép đo",
+    "artifacts": "hiện vật", "artifact": "hiện vật", "cost": "chi phí", "budget": "ngân sách",
+})
+
+# Exact sentence translations keep technical claims readable and unambiguous.
+VI_COPY.update({
+    "Autoregressive, EBM and flow-matching are recorded as out of scope in the HTML survey; do not generalize from this table.": "Các mô hình tự hồi quy, EBM và flow-matching nằm ngoài phạm vi tài liệu tổng quan HTML; không khái quát hóa từ bảng này.",
+    "Autoregressive, EBM and flow-matching models are outside the HTML survey's scope; do not generalize from this table.": "Các mô hình tự hồi quy, EBM và flow-matching nằm ngoài phạm vi tài liệu tổng quan HTML; không khái quát hóa từ bảng này.",
+    "DIRE does not ask which model is 'stronger'; it needs a reproducible round trip, not a perfect inverse.": "DIRE không hỏi mô hình nào “mạnh hơn”; phương pháp cần phép đi-về có thể tái lập, không cần nghịch đảo hoàn hảo.",
+    "A single encoder/decoder pass; no learned DDIM trajectory.": "Một lượt mã hóa/giải mã; không có quỹ đạo DDIM được học.",
+    "GAN basic has no probability density or integrated inverse; latent recovery requires separate optimization.": "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để khôi phục không gian ẩn.",
+    "The basic GAN has no probability density or integrated inverse; latent recovery requires separate optimization.": "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để khôi phục không gian ẩn.",
+    "ADM uses a linear β_t schedule; cumulative ᾱ_t reduces the signal over time.": "ADM dùng lịch β_t tuyến tính; ᾱ_t tích lũy làm tín hiệu suy giảm theo thời gian.",
+    "ε in the forward process explains the noise target when training diffusion; DDIM inference selects a deterministic path.": "ε trong quá trình thuận là mục tiêu nhiễu khi huấn luyện diffusion; suy luận DDIM chọn quỹ đạo tất định.",
+    "ADM uses epsilon-prediction. Timestep embedding provides t to every block; the simplified loss is a practical training form related to ELBO.": "ADM dự đoán epsilon. Nhúng timestep cung cấp t cho mọi khối; hàm mất mát rút gọn là dạng huấn luyện thực dụng có liên hệ với ELBO.",
+    "Same model, schedule and timesteps; inversion is approximate, not stochastic.": "Giữ nguyên mô hình, lịch và timestep; phép đảo là xấp xỉ, không ngẫu nhiên.",
+    "Same backbone, schedule and timesteps; inversion is approximate, not stochastic.": "Giữ nguyên backbone, lịch và timestep; phép đảo là xấp xỉ, không ngẫu nhiên.",
+    "The residual distributions of real and generated images must differ; this must be measured.": "Phân phối sai số tái tạo của ảnh thật và ảnh tạo sinh phải khác nhau; cần đo kiểm.",
+    "The result supports the chosen representation; it does not establish a universal mechanism.": "Kết quả ủng hộ biểu diễn được chọn, nhưng không xác lập cơ chế phổ quát.",
+    "Projection W_s is used when stride or channel count changes.": "Dùng phép chiếu W_s khi stride hoặc số kênh thay đổi.",
+    "Residual path supports gradient flow; it does not itself guarantee generalization.": "Đường residual hỗ trợ luồng gradient nhưng không tự bảo đảm khả năng tổng quát hóa.",
+    "Label convention: y=1 denotes generated/fake in the binary detector.": "Quy ước nhãn: y=1 chỉ ảnh tạo sinh/giả trong bộ phân loại nhị phân.",
+    "Training uses BCEWithLogitsLoss for numerical stability.": "Huấn luyện dùng BCEWithLogitsLoss để ổn định số học.",
+    "Why one logit matters": "Vì sao một logit quan trọng",
+    "The published head shape is [1, 2048]; a 2-logit softmax head is not interchangeable.": "Kích thước head được công bố là [1, 2048]; không thể thay bằng head softmax 2 logit.",
+    "Why ImageNet initialization": "Vì sao khởi tạo ImageNet",
+    "Transfer learning initializes visual features; the pilot protocol records ImageNet initialization and an independent detector for each S.": "Học chuyển giao khởi tạo đặc trưng thị giác; giao thức pilot ghi nhận khởi tạo ImageNet và bộ phân loại riêng cho từng S.",
+    "Protocol guard: choose epoch and threshold on validation; test is only for final evaluation.": "Ràng buộc giao thức: chọn epoch và ngưỡng trên tập xác thực; tập kiểm thử chỉ dùng để đánh giá cuối.",
+    "Every cell is shown as ACC / AP (%), reported by the authors. These are not measurements from the project.": "Mỗi ô ghi ACC / AP (%), do tác giả báo cáo; đây không phải số đo của dự án.",
+    "Table 2 headline is specific to its dataset, split, reference weights and evaluation protocol.": "Kết quả chính của Table 2 gắn với tập dữ liệu, cách chia, trọng số tham chiếu và giao thức đánh giá cụ thể.",
+    "n≈1,000 per test cell; paper provides no CIs. Differences of a few tenths should not be overstated.": "n≈1.000 cho mỗi ô kiểm thử; bài báo không cung cấp khoảng tin cậy. Không nên phóng đại khác biệt chỉ vài phần mười.",
+    "Lowest shown cell: ACC 76.9% · cross-domain generalization is a real limitation.": "Ô thấp nhất được trình bày: ACC 76,9% · khả năng tổng quát hóa chéo miền là một giới hạn thực sự.",
+    "Paper protocol and full test data; S=20→50 multiplies NFE by 2.5. These rows are paper-reported, not the project's Table 4 ledger.": "Giao thức bài báo và dữ liệu kiểm thử đầy đủ; S=20→50 làm NFE tăng 2,5 lần. Đây là số liệu bài báo, không phải sổ Table 4 của dự án.",
+    "Related work, not a result or feature implemented by this project's prototype.": "Công trình liên quan, không phải kết quả hay tính năng đã triển khai trong bản thử nghiệm của dự án.",
+    "Do not recompute, combine or call these counters a reconciled total.": "Không tính lại, gộp hoặc gọi các bộ đếm này là tổng đã đối soát.",
+    "This is a project evaluation on self-computed DIRE maps with a from-scratch detector; it is not an absolute Table 2 comparison.": "Đây là đánh giá của dự án trên bản đồ DIRE tự tính với bộ phân loại huấn luyện từ đầu; không phải phép so sánh trực tiếp với Table 2.",
+    "The source protocol uses SD-v2; that differs from this paper SD-v1 table. These columns are deliberately not combined.": "Giao thức nguồn dùng SD-v2, khác SD-v1 trong bảng bài báo; hai cột này được giữ riêng có chủ ý.",
+    "each condition × generator → measured AP shard → result ledger": "mỗi điều kiện × bộ sinh → phần AP đã đo → sổ kết quả",
+    "Planned matrix: 30 condition×generator shards (6×5), each comparing 2 project-trained detectors = 60 model-condition metrics. Current output: none found. Runner is not the paper's CNNDetection/PatchForensics baseline reproduction.": "Ma trận dự kiến: 30 ô điều kiện×bộ sinh (6×5), mỗi ô so sánh 2 bộ phân loại do dự án huấn luyện = 60 chỉ số mô hình–điều kiện. Hiện chưa tìm thấy đầu ra. Trình chạy không tái lập baseline CNNDetection/PatchForensics của bài báo.",
+    "Manifest-only: source images stay unchanged; seed 3407 · sha256-ranked-cell-v1 · cell counts in ledger.": "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · sha256-ranked-cell-v1 · số mẫu mỗi ô được ghi trong sổ.",
+    "LSUN-Bedroom: ADM · DDPM · iDDPM · PNDM · LDM · SD-v1 · SD-v2 · VQ-Diffusion\n\nImageNet: ADM · SD-v1\n\nTrain / test roles and prompt conditions are specified in the paper.": "LSUN-Bedroom: ADM · DDPM · iDDPM · PNDM · LDM · SD-v1 · SD-v2 · VQ-Diffusion\n\nImageNet: ADM · SD-v1\n\nVai trò huấn luyện/kiểm thử và điều kiện prompt được quy định trong bài báo.",
+    "Report inventory adds DALL·E 2, IF, projected GAN, hybrids and other tags.\n\nSome family assignments are uncertain or model-closed. Names such as diff-projectedgan are not evidence of architecture.": "Danh mục báo cáo bổ sung DALL·E 2, IF, GAN chiếu, mô hình lai và các nhãn khác.\n\nMột số phân loại họ mô hình chưa chắc chắn hoặc thuộc mô hình đóng. Tên như diff-projectedgan không phải bằng chứng về kiến trúc.",
+    "Do not merge out-of-paper generators into a paper mean or claim exact source architecture from a folder name.": "Không gộp bộ sinh ngoài phạm vi bài báo vào giá trị trung bình, hoặc suy ra kiến trúc chính xác chỉ từ tên thư mục.",
+    "Euler error, clipping and data-manifold explanations are not isolated experimentally.": "Sai số Euler, clipping và giả thuyết về đa tạp dữ liệu chưa được kiểm chứng riêng bằng thực nghiệm.",
+    "Table 3 includes 76.9% ACC in a cross-domain cell.": "Table 3 có một ô chéo miền với ACC 76,9%.",
+    "Paper tests selected blur/JPEG conditions; many transformations remain untested.": "Bài báo thử nghiệm một số điều kiện làm mờ/JPEG; nhiều phép biến đổi vẫn chưa được kiểm tra.",
+    "No adaptive attacker or post-processing adversarial optimization.": "Chưa đánh giá đối thủ thích ứng hoặc tối ưu hóa đối kháng sau xử lý.",
+    "2023 generators/prompts do not cover current closed / transformer / flow models.": "Các bộ sinh/prompt năm 2023 chưa bao quát mô hình đóng, transformer hoặc flow hiện nay.",
+    "No multiple seeds / paper CIs for many comparisons; don't overread tenths of a point.": "Nhiều so sánh không có nhiều seed hoặc khoảng tin cậy từ bài báo; không diễn giải quá mức chênh lệch vài phần mười điểm.",
+    "Ledger protocol target says 400 epochs with patience 5; actual run stopped early at 12–15 epochs. Do not present target epochs as executed epochs.": "Giao thức trong sổ đặt mục tiêu 400 epoch với patience 5; lượt chạy thực tế dừng sớm ở epoch 12–15. Không trình bày số epoch mục tiêu như số epoch đã chạy.",
+})
+
+VI_COPY.update({
+    "AUDIT FLAG: report.dire.n = 5,900; n_new = 5,869; n_reused = 2,431. The latter two sum to 8,300, not 5,900. NFE=234,760 equals 5,869×40, not 5,900×40. Keep these fields separate until their definitions / denominator are reconciled.": "CẢNH BÁO KIỂM TOÁN: report.dire.n = 5.900; n_new = 5.869; n_reused = 2.431. Hai số sau cộng thành 8.300, không phải 5.900. NFE=234.760 bằng 5.869×40, không phải 5.900×40. Giữ các trường riêng biệt cho đến khi đối soát được định nghĩa và mẫu số.",
+    "AUDIT FLAG: eval.json lists ACC=78.1% at threshold 0.50029 (chosen on val), but `acc_ci95=[0.47,0.529]` is centered near 50%, inconsistent with that ACC. Do not publish this CI until corrected. At threshold 0.5, ACC is separately 50.0%.": "CẢNH BÁO KIỂM TOÁN: eval.json ghi ACC=78,1% tại ngưỡng 0,50029 (chọn trên tập xác thực), nhưng `acc_ci95=[0.47,0.529]` tập trung gần 50%, không nhất quán với ACC đó. Không công bố khoảng tin cậy này trước khi sửa. Tại ngưỡng 0,5, ACC riêng được ghi là 50,0%.",
+    "Repo metrics, not paper Table 2; fake cell n=700 and report warnings limit direct interpretation.": "Chỉ số repo, không phải Table 2; ô ảnh giả n=700 và cảnh báo giới hạn diễn giải.",
+    "Repo protocol: S=20 · 40 NFE/image · 256×256 · float16 inputs. Inputs materialized; no Table 5 training/evaluation ledger found. REC needs reconstruction data, not residual .npy alone.": "Giao thức repo: S=20 · 40 NFE/ảnh · 256×256 · đầu vào float16. Đầu vào đã được chuẩn bị; chưa tìm thấy sổ huấn luyện/đánh giá Table 5. REC cần dữ liệu ảnh tái tạo, không chỉ tệp sai số .npy.",
+    "Different: SD-v1 vs SD-v2; paper full data vs pilot; paper vs 200-per-cell; documented training protocol differs. No delta = reproduction claim.": "Khác biệt: SD-v1 so với SD-v2; dữ liệu đầy đủ của bài báo so với pilot; bài báo so với 200 ảnh mỗi ô; giao thức huấn luyện được ghi nhận cũng khác. Không xem độ chênh là tuyên bố tái lập.",
+    "Gallery PNG is display-only: [0,2] → uint8 with gamma 0.5, RGB channels preserved. Do not feed that PNG back as authoritative data or infer source-map encoding from an extension.": "PNG trong gallery chỉ dùng hiển thị: [0,2] → uint8 với gamma 0,5, giữ nguyên kênh RGB. Không dùng PNG làm dữ liệu chuẩn hoặc suy ra cách mã hóa map nguồn từ phần mở rộng tệp.",
+})
+
+VI_COPY.update({
+    "Train và test có thể khác p_g: nhận diện dấu vết của một generator không đồng nghĩa phát hiện ảnh sinh nói chung.": "Phân phối p_g có thể khác giữa huấn luyện và kiểm thử: nhận diện dấu vết của một bộ sinh không đồng nghĩa phát hiện ảnh tạo sinh nói chung.",
+    "AUDIT FLAG: eval.json lists ACC=78.1% at threshold 0.50029 (chosen on val), but `acc_ci95=[0.47,0.529]` is centered near 50%, inconsistent with that ACC. Do not publish this CI until corrected. At threshold 0.5, ACC is separately 50.0%.": "CẢNH BÁO KIỂM TOÁN: eval.json ghi ACC=78,1% tại ngưỡng 0,50029 (chọn trên tập xác thực), nhưng `acc_ci95=[0.47,0.529]` tập trung gần 50%, không nhất quán với ACC đó. Không công bố khoảng tin cậy này trước khi sửa. Tại ngưỡng 0,5, ACC riêng được ghi là 50,0%.",
+    "Residual bottleneck counts [3, 4, 6, 3]; final pooled feature vector has 2,048 components. The DIRE checkpoint convention is fc: 2,048 → 1 logit.": "Các khối bottleneck residual có số lượng [3, 4, 6, 3]; vector đặc trưng sau pooling có 2.048 thành phần. Quy ước checkpoint DIRE: fc 2.048 → 1 logit.",
+    "Transfer learning initializes visual features; pilot protocol records ImageNet init and an independent detector per S.": "Học chuyển giao khởi tạo đặc trưng thị giác; giao thức pilot ghi nhận khởi tạo ImageNet và một bộ phân loại riêng cho từng S.",
+    "Protocol guard: choose epoch and threshold on validation; test is for final evaluation only.": "Ràng buộc giao thức: chọn epoch và ngưỡng trên tập xác thực; tập kiểm thử chỉ dùng cho đánh giá cuối.",
+    "The basic GAN has no probability density or integrated inverse; latent recovery requires separate optimization.": "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để khôi phục không gian ẩn.",
+    "VQ-Diffusion and latent diffusion move the diffusion trajectory into another space.": "VQ-Diffusion và khuếch tán tiềm ẩn đưa quỹ đạo khuếch tán sang không gian khác.",
+    "Discrete diffusion over codebook tokens; quantization error belongs to the representation. This model is in the paper's generator benchmark.": "Khuếch tán rời rạc trên token codebook; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này có trong benchmark bộ sinh của bài báo.",
+    "VAE encoder → latent DDIM trajectory → VAE decoder. The DIRE paper still uses pixel-space ADM as its reconstruction reference.": "Bộ mã hóa VAE → quỹ đạo DDIM trong không gian ẩn → bộ giải mã VAE. Bài DIRE vẫn dùng ADM trên pixel làm tham chiếu tái tạo.",
+    "Example on the ADM detector: Table 6 compares raw signed residual with |residual|; this is a paper result, not a pilot.": "Ví dụ trên bộ phân loại ADM: Table 6 so sánh sai số có dấu thô với |sai số|; đây là kết quả bài báo, không phải pilot.",
+    "The toy-image illustration; not a feature map or attention score extracted from ADM/ResNet.": "Minh họa trên ảnh tổng hợp; không phải bản đồ đặc trưng hay điểm attention trích từ ADM/ResNet.",
+    "This reconstruction is intentionally blurred to make the residual visible; it is not ADM or a measurement on a real image.": "Ảnh tái tạo được làm mờ có chủ ý để residual dễ quan sát; đây không phải ADM hay phép đo trên ảnh thật.",
+    "In checkout there is an R1+R2 report, Table 4 pilot and 64 gallery samples; Table 5/Figure 4 have no result ledger.": "Trong bản mã nguồn có báo cáo R1+R2, pilot Table 4 và 64 mẫu thư viện; Table 5/Hình 4 chưa có sổ kết quả.",
+    "Checkpoint not present in checkout; gallery image hashes verify only display PNGs, not the source map.": "Checkpoint không có trong bản mã nguồn; hash ảnh gallery chỉ xác nhận PNG hiển thị, không thay thế map nguồn.",
+    "Git metadata · report.json:data.created · developer session date": "Siêu dữ liệu Git · report.json:data.created · ngày phiên làm việc",
+    "The displayed data retain source labels. Until timeline / Modal Volume is confirmed, do not call them independently verified results.": "Số liệu hiển thị giữ nguyên nhãn nguồn. Cho đến khi xác nhận dòng thời gian và Modal Volume, không gọi đây là kết quả được kiểm chứng độc lập.",
+    "A checkpoint is not in the checkout; gallery image hashes only verify display PNGs, not the source map.": "Checkpoint không có trong bản mã nguồn; hash ảnh gallery chỉ xác minh PNG hiển thị, không phải map nguồn.",
+    "R-level · preprocessing · checkpoint hash · split / threshold plan": "Mức R · tiền xử lý · hash checkpoint · cách chia / kế hoạch ngưỡng",
+    "Complete ledger · no empty class · repeatability / hash checks": "Sổ đầy đủ · không có lớp rỗng · kiểm tra khả năng lặp lại / hash",
+})
+
+VI_COPY.update({
+    "Diffusion Reconstruction Error · nền tảng toán học, kiến trúc mô hình,\nđối chiếu paper và trạng thái pilot theo artifacts trong repo": "Sai số tái tạo khuếch tán (DIRE) · nền tảng toán học, kiến trúc mô hình,\nđối chiếu bài báo và trạng thái thí điểm theo hiện vật trong kho mã",
+    "Editable PPTX + PDF  ·  equations typeset from LaTeX source": "PPTX + PDF có thể chỉnh sửa · công thức được dàn trang từ mã LaTeX",
+    "Trong checkout có report R1+R2, pilot Table 4 và 64 mẫu gallery; Table 5/Figure 4 chưa có sổ kết quả.": "Trong bản mã nguồn có báo cáo R1+R2, pilot Table 4 và 64 mẫu thư viện; Table 5/Hình 4 chưa có sổ kết quả.",
+    "Checkpoint chưa có trong checkout; hash ảnh gallery chỉ xác nhận PNG hiển thị, không thay thế map nguồn.": "Checkpoint chưa có trong bản mã nguồn; hash chỉ xác nhận PNG hiển thị, không thay thế bản đồ nguồn.",
+    "Báo cáo R1+R2; đánh giá ADM trên tập giữ lại; pilot Table 4; 64 mẫu gallery có metadata.": "Báo cáo R1+R2; đánh giá ADM trên tập giữ lại; pilot Table 4; 64 mẫu thư viện có siêu dữ liệu.",
+    "Table 5 mới có giao thức/đầu vào; Figure 4 chưa có kết quả. Không suy diễn S=50 cho pilot.": "Table 5 mới có giao thức/đầu vào; Hình 4 chưa có kết quả. Không ngoại suy S=50 cho pilot.",
+    "Train và test có thể khác p_g: nhận diện dấu vết của một generator không đồng nghĩa phát hiện ảnh sinh nói chung.": "Phân phối p_g có thể khác giữa huấn luyện và kiểm thử: nhận diện dấu vết của một bộ sinh không đồng nghĩa phát hiện ảnh tạo sinh nói chung.",
+    "Shortcut risk": "Nguy cơ học lối tắt",
+    "Research target": "Mục tiêu nghiên cứu",
+    "A round trip should be reproducible but is not a perfect inverse.": "Phép đi-về cần tái lập được nhưng không phải nghịch đảo hoàn hảo.",
+    "Tái tạo tốt hơn ↔ latent posterior gần prior; encoder chỉ xấp xỉ posterior.": "Tái tạo tốt hơn ↔ hậu nghiệm trong không gian ẩn gần tiên nghiệm; bộ mã hóa chỉ xấp xỉ hậu nghiệm.",
+    "Một lượt encoder/decoder; không có quỹ đạo DDIM được học.": "Một lượt mã hóa/giải mã; không có quỹ đạo DDIM được học.",
+    "VAE là codec không gian ẩn bên trong mô hình khuếch tán tiềm ẩn.": "VAE là bộ mã hóa/giải mã không gian ẩn bên trong mô hình khuếch tán tiềm ẩn.",
+    "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để tìm latent.": "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để tìm không gian ẩn.",
+    "Khác biệt không gian mô hình rất quan trọng: generator bị phát hiện không phải backbone tái tạo.": "Khác biệt về không gian mô hình rất quan trọng: bộ sinh được phát hiện không phải backbone tái tạo.",
+    "Khuếch tán rời rạc trên token codebook; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này có trong benchmark generator của bài báo.": "Khuếch tán rời rạc trên token codebook; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này nằm trong bộ kiểm chuẩn bộ sinh của bài báo.",
+    "Encoder VAE → quỹ đạo DDIM trong latent → decoder VAE. Bài DIRE vẫn dùng ADM trên pixel làm phép tái tạo tham chiếu.": "Bộ mã hóa VAE → quỹ đạo DDIM trong không gian ẩn → bộ giải mã VAE. Bài DIRE vẫn dùng ADM trên pixel làm tham chiếu tái tạo.",
+    "VQ-Diffusion và latent diffusion đưa quỹ đạo khuếch tán sang không gian khác": "VQ-Diffusion và khuếch tán tiềm ẩn đưa quỹ đạo sang không gian khác",
+    "ε ở forward process giải thích noise target khi train diffusion; DDIM inference chọn đường determinist.": "ε trong quá trình thuận là mục tiêu nhiễu khi huấn luyện diffusion; suy luận DDIM chọn quỹ đạo tất định.",
+    "Supervision tự sinh: biết ε vì chính quy trình forward vừa thêm nó.": "Tín hiệu giám sát tự sinh: biết ε vì chính quá trình thuận đã thêm nhiễu này.",
+    "ADM dùng epsilon-prediction. Timestep embedding cung cấp t cho mọi khối; loss rút gọn là dạng huấn luyện thực dụng liên quan ELBO.": "ADM dự đoán epsilon. Nhúng timestep cung cấp t cho mọi khối; hàm mất mát rút gọn là dạng huấn luyện thực dụng liên hệ với ELBO.",
+    "Timestep embedding đi vào từng stage; attention được đặt tại các bản đồ đặc trưng 32×32, 16×16, 8×8.": "Nhúng timestep đi vào từng tầng; attention được đặt tại bản đồ đặc trưng 32×32, 16×16 và 8×8.",
+    "SKIP CONNECTIONS · giữ chi tiết nông qua bottleneck": "KẾT NỐI TẮT · giữ chi tiết tầng nông qua nút thắt",
+    "Global context, used at selected resolutions.": "Ngữ cảnh toàn cục, dùng tại một số độ phân giải.",
+    "Minh họa trên ảnh toy; không phải feature map hay attention score được trích từ ADM/ResNet.": "Minh họa trên ảnh tổng hợp; không phải bản đồ đặc trưng hay điểm attention trích từ ADM/ResNet.",
+    "The result supports the chosen representation; it does not establish a universal mechanism.": "Kết quả ủng hộ biểu diễn được chọn, nhưng không xác lập cơ chế phổ quát.",
+    "Paper's qualitative claim: DIRE changes little; RGB baselines degrade more. The plot's pixel values are not tabulated in the cited paper copy, so this deck does not invent exact AP points.": "Nhận định định tính của bài báo: DIRE thay đổi ít; các đối chứng RGB suy giảm nhiều hơn. Bản bài báo trích dẫn không có bảng số liệu của đồ thị, nên không tự tạo điểm AP.",
+    "Repo report label: R1+R2. The diffusion checkpoint and source dataset are not project-trained; fake images are marked author-sourced, so do not claim R3.": "Nhãn báo cáo trong repo: R1+R2. Checkpoint diffusion và tập dữ liệu nguồn không do dự án huấn luyện; ảnh giả được ghi nhận là do tác giả cung cấp, vì vậy không tuyên bố R3.",
+    "Lớn hơn không tự động có nghĩa 'fake'; classifier học phân phối map từ dữ liệu có nhãn.": "Giá trị lớn hơn không tự động đồng nghĩa “ảnh giả”; bộ phân loại học phân phối bản đồ từ dữ liệu có nhãn.",
+    "Ví dụ minh họa trên detector ADM: Table 6 so sánh raw signed residual với |residual|; đây là paper result, không phải pilot.": "Ví dụ trên bộ phân loại ADM: Table 6 so sánh sai số có dấu thô với |sai số|; đây là kết quả bài báo, không phải pilot.",
+    "The source protocol uses SD-v2; that differs from this paper SD-v1 table. These columns are deliberately not combined.": "Giao thức nguồn dùng SD-v2, khác SD-v1 trong bảng bài báo; hai cột được giữ riêng có chủ ý.",
+    "Ảnh gốc ADM kiểm thử và bản đồ DIRE được lưu thành một cặp có nguồn gốc": "Ảnh ADM trong tập kiểm thử và bản đồ DIRE được lưu thành một cặp có nguồn gốc",
+    "Đây là cặp ảnh/map lưu trong gallery, không phải lượt inference mới. File tái tạo và map .npy gốc chưa có trong checkout; PNG map chỉ dùng để hiển thị.": "Đây là cặp ảnh/bản đồ trong thư viện, không phải lượt suy luận mới. Ảnh tái tạo và bản đồ .npy gốc chưa có trong bản mã nguồn; PNG chỉ dùng để hiển thị.",
+    "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · sha256-ranked-cell-v1 · số mẫu mỗi ô được ghi trong sổ.": "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · sha256-ranked-cell-v1 · số mẫu mỗi ô ghi trong sổ.",
+    "Related work, not a result or feature implemented in the prototype.": "Công trình liên quan, không phải kết quả hay tính năng đã triển khai trong bản thử nghiệm.",
+    "R-level · preprocessing · checkpoint hash · split / threshold plan": "Mức R · tiền xử lý · hash checkpoint · cách chia / kế hoạch ngưỡng",
+})
+
+VI_COPY.update({
+    "repo": "kho mã", "checkout": "bản mã nguồn", "gallery": "thư viện ảnh", "metadata": "siêu dữ liệu",
+    "hash": "mã băm", "map": "bản đồ", "maps": "bản đồ", "benchmark": "bộ kiểm chuẩn",
+    "pixel": "điểm ảnh", "pixels": "điểm ảnh", "pipeline": "quy trình", "backbone": "mạng nền",
+    "diffusion": "khuếch tán", "pilot": "thí điểm", "attention": "attention", "self-attention": "tự chú ý",
+    "codebook": "bảng mã", "latent": "không gian ẩn", "threshold": "ngưỡng", "detector": "bộ phân loại",
+    "input": "đầu vào", "output": "đầu ra", "real": "thật", "fake": "giả", "flow-matching": "flow-matching",
+    "timestep": "timestep", "epsilon-prediction": "dự đoán epsilon", "sampling": "lấy mẫu", "inference": "suy luận",
+    "feature map": "bản đồ đặc trưng", "attention score": "điểm attention", "display-only": "chỉ để hiển thị",
+    "gallery samples": "mẫu thư viện ảnh", "metadata gallery": "siêu dữ liệu thư viện ảnh",
+    "Repo metrics": "Chỉ số kho mã", "repo-recorded": "ghi trong kho mã",
+    "Paper evidence": "Bằng chứng bài báo", "paper-reported": "do bài báo công bố",
+})
+
+VI_COPY.update({
+    "Area under ROC; compare with caution under domain shift.": "Diện tích dưới ROC; cần thận trọng khi so sánh giữa các miền dữ liệu.",
+    "Đi xuống: giảm resolution, tăng khả năng biểu diễn.  Bottleneck: context toàn cục.  Đi lên: khôi phục chi tiết qua skip.  Đây là sơ đồ kiến trúc, không phải tensor visualization.": "Đi xuống: giảm độ phân giải, tăng năng lực biểu diễn. Nút thắt: ngữ cảnh toàn cục. Đi lên: khôi phục chi tiết qua kết nối tắt. Đây là sơ đồ kiến trúc, không phải ảnh trực quan hóa tensor.",
+    "xₜ₋₁ được lấy mẫu từ phân phối Gaussian mỗi bước.\nƯu điểm: sampling gốc.\nHệ quả cho DIRE: stochastic noise làm residual thay đổi nếu không cố định path.": "Ở mỗi bước, xₜ₋₁ được lấy mẫu từ phân phối Gauss.\nƯu điểm: cơ chế lấy mẫu nguyên bản.\nHệ quả với DIRE: nhiễu ngẫu nhiên làm sai số thay đổi nếu không cố định quỹ đạo.",
+    "η = 0 loại thành phần noise bổ sung.\nCùng xₜ và protocol → cùng x₀.\nPhép reverse ODE có thể đi theo chiều tăng timestep.": "η = 0 loại bỏ thành phần nhiễu bổ sung.\nCùng xₜ và giao thức → cùng x₀.\nODE ngược có thể đi theo chiều timestep tăng.",
+    "Ví dụ minh họa trên detector ADM: Table 6 so sánh raw signed residual với |residual|; đây là paper result, không phải pilot.": "Ví dụ trên bộ phân loại ADM: Table 6 so sánh sai số có dấu thô với |sai số|; đây là kết quả bài báo, không phải pilot.",
+    "Table 4 bài báo · repo Table 4 ledger · different split size, bộ sinh and huấn luyện giao thức": "Table 4 của bài báo · sổ Table 4 của kho mã · khác quy mô chia tập, bộ sinh và giao thức huấn luyện",
+    "Table 4 paper · project Table 4 ledger · different split size, generators and training protocol": "Table 4 của bài báo · sổ Table 4 của dự án · khác quy mô chia tập, bộ sinh và giao thức huấn luyện",
+    "SỔ KẾT QUẢ TABLE 4 · _subset_protocol.json · MANIFEST SHA-256": "SỔ TABLE 4 · _subset_protocol.json · MANIFEST SHA-256",
+    "Toàn bộ metric pilot Table 4 từ sổ đã lưu trong repo": "Toàn bộ chỉ số pilot Table 4 từ sổ trong kho mã",
+    "Table 4 bài báo cho thấy đánh đổi theo S; không thay bằng dữ liệu pilot": "Table 4 của bài báo cho thấy sự đánh đổi theo S; không thay bằng số liệu pilot.",
+    "Table 2 báo cáo khả năng tổng quát hóa chéo bộ sinh cao ở bốn detector DIRE": "Table 2 báo cáo khả năng tổng quát hóa chéo bộ sinh cao ở bốn bộ phân loại DIRE.",
+    "ACC trung bình do tác giả báo cáo nằm trong khoảng 97,9%–99,9% theo bộ sinh huấn luyện": "ACC trung bình do tác giả báo cáo nằm trong khoảng 97,9%–99,9% tùy bộ sinh huấn luyện.",
+    "Table 5 bài báo ủng hộ DIRE hơn RGB hoặc ảnh tái tạo riêng lẻ": "Table 5 của bài báo cho thấy DIRE tốt hơn RGB hoặc ảnh tái tạo riêng lẻ.",
+    "Bài báo và pilot dùng bộ sinh cùng quy mô thực thi khác nhau": "Bài báo và pilot dùng các bộ sinh, quy mô thực thi khác nhau.",
+    "The source protocol uses SD-v2; that differs from this paper SD-v1 table. These columns are deliberately not combined.": "Giao thức nguồn dùng SD-v2, khác với SD-v1 trong bảng bài báo; hai cột được giữ riêng có chủ ý.",
+    "S5/S10/S20 train.json · MANIFEST giao thức hashes": "train.json của S5/S10/S20 · hash manifest giao thức",
+    "flow-matching": "flow-matching", "normalizing flow": "dòng chuẩn hóa", "tensor visualization": "trực quan hóa tensor",
+    "metric": "chỉ số", "metrics": "các chỉ số", "tag": "nhãn", "Run tag": "Nhãn lượt chạy",
+    "sha256-ranked-cell-v1": "sha256-ranked-cell-v1", "seed": "seed", "timeline": "dòng thời gian", "generated": "tạo sinh",
+    "Paper Table 4 · repo Table 4 ledger · different split size, generator and training protocol": "Table 4 của bài báo · sổ Table 4 của kho mã · khác quy mô chia tập, bộ sinh và giao thức huấn luyện",
+    "Paper Table 4 · repo Table 4 protocol + ledger": "Table 4 của bài báo · giao thức và sổ kết quả Table 4 của kho mã",
+    "Paper Table 4 and project Table 4 are not directly comparable experiments": "Table 4 của bài báo và Table 4 của dự án không phải các thí nghiệm so sánh trực tiếp",
+    "25 · Hạn chế & research questions": "25 · Hạn chế và câu hỏi nghiên cứu",
+    "RESEARCH QUESTIONS": "CÂU HỎI NGHIÊN CỨU", "Why one logit matters": "Vì sao một logit quan trọng",
+    "Re-score": "Chấm điểm lại", "Recompute map": "Tính lại bản đồ", "Retrain detector": "Huấn luyện lại bộ phân loại",
+    "Regenerate source images": "Tạo lại ảnh nguồn", "author map + author detector": "bản đồ và bộ phân loại của tác giả",
+    "self-computed DIRE": "DIRE tự tính", "self-trained classifier": "bộ phân loại tự huấn luyện", "own generator / data": "bộ sinh / dữ liệu tự sở hữu",
+})
+
+VI_COPY.update({
+    "Q, K, V projections\nacross spatial positions": "Phép chiếu Q, K, V\ntrên các vị trí không gian",
+    "raw pixels": "điểm ảnh gốc",
+    "float [−1,1]\ncenter crop/resize 256\ndiffusion domain": "float [−1,1]\ncắt giữa/đổi kích thước 256\nmiền khuếch tán",
+    "|x − x̂|\nfloat [0,2], 3 channels\nauthoritative map array": "|x − x̂|\nfloat [0,2], 3 kênh\nmảng bản đồ chuẩn",
+    "resize 256 → crop 224\nImageNet normalize\ndetector domain": "đổi kích thước 256 → cắt 224\nchuẩn hóa ImageNet\nmiền bộ phân loại",
+    "Đi xuống: giảm resolution, tăng khả năng biểu diễn.  Bottleneck: context toàn cục.  Đi lên: khôi phục chi tiết qua skip.  Đây là sơ đồ kiến trúc, không phải tensor visualization.": "Đi xuống: giảm độ phân giải, tăng năng lực biểu diễn. Nút thắt: ngữ cảnh toàn cục. Đi lên: khôi phục chi tiết qua kết nối tắt. Đây là sơ đồ kiến trúc, không phải ảnh trực quan hóa tensor.",
+    "A completed scientific cell requires metrics, labels, counts and compatible provenance": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích",
+    "complete ledger · no empty class · repeatability / hash checks": "sổ đầy đủ · không có lớp rỗng · kiểm tra khả năng lặp lại / mã băm",
+    "No empty class · all labels represented · repeatability checks": "Không có lớp rỗng · đủ mọi nhãn · kiểm tra khả năng lặp lại",
+    "A completed cell requires a metric, labels, counts and compatible provenance.": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích.",
+    "Mốc ghi nhận trong kho mã nằm sau ngày phiên làm việc": "Các mốc ghi nhận trong kho mã muộn hơn ngày phiên làm việc",
+    "Có file + ledger\nnhưng dòng thời gian chưa khớp": "Có tệp và sổ kết quả\nnhưng dòng thời gian chưa khớp",
+    "Mạng có thể học dấu vân tay Bộ sinh thay vì dấu hiệu bền vững.": "Mạng có thể học dấu vân tay của bộ sinh thay vì dấu hiệu bền vững.",
+    "Tìm biểu diễn có ích khi Bộ sinh Kiểm thử ≠ Bộ sinh Huấn luyện.": "Tìm biểu diễn hữu ích khi bộ sinh kiểm thử khác bộ sinh huấn luyện.",
+    "Dòng chuẩn hóa (normalizing flow) lý tưởng nghịch đảo chính xác — làm mất tín hiệu Sai số DIRE": "Dòng chuẩn hóa có phép nghịch đảo chính xác — trong trường hợp lý tưởng, DIRE bằng không.",
+    "Các lớp biến đổi ảnh thành đặc trưng theo không gian": "Các lớp biến đổi ảnh thành đặc trưng không gian",
+    "Bài DIRE vẫn dùng ADM trên pixel làm tham chiếu tái tạo.": "Bài DIRE vẫn dùng ADM trên điểm ảnh làm mô hình tham chiếu để tái tạo.",
+    "AEROBLADE cùng trực giác sai số tái tạo nhưng dùng autoencoder": "AEROBLADE có trực giác tương tự về sai số tái tạo nhưng dùng bộ mã hóa tự động",
+    "A completed scientific cell requires metrics, labels, counts and compatible provenance": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích",
+    "A completed scientific cell requires a metric, labels, counts and compatible provenance": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích",
+})
+
 def _vi_copy(text: str) -> str:
-    # Translate complete English tokens/phrases, never substrings inside technical
-    # identifiers (e.g. Reconstruction → tái tạo, but not partial mangling).
+    """Translate prose without cascading replacements into Vietnamese or identifiers."""
     import re
-    for en, vi in sorted(VI_COPY.items(), key=lambda item: len(item[0]), reverse=True):
-        if en and (en[0].isalnum() or en[-1].isalnum()):
-            pattern = rf"(?<![A-Za-z0-9_-]){re.escape(en)}(?![A-Za-z0-9_-])"
-            text = re.sub(pattern, lambda _match, replacement=vi: replacement, text)
-        else:
-            text = text.replace(en, vi)
+    # Exact full-copy entries take precedence, including prose that contains a
+    # filename or slash-form label which must remain untouched as an identifier.
+    exact = VI_COPY.get(text)
+    if exact is None:
+        exact = next((v for k, v in VI_COPY.items() if k.lower() == text.lower() and " " in k), None)
+    if exact is not None:
+        return exact
+    # Keep repository paths, filenames, URLs, and author citation fragments intact,
+    # while still translating any surrounding explanatory prose.
+    protected = []
+    def hold(match):
+        protected.append(match.group(0))
+        return f"\u0000{len(protected)-1}\u0000"
+    text = re.sub(r"\b(?:docs|modal-runs|src|tools|platforms)/[\w./-]+|https?://\S+|\b\w+\.(?:json|pdf|tsv|npy|png|md|py)\b|\bet al\.", hold, text)
+
+    # Multi-word phrases win first and are held so later glossary entries cannot
+    # rewrite words inside the Vietnamese translation (or technical terms).
+    held_phrases = []
+    for en, vi in sorted(((k, v) for k, v in VI_COPY.items() if " " in k),
+                         key=lambda item: len(item[0]), reverse=True):
+        pattern = rf"(?<![\w-]){re.escape(en)}(?![\w-])"
+        def hold_translation(_match, replacement=vi):
+            held_phrases.append(replacement)
+            return f"\u0001{len(held_phrases)-1}\u0001"
+        text = re.sub(pattern, hold_translation, text, flags=re.IGNORECASE)
+
+    # Translate single terms in one pass. This avoids accidental cascades such as
+    # replacing English fragments that happen to occur in a translated Vietnamese word.
+    stopwords = set()
+    singles = {k.lower(): v for k, v in VI_COPY.items() if " " not in k and k.lower() not in stopwords}
+    if singles:
+        choices = sorted(singles, key=len, reverse=True)
+        pattern = r"(?<![\w-])(?:" + "|".join(re.escape(k) for k in choices) + r")(?![\w-])"
+        text = re.sub(pattern, lambda m: singles[m.group(0).lower()], text, flags=re.IGNORECASE)
+    for i, value in enumerate(held_phrases):
+        text = text.replace(f"\u0001{i}\u0001", value)
+    for i, value in enumerate(protected):
+        text = text.replace(f"\u0000{i}\u0000", value)
     return text
 
 def hx(code: str) -> str:
@@ -801,7 +1403,7 @@ def build_deck() -> Deck:
     p.text(55, 54, 440, 20, "TECHNICAL DEEP DIVE  ·  RESEARCH UPDATE", 10, "mint", bold=True)
     p.text(55, 112, 520, 112, "DIRE: từ phép tái tạo\ntới bằng chứng", 35, "white", bold=True)
     p.text(58, 238, 500, 60,
-           "Diffusion Reconstruction Error · nền tảng toán học, kiến trúc mô hình,\nđối chiếu paper và trạng thái pilot theo artifacts trong repo", 15, "deepmuted")
+           "DIRE · toán học, kiến trúc mô hình,\nđối chiếu bài báo và kết quả pilot trong kho mã", 15, "deepmuted")
     p.badge(58, 325, 174, "PAPER-REPORTED", "navy2", "mint")
     p.badge(243, 325, 186, "REPO-RECORDED", "navy2", "gold")
     p.badge(440, 325, 176, "MISSING ≠ ZERO", "navy2", "white")
@@ -811,28 +1413,28 @@ def build_deck() -> Deck:
     p.note()
 
     # 02 executive overview
-    p = d.page("01 · Tóm tắt", "Dự án nay có số đo repo-recorded — nhưng provenance và live state còn mở",
-        "handoff.md · modal-runs/runs/report.json · Table 4 ledger · gallery metadata",
+    p = d.page("01 · Tóm tắt", "Báo cáo tách biệt kết quả bài báo, số đo pilot và phần chưa có dữ liệu",
+        "handoff.md · report R1+R2 · sổ Table 4 · metadata gallery",
         notes_for("handoff.md; modal-runs/runs/report.json; Table 4 ledger; gallery/*.json",
-                  "Phân biệt file hiện có trong checkout với xác nhận live Modal. Theo session context, trần $30 là all-in; CLI/live state chưa được kiểm tra trong phiên này."))
-    heading_sub(p, "Snapshot của checkout: có report R1+R2, Table 4 pilot, gallery và prototype read-only; không có kết quả Table 5/Figure 4.")
-    label_value(p, 48, 157, 205, "Table 4 ledger", "S=5 / 10 / 20", "teal", 21)
-    label_value(p, 266, 157, 205, "Per test cell", "n = 400", "teal", 23)
-    label_value(p, 484, 157, 205, "Gallery records", "64 cặp", "teal", 25)
-    label_value(p, 702, 157, 205, "Hard cap", "$30 total", "gold", 24, "goldp")
-    p.card(48, 260, 270, 147, "Có trong repo",
-           "R1+R2 aggregate report; ADM held-out eval; Table 4 S sweep; 64 mẫu gallery với metadata.", "teal")
-    p.card(345, 260, 270, 147, "Chưa có ledger",
-           "Table 5 có protocol/inputs בלבד; Figure 4 không có kết quả. S=50 của Table 4 được đánh missing.", "gold", "goldp")
-    p.card(642, 260, 270, 147, "Chưa xác minh",
-           "Live Modal app/job, account spend/headroom, checkpoint binaries và thời điểm artifacts.", "red", "redp")
+                  "Các số liệu được giữ theo đúng nguồn và phạm vi; chưa xác minh bản nhị phân checkpoint và trạng thái lưu trữ ngoài repo."))
+    heading_sub(p, "Trong checkout có report R1+R2, pilot Table 4 và 64 mẫu gallery; Table 5/Figure 4 chưa có sổ kết quả.")
+    label_value(p, 48, 157, 205, "Các mức S đã đo", "5 / 10 / 20", "teal", 22)
+    label_value(p, 266, 157, 205, "Mỗi ô kiểm thử", "n = 400", "teal", 23)
+    label_value(p, 484, 157, 205, "Mẫu gallery", "64", "teal", 25)
+    label_value(p, 702, 157, 205, "Nguồn", "Bài báo / repo", "gold", 18, "goldp")
+    p.card(48, 260, 270, 147, "Đã ghi nhận",
+           "Báo cáo R1+R2; đánh giá ADM trên tập giữ lại; pilot Table 4; 64 mẫu gallery có metadata.", "teal")
+    p.card(345, 260, 270, 147, "Chưa có kết quả",
+           "Table 5 mới có giao thức/đầu vào; Figure 4 chưa có kết quả. Không suy diễn S=50 cho pilot.", "gold", "goldp")
+    p.card(642, 260, 270, 147, "Giới hạn nguồn",
+           "Checkpoint chưa có trong checkout; hash ảnh gallery chỉ xác nhận PNG hiển thị, không thay thế map nguồn.", "red", "redp")
     p.text(52, 431, 855, 46,
-           "Kết luận điều hành: dữ liệu mới làm dashboard và báo cáo phong phú hơn; chúng chưa cho phép vượt qua cost/provenance gate hoặc tuyên bố tái hiện toàn paper.",
+           "Kết luận: báo cáo nêu rõ đâu là kết quả công bố, đâu là số đo pilot và đâu là câu hỏi chưa được kiểm chứng.",
            14, "ink", bold=True)
     p.note()
 
     # 03 timeline/evidence discipline
-    p = d.page("01 · Cách đọc bằng chứng", "Các artifact mới mang mốc thời gian tương lai so với ngày phiên này",
+    p = d.page("01 · Cách đọc bằng chứng", "Mốc ghi nhận trong repo nằm sau ngày phiên làm việc",
         "Git metadata · report.json:data.created · developer session date",
         notes_for("git commit 174e8cf (2026-11-25); report.json created=2026-11-17T03:17:09Z; system date=2026-10-14",
                   "Mốc của checkout và report đều sau ngày hiện tại do môi trường khai báo. Vì vậy deck trích chúng như 'repository-recorded', không khẳng định thời điểm thực nghiệm; cần giải quyết timeline provenance trước khi công bố."))
@@ -1032,8 +1634,29 @@ def build_deck() -> Deck:
     p.text(517, 401, 359, 21, "Global context, used at selected resolutions.", 10, "muted", align="center")
     p.note()
 
+    # 10a · Hình minh họa trực quan cho convolution, attention và residual path.
+    p = d.page("05 · Minh họa các lớp mạng", "Các lớp biến đổi ảnh thành đặc trưng theo không gian",
+        "Ảnh tổng hợp · tools/build_report_illustrations.py · minh họa toán tử, không phải activation ADM",
+        notes_for("Deterministic synthetic image; Sobel/Laplacian filter responses, illustrative attention weights and a ResNet-style residual block. No model checkpoint was run."))
+    cards=[
+        (53,"TÍCH CHẬP 3×3","conv_feature_maps.png",(64,198,238,93),
+         "Bộ lọc cục bộ làm nổi cạnh dọc, cạnh ngang và chi tiết; mỗi kernel tạo một bản đồ đặc trưng khác nhau."),
+        (355,"SELF-ATTENTION","attention_weights.png",(427,188,122,122),
+         "Một vị trí truy vấn phân bổ trọng số lên các vị trí khác. Ô vàng là điểm truy vấn; vùng sáng có trọng số lớn hơn."),
+        (657,"RESNET BOTTLENECK","resnet_residual_path.png",(665,218,234,55),
+         "Nhánh chính biến đổi đặc trưng; nhánh tắt cộng lại trước ReLU để giữ đường truyền thông tin/gradient."),
+    ]
+    for x,title,filename,(ix,iy,iw,ih),body in cards:
+        p.rect(x,151,250,293,"paper",stroke="line",radius=11)
+        p.text(x+10,164,230,24,title,10.4,"teal",bold=True,align="center")
+        p.image(ILLUSTRATIONS/filename,ix,iy,iw,ih,title)
+        p.text(x+14,312,222,105,body,10.5,"ink",align="center",valign="mid")
+    p.rect(107,459,746,34,"goldp",stroke="gold",radius=9)
+    p.text(119,467,722,19,"Minh họa trên ảnh toy; không phải feature map hay attention score được trích từ ADM/ResNet.",9.7,"ink",bold=True,align="center")
+    p.note()
+
     # 11 ADM config
-    p = d.page("05 · ADM configuration", "Cấu hình ADM 256² đặt chi phí và phạm vi reconstruction",
+    p = d.page("05 · Cấu hình ADM", "Cấu hình ADM 256² xác định mô hình tham chiếu cho phép tái tạo",
         "docs/dire-tu-so-0.pdf §5.3 · Table 4 protocol / model SHA recorded in repo",
         notes_for("docs/dire-tu-so-0.pdf, §5.3; Table 4 ledger protocol keys"))
     config=[
@@ -1090,19 +1713,39 @@ def build_deck() -> Deck:
            12, "muted", align="center")
     p.note()
 
-    # 15 NFE / S
-    p = d.page("06 · Chi phí suy luận", "Mỗi DIRE map cần 2S lượt U-Net — chi phí tuyến tính theo S",
-        "docs/dire-tu-so-0.pdf §§7.5–7.7 · Table 4 paper / pilot ledger",
-        notes_for("docs/dire-tu-so-0.pdf, pp. 35–37; Table 4 ledger"))
-    show_equation(p, r"\mathrm{NFE}_{\mathrm{per\ image}}=S_{\mathrm{invert}}+S_{\mathrm{reconstruct}}=2S",
-                  144, 148, 672, 66, "NFE = number of function evaluations of the diffusion network.", 24)
-    vals=[(5,"10 NFE","chi phí thấp"),(10,"20 NFE",""),(20,"40 NFE","mốc bài báo")]
-    for i,(s,n,tag) in enumerate(vals):
-        x=178+i*254; height=44+int(s*1.0); y=421-height
-        p.rect(x,y,112,height,"teal" if s==20 else "bluep",stroke="teal",radius=8)
-        p.text(x-6,y-48,124,30,f"S={s}",18,"ink",bold=True,align="center")
-        p.text(x-6,y+height+6,124,24,n,12,"teal",bold=True,align="center")
-        if tag:p.text(x-26, 468, 152, 20, tag, 8.7,"muted",align="center")
+    # 15 · Quỹ đạo DDIM và map DIRE minh họa bằng ảnh tổng hợp.
+    p = d.page("06 · Minh họa DDIM", "Từ ảnh sạch qua nhiễu DDIM đến ảnh tái tạo",
+        "Minh họa tổng hợp tạo bởi tools/build_report_illustrations.py · seed=3407 · S=20",
+        notes_for("Synthetic teaching illustration: deterministic toy DDIM trajectory; the final reconstructed thumbnail is intentionally blurred to make the schematic residual legible. Not ADM/U-Net inference or an experimental measurement."))
+    sequence=[
+        ("ddim_x0.png", "Ảnh đầu vào x₀", "ảnh tổng hợp"),
+        ("ddim_xt500.png", "Đảo · xₜ", "t xấp xỉ 500"),
+        ("ddim_xt950.png", "Đầu quỹ đạo", "t xấp xỉ 950"),
+        ("ddim_reverse500.png", "Tái tạo · xₜ", "t giảm"),
+        ("ddim_xhat0.png", "Ước lượng x̂₀", "DDIM η=0"),
+        ("toy_dire_residual.png", "|x₀ − x̂₀|", "map toy minh họa"),
+    ]
+    left, gap, iw = 43, 14, 132
+    for i,(filename,caption,sub) in enumerate(sequence):
+        x=left+i*(iw+gap)
+        p.rect(x,162,iw,174,"paper",stroke="line",radius=9)
+        p.image(ILLUSTRATIONS/filename,x+8,171,iw-16,iw-16,caption)
+        p.text(x+6,306,iw-12,21,caption,9.2,"ink",bold=True,align="center",valign="mid")
+        p.text(x+6,326,iw-12,14,sub,7.7,"muted",align="center")
+        if i<5:
+            p.arrow(x+iw+1,238,x+iw+gap-2,238,"teal" if i>=3 else "gold",1.1)
+    p.text(71, 365, 818, 29, "Đảo: timestep tăng  →  tái tạo: timestep giảm  →  DIRE = |x₀ − R(I(x₀))|", 14, "ink", bold=True, align="center")
+    p.rect(93, 410, 774, 53, "goldp", stroke="gold", radius=10)
+    p.text(109, 420, 742, 33, "Minh họa tổng hợp: ảnh tái tạo được làm mờ có chủ ý để residual dễ thấy; không phải ADM hay kết quả đo ảnh thật.", 10.8, "ink", bold=True, align="center", valign="mid")
+    p.note()
+
+    # Hình gốc của tác giả: dùng trực tiếp asset từ kho chính thức, không vẽ lại chart.
+    p = d.page("06 · Hình gốc từ bài báo", "Sơ đồ gốc của tác giả: đảo DDIM, tái tạo và bản đồ DIRE",
+        "Wang et al., ICCV 2023 · kho tác giả ZhendongWang6/DIRE · figs/dire.png",
+        notes_for("Author-supplied image asset used without redrawing: https://github.com/ZhendongWang6/DIRE/blob/main/figs/dire.png . The image presents DDIM inversion, reconstruction and DIRE. It is not project pilot data."))
+    p.text(80, 117, 800, 19, "Hình nguyên bản từ kho tác giả; nhãn và số phương trình được giữ nguyên.", 9.5, "muted", align="center")
+    p.image(ILLUSTRATIONS / "author_dire.png", 185, 137, 590, 361,
+            "Hình gốc của tác giả về DDIM inversion, reconstruction và DIRE")
     p.note()
 
     # 16 DIRE formula
@@ -1348,20 +1991,6 @@ def build_deck() -> Deck:
     p.text(139, 457, 685, 25, "Related work, not a result or feature implemented by this project's prototype.", 11.2, "muted", italic=True, align="center")
     p.note()
 
-    # 31 project source architecture
-    p = d.page("14 · Kiến trúc dự án", "Một core dùng chung giữ preprocessing, checkpoint parsing và scoring nhất quán",
-        "README.md · docs/adr-0005-local-first-modal-wrapper.md",
-        notes_for("README.md; ADR-0005; current repository architecture"))
-    arrow_box(p, 63, 195, 206, 112, "Data / Volume", "manifest · maps\nckpt · run ledger", "bluep", "teal")
-    arrow_box(p, 352, 195, 248, 112, "dire_core", "preprocess · detector\nscore · batch · provenance", "navy", "white")
-    arrow_box(p, 687, 157, 203, 91, "dire_local", "CLI + local API", "greenp", "teal")
-    arrow_box(p, 687, 275, 203, 91, "dire_modal", "Modal wrappers\nremote GPU paths", "goldp", "gold")
-    p.arrow(272,251,343,251,"teal",2); p.arrow(602,229,680,205,"teal",1.5);p.arrow(602,273,680,318,"teal",1.5)
-    p.text(114, 373, 730, 54,
-           "Other surfaces: HF Spaces Gradio app + Streamlit fallback; Kaggle notebook; RunPod/Vast helper scripts; private Streamlit research prototype.",
-           12.8, "ink", bold=True, align="center")
-    p.note()
-
     # 32 R1+R2 report
     p = d.page("15 · Project measurements", "R1+R2 report records a broader run — but bookkeeping counters need reconciliation",
         "modal-runs/runs/report.json · runs/eval/gen-adm/eval.json",
@@ -1414,17 +2043,21 @@ def build_deck() -> Deck:
            12, "ink", bold=True, align="center")
     p.note()
 
-    # 35 gallery pair
-    p = d.page("16 · Gallery & provenance", "An archived ADM test pair links an original image to a display-only DIRE map",
-        "modal-runs/gallery/adm_004006349103115c.json + PNG SHA-256 metadata",
-        notes_for("modal-runs/gallery/adm_004006349103115c.json; both committed PNGs match the declared display-file SHA-256; source NPY is not in repo"))
-    orig=GALLERY/"adm_004006349103115c_orig.png"; diff=GALLERY/"adm_004006349103115c_diff.png"
-    p.rect(94, 147, 346, 254, "paper", stroke="line", radius=12); p.image(orig,111,164,312,218,"source image, ADM test split")
-    p.rect(520,147,346,254,"paper",stroke="line",radius=12); p.image(diff,537,164,312,218,"display render of RGB DIRE residual")
-    p.text(101, 410, 326, 18, "ORIGINAL · ADM / test · R1+R2", 10, "teal", bold=True, align="center")
-    p.text(527, 410, 326, 18, "DIRE MAP · S=20 · display PNG", 10, "gold", bold=True, align="center")
-    p.rect(108, 442, 744, 48, "goldp", stroke="gold", radius=9)
-    p.text(122, 450, 716, 32, "Metadata names the source as /zero/data/test/adm/004006349103115c.png; original+display PNG hashes verified. Authoritative .npy map was not retrieved.", 9.8, "ink", bold=True, align="center", valign="mid")
+    # 35 · Cặp ảnh gốc/map DIRE đã lưu trong gallery.
+    p = d.page("16 · Ví dụ map DIRE", "Ảnh ADM kiểm thử và bản đồ DIRE được lưu thành một cặp có nguồn gốc",
+        "modal-runs/gallery/adm_004006349103115c.json · SHA-256 PNG trong metadata",
+        notes_for("Both committed PNGs match declared display-file SHA-256; source NPY and the corresponding reconstruction were not retrieved."))
+    p.rect(47,151,320,258,"paper",stroke="line",radius=12)
+    p.image(GALLERY/"adm_004006349103115c_orig.png",62,164,290,218,"Ảnh gốc ADM/test")
+    p.text(64,386,286,16,"ẢNH GỐC · ADM / test · R1+R2",9.5,"teal",bold=True,align="center")
+    p.rect(593,151,320,258,"paper",stroke="line",radius=12)
+    p.image(GALLERY/"adm_004006349103115c_diff.png",608,164,290,218,"Bản đồ DIRE hiển thị")
+    p.text(610,386,286,16,"BẢN ĐỒ DIRE · S=20 · PNG hiển thị",9.5,"gold",bold=True,align="center")
+    p.arrow(382,275,578,275,"teal",2)
+    p.text(393,206,174,52,"ADM + DDIM\nđảo rồi tái tạo",12,"ink",bold=True,align="center",valign="mid")
+    p.formula(r"\mathrm{DIRE}(x_0)=|x_0-\hat{x}_0|",395,298,168,44,size=16)
+    p.rect(88,431,784,54,"goldp",stroke="gold",radius=9)
+    p.text(103,439,754,37,"Đây là cặp ảnh/map lưu trong gallery, không phải lượt inference mới. File tái tạo và map .npy gốc chưa có trong checkout; PNG map chỉ dùng để hiển thị.",9.6,"ink",bold=True,align="center",valign="mid")
     p.note()
 
     # 36 Table4 design
@@ -1613,35 +2246,6 @@ def build_deck() -> Deck:
         p.text(x+23,358,218,23,status,10,accent,bold=True,align="center",valign="mid")
     p.note()
 
-    # 45 clean-room
-    p = d.page("21 · Clean-room implementation", "The clean-room path independently rewrites U-Net, DDIM, DIRE, ResNet and metrics",
-        "docs/from-zero-clean-room.md · src/dire_zero/",
-        notes_for("docs/from-zero-clean-room.md; test claims are documentation claims and not a fresh GPU run in this presentation session"))
-    p.table(82, 158, 796, ["Component", "Reference dependency", "Clean-room counterpart", "Verification idea"], [
-        ["ADM U-Net", "guided-diffusion source + weights", "src/dire_zero/unet.py", "566 tensor names/shapes"],
-        ["DDIM / schedule", "GaussianDiffusion / respacing", "src/dire_zero/diffusion.py", "schedule + NFE tests"],
-        ["DIRE maps", "compute_dire.py", "src/dire_zero/pipeline.py", "finite maps + matching protocol"],
-        ["ResNet-50", "vendor/networks/resnet.py", "src/dire_zero/detector.py", "shape mapping / parity"],
-        ["Metrics", "sklearn / author eval", "src/dire_zero/metrics.py", "ACC/AP formula tests"],
-    ], [146,232,208,210], 50, 9.9)
-    p.rect(127, 445, 708, 43, "bluep", stroke="teal", radius=9)
-    p.text(141, 452, 681, 28, "Weights and LSUN data still come from external sources: clean-room means independent code, not independent training data.", 10.6, "ink", bold=True, align="center", valign="mid")
-    p.note()
-
-    # 46 architecture audit / error lessons
-    p = d.page("21 · Verification lessons", "Several silent-but-plausible bugs were found only by deriving the pipeline again",
-        "docs/from-zero-clean-room.md §3 · docs/dire-tu-so-0.pdf §11",
-        notes_for("docs/from-zero-clean-room.md; reported fixes include alpha index, NFE, fp16/device handling and saving CUDA tensors"))
-    bugs=[("ᾱ index", "NaN at first reverse step", "shifted schedule index + finite-map test"),
-          ("NFE", "S−1 per direction; cost undercount", "count actual model calls; require 2S"),
-          ("fp16 / device", "dtype or CPU/CUDA mismatch", "norm policy + explicit device transfer"),
-          ("GPU image output", "CUDA tensor → NumPy failure", "detach → CPU → contiguous before save"),
-          ("input cap", "cost estimate ignored --n", "plan the exact cells that will execute")]
-    p.table(65, 152, 830, ["Failure surface", "How it misleads", "Guard / correction"], bugs,
-            [162,285,383], 53, 10)
-    p.text(98, 460, 762, 29, "Lesson: passing CPU tests does not prove the GPU path or cost estimate is correct.", 12, "red", bold=True, align="center")
-    p.note()
-
     # 47 generator taxonomy project
     p = d.page("22 · Dataset & generators", "Paper benchmark and repository extensions must remain separate",
         "Wang et al. (2023), Table 1 · paper-cac-mo-hinh-sinh.html §§09–10 · report.json",
@@ -1659,32 +2263,6 @@ def build_deck() -> Deck:
     p.text(105, 444, 750, 31, "Do not merge out-of-paper generators into a paper mean or claim exact source architecture from a folder name.", 11.5, "red", bold=True, align="center")
     p.note()
 
-    # 48 project prototype / apps
-    p = d.page("23 · Demo & prototype", "The research dashboard is read-only; upload preview is not model inference",
-        "platforms/prototype/README.md · platforms/hf-spaces/README.md",
-        notes_for("platforms/prototype current MVP; HF Spaces app architecture documented in its README"))
-    p.table(85, 157, 790, ["Surface", "Current purpose", "Boundary"], [
-        ["HF Spaces / Gradio", "Public explainer, gallery, optional DIRE endpoint", "Endpoint computes maps; no detector prediction on raw RGB"],
-        ["Streamlit fallback", "Demo backup UI", "Shares public demo constraints"],
-        ["Private research prototype", "Paper refs + repo ledgers + gallery + image preview", "No Modal calls, no checkpoints, no prediction"],
-        ["On-demand / generator", "Future roadmap", "Off until checkpoint + budget guard are verified"],
-    ], [179,293,318], 58, 10)
-    p.badge(311, 450, 337, "UPLOAD ≠ SCORE · RGB MUST NOT GO TO DIRE DETECTOR", "redp", "red")
-    p.note()
-
-    # 49 cost guard
-    p = d.page("24 · Budget & safeguards", "The all-in GPU cap remains $30; live spend/headroom is unknown",
-        "handoff.md decisions · no Modal CLI installed in this session",
-        notes_for("User-approved hard cap; current spend and live jobs were not queried; no GPU run launched during this deck build"))
-    p.rect(74, 154, 310, 232, "navy", radius=14)
-    p.text(104, 184, 250, 26, "PILOT HARD CAP", 12, "mint", bold=True, align="center")
-    p.text(97, 227, 264, 70, "$30", 54, "white", bold=True, align="center", valign="mid")
-    p.text(107, 316, 245, 43, "all GPU cost\naccrued + active + new", 12, "deepmuted", align="center")
-    p.card(445, 155, 438, 106, "Before any new GPU job", "Check Modal app status, Volume ledger/artifacts, account spend and remaining headroom.", "gold", "goldp", 15, 12)
-    p.card(445, 282, 438, 104, "Stop only on evidence", "Stop only to protect the cap or with evidence of a stuck/non-progressing job; inspect artifacts first.", "red", "redp", 15, 12)
-    p.text(100, 425, 759, 42, "The deck build is offline/read-only. It did not launch, stop, upload, modify or delete Modal data.", 12.2, "teal", bold=True, align="center")
-    p.note()
-
     # 50 scientific limitations
     p = d.page("25 · Hạn chế & research questions", "High paper scores do not close the mechanism, domain and deployment questions",
         "docs/dire-tu-so-0.pdf §9 · docs/paper-cac-mo-hinh-sinh.html §§08,11",
@@ -1697,26 +2275,6 @@ def build_deck() -> Deck:
             ("Uncertainty", "No multiple seeds / paper CIs for many comparisons; don't overread tenths of a point.")]
     for i,(head,body) in enumerate(limits):
         col=i%3; row=i//3; p.card(55+col*292, 159+row*137, 264, 111, head, body, "red" if col==0 else "gold", "paper", 13.4, 10.8)
-    p.note()
-
-    # 51 project plan
-    p = d.page("26 · Kế hoạch tiếp theo", "Resolve evidence and cost gates before turning the dashboard into an inference service",
-        "handoff.md · project constraints and approved decisions",
-        notes_for("handoff.md and the user-confirmed decisions in session memory"))
-    steps=[("01", "Reconcile chronology", "Verify commit / artifact timestamps and provenance."),
-           ("02", "Read-only Modal audit", "Check live apps, Volume ledgers, spend and headroom."),
-           ("03", "Audit metrics", "Repair report counter mismatch and CI inconsistency."),
-           ("04", "Verify checkpoints", "Locate binaries; validate hashes and preprocessing."),
-           ("05", "Complete ledgers", "Table 5 + Figure 4 only if cap permits."),
-           ("06", "Inference safely", "Add cost-guarded on-demand path; keep image handling explicit.")]
-    for i,(n,h,b) in enumerate(steps):
-        x=57+(i%3)*294; y=151+(i//3)*156
-        p.rect(x,y,266,126,"paper",stroke="line",radius=11)
-        p.badge(x+13,y+12,41,n,"bluep","teal")
-        p.text(x+65,y+13,185,24,h,12.4,"ink",bold=True)
-        p.text(x+15,y+53,236,59,b,10.8,"muted")
-    p.rect(175, 475, 610, 27, "redp", radius=8)
-    p.text(187, 478, 586, 19, "Do not start new GPU jobs until steps 01–03 establish valid headroom under $30.", 10.1, "red", bold=True, align="center", valign="mid")
     p.note()
 
     # 52 conclusion
@@ -1794,36 +2352,8 @@ def build_deck() -> Deck:
     ], [162,325,327], 54, 9.9)
     p.note()
 
-    # A5 exact fingerprints
-    p = d.page("Appendix D · Fingerprints", "Hashes identify artifacts but do not prove binaries are available or live state is current",
-        "Table 4 ledger · report.json · gallery sample metadata",
-        notes_for("Hashes copied from checked-in metadata. Only gallery display PNGs were re-hashed locally; diffusion and detector files were not available to re-hash in this session."))
-    p.table(58, 149, 844, ["Artifact", "Recorded SHA-256 (prefix)", "What is / is not verified"], [
-        ["Table 4 subset manifest", str(T4_RUNS["5"]["protocol"].get("manifest_sha256","—"))[:24]+"…", "Identifier in ledger; Modal Volume not queried"],
-        ["ADM diffusion checkpoint", str(T4_RUNS["5"]["protocol"].get("adm_ckpt_sha256","—"))[:24]+"…", "Identifier in protocol; binary not checked out"],
-        ["ImageNet init weights", str(T4_RUNS["5"]["protocol"].get("imagenet_weights_sha256","—"))[:24]+"…", "Identifier in protocol; binary not checked out"],
-        ["S5 detector", str(T4_RUNS["5"].get("detector_sha256","—"))[:24]+"…", "Ledger hash; no local checkpoint binary found in modal-runs"],
-        ["Gallery original PNG", GALLERY_SAMPLE["sha256"]["png_orig"][:24]+"…", "File hash verified against committed PNG"],
-        ["Gallery map PNG", GALLERY_SAMPLE["sha256"]["png_diff"][:24]+"…", "Display image only; source .npy not retrieved"],
-    ], [177,270,397], 42, 8.8)
-    p.note()
-
-    # A6 complete representation of current pipeline
-    p = d.page("Appendix E · Implementation map", "Study path: source data → map cache → detector → ledger → report / display",
-        "src/dire_zero · src/dire_core · tools/experiment_tables.py · platforms",
-        notes_for("Repository module map from README, AGENT.md, runbooks and current artifacts"))
-    nodes=[("Manifest + subset", "sample identity\nseed / SHA", 61, "bluep", "teal"),
-           ("DIRE generation", "ADM + DDIM\nS steps × 2", 278, "purple", "white"),
-           ("Representation", "DIRE / RGB / REC\nper-image cache", 495, "greenp", "teal"),
-           ("ResNet + metrics", "split / threshold\nACC · AP · AUC", 712, "goldp", "gold")]
-    for title,body,x,fill,acc in nodes:arrow_box(p,x,200,182,105,title,body,fill,acc)
-    for x in (246,463,680):p.arrow(x,252,x+29,252,"muted",1.2)
-    p.rect(219, 364, 521, 70, "paper", stroke="line", radius=11)
-    p.text(239, 378, 483, 42, "Artifact handoff: immutable input protocol → result ledger → sourced tables / plots → slides", 12.2, "ink", bold=True, align="center", valign="mid")
-    p.note()
-
     # A7 runbook evidence requirements
-    p = d.page("Appendix F · Evidence gates", "A completed scientific cell requires metrics, labels, counts and compatible provenance",
+    p = d.page("Appendix E · Cổng bằng chứng", "A completed scientific cell requires metrics, labels, counts and compatible provenance",
         "docs/dire-tu-so-0.pdf Appendix C · table4/table5/figure4 runbook",
         notes_for("docs/dire-tu-so-0.pdf p. 76; runbook completion checks"))
     gates=[("Before", "R-level · preprocessing · checkpoint hash · split / threshold plan"),
@@ -1837,7 +2367,7 @@ def build_deck() -> Deck:
     p.note()
 
     # A8 references
-    p = d.page("Appendix G · References", "Primary sources and project evidence used in this deck",
+    p = d.page("Appendix F · Tài liệu tham khảo", "Primary sources and project evidence used in this deck",
         "Bibliography extracted from docs/dire-tu-so-0.pdf and source packet",
         notes_for("Full citation list; internal repository paths are relative to project root"))
     refs=[
@@ -1923,7 +2453,7 @@ def main():
     write_equation_source()
     deck = build_deck()
     # Inspect presentation text / PDF output consistency and evidence content.
-    expected = ["U-Net", "ResNet-50", "DDIM", "Table 4", "S=50", "chưa chạy", "$30"]
+    expected = ["U-Net", "ResNet-50", "DDIM", "Table 4", "S=50", "chưa có"]
     all_text = "\n".join(shape.text for slide in deck.prs.slides for shape in slide.shapes if getattr(shape, "has_text_frame", False))
     missing = [item for item in expected if item.lower() not in all_text.lower()]
     if missing:
