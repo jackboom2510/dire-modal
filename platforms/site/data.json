@@ -1,19 +1,17 @@
 {
   "schema": 1,
   "labels": {
-    "paper": "số của paper (ICCV 2023) — CHƯA phải số đo của mình",
-    "measured": "số ĐO của repo · xem nguồn từng ô",
-    "demo": "demo — KHÔNG phải số của paper"
+    "paper": "kết quả được công bố trong paper ICCV 2023; không phải số đo của repo",
+    "repo": "trạng thái repo, không phải benchmark hiệu năng"
   },
   "honesty": {
-    "pill": "code xong: 6 · chưa có: 4 · số của dự án: chưa có"
+    "pill": "chỉ hiển thị kết quả paper đã công bố · chưa có benchmark repo được xác minh"
   },
   "generated_by": "platforms/site/build.py",
   "sources": {
-    "paper": "src/dire_modal/paper_table2.tsv",
-    "manifest": "src/dire_modal/manifest.py (tier e2)",
-    "demo": "src/dire_modal/demo_train.yaml",
-    "measured": "docs/runbook-free.md (số đo 2026-10-25/28)"
+    "paper_table2": "src/dire_modal/paper_table2.tsv",
+    "paper_baselines": "src/dire_modal/paper_detector_benchmark.tsv",
+    "paper_table5": "src/dire_modal/paper_table5.tsv"
   },
   "paper": {
     "generators": [
@@ -148,57 +146,284 @@
         }
       }
     ],
-    "source": "src/dire_modal/paper_table2.tsv · ICCV 2023, Table 2"
-  },
-  "pipeline": {
-    "tier": "e2",
-    "items": 17,
-    "tars": 16,
-    "pairs": 15,
-    "checkpoints": 1,
-    "source": "manifest tier `e2` — đếm tar, KHÔNG đếm `real` là generator",
-    "containers": 60,
-    "detectors_count": 4
-  },
-  "demo": {
-    "labels": "demo — KHÔNG phải số của paper",
-    "images_epochs": "2000 × 5",
-    "seed": 3407,
-    "arch": "resnet50",
-    "n_out": 1,
-    "loss": "bce_with_logits",
-    "batch_size": 64,
-    "lr": 0.0001,
-    "epochs": 5,
-    "images": 2000,
-    "paper_epochs": 400,
-    "steps": 160,
-    "val_steps": 20,
-    "gpu_seconds": 58.333,
-    "usd": 0.01296,
-    "gpu": "L4",
-    "sec_per_step": 0.35,
-    "measured": false,
-    "source": "src/dire_modal/demo_train.yaml · docs/adr-0003-demo-training.md"
-  },
-  "measured": {
-    "baidu_kib_s": {
-      "value": 76.6,
-      "text": "76.6 KiB/s",
-      "source": "đo 2026-10-25 · docs/runbook-free.md §2",
-      "note": "trần của TÀI KHOẢN free, không phải của container"
-    },
-    "ls_rounding": {
-      "shown": "119.22MB",
-      "reversed_bytes": 125011230,
-      "real_bytes": 125015131,
-      "delta_bytes": 3901,
-      "source": "log thật 2026-10-25 · docs/runbook-free.md §Sự cố 2026-10-25"
-    },
-    "fc_weight": {
-      "paper_shape": "[1, 2048]",
-      "old_code_shape": "[2, 2048]",
-      "source": "sự cố 2026-10-28 · PR #18"
+    "source": "src/dire_modal/paper_table2.tsv · ICCV 2023, Table 2",
+    "comparisons": {
+      "detector_baselines": [
+        {
+          "method": "CNNDetection",
+          "train_set": "LSUN / ProGAN",
+          "acc": 51.1,
+          "ap": 72.6,
+          "group": "pretrained"
+        },
+        {
+          "method": "GANDetection",
+          "train_set": "LSUN / ProGAN",
+          "acc": 58.5,
+          "ap": 58.3,
+          "group": "pretrained"
+        },
+        {
+          "method": "PatchForensics",
+          "train_set": "FF++ / multi",
+          "acc": 57.4,
+          "ap": 77.4,
+          "group": "pretrained"
+        },
+        {
+          "method": "SBI",
+          "train_set": "FF++ / multi",
+          "acc": 58.9,
+          "ap": 62.3,
+          "group": "pretrained"
+        },
+        {
+          "method": "CNNDetection*",
+          "train_set": "ADM subset",
+          "acc": 86.5,
+          "ap": 97.3,
+          "group": "retrained"
+        },
+        {
+          "method": "PatchForensics*",
+          "train_set": "ADM subset",
+          "acc": 90.9,
+          "ap": 96.4,
+          "group": "retrained"
+        },
+        {
+          "method": "F3Net*",
+          "train_set": "ADM subset",
+          "acc": 91.6,
+          "ap": 97.7,
+          "group": "retrained"
+        },
+        {
+          "method": "DIRE (ADM)",
+          "train_set": "ADM subset",
+          "acc": 99.9,
+          "ap": 100.0,
+          "group": "dire"
+        }
+      ],
+      "table5": {
+        "REC": {
+          "adm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "ddpm": {
+            "acc": 57.1,
+            "ap": 57.7
+          },
+          "iddpm": {
+            "acc": 49.7,
+            "ap": 92.6
+          },
+          "pndm": {
+            "acc": 87.1,
+            "ap": 98.7
+          },
+          "sdv1": {
+            "acc": 46.9,
+            "ap": 57.0
+          }
+        },
+        "RGB": {
+          "ddpm": {
+            "acc": 87.3,
+            "ap": 99.6
+          },
+          "iddpm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "pndm": {
+            "acc": 77.8,
+            "ap": 99.1
+          },
+          "adm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "sdv1": {
+            "acc": 77.4,
+            "ap": 85.8
+          }
+        },
+        "RGB_DIRE": {
+          "ddpm": {
+            "acc": 99.8,
+            "ap": 100.0
+          },
+          "iddpm": {
+            "acc": 99.9,
+            "ap": 100.0
+          },
+          "pndm": {
+            "acc": 99.2,
+            "ap": 100.0
+          },
+          "adm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "sdv1": {
+            "acc": 62.4,
+            "ap": 92.4
+          }
+        },
+        "DIRE": {
+          "ddpm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "iddpm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "pndm": {
+            "acc": 99.7,
+            "ap": 100.0
+          },
+          "adm": {
+            "acc": 100.0,
+            "ap": 100.0
+          },
+          "sdv1": {
+            "acc": 99.7,
+            "ap": 100.0
+          }
+        }
+      },
+      "table5_rows": [
+        {
+          "representation": "REC",
+          "generator": "adm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "REC",
+          "generator": "ddpm",
+          "acc": 57.1,
+          "ap": 57.7
+        },
+        {
+          "representation": "REC",
+          "generator": "iddpm",
+          "acc": 49.7,
+          "ap": 92.6
+        },
+        {
+          "representation": "REC",
+          "generator": "pndm",
+          "acc": 87.1,
+          "ap": 98.7
+        },
+        {
+          "representation": "REC",
+          "generator": "sdv1",
+          "acc": 46.9,
+          "ap": 57.0
+        },
+        {
+          "representation": "RGB",
+          "generator": "ddpm",
+          "acc": 87.3,
+          "ap": 99.6
+        },
+        {
+          "representation": "RGB",
+          "generator": "iddpm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB",
+          "generator": "pndm",
+          "acc": 77.8,
+          "ap": 99.1
+        },
+        {
+          "representation": "RGB",
+          "generator": "adm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB",
+          "generator": "sdv1",
+          "acc": 77.4,
+          "ap": 85.8
+        },
+        {
+          "representation": "RGB_DIRE",
+          "generator": "ddpm",
+          "acc": 99.8,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB_DIRE",
+          "generator": "iddpm",
+          "acc": 99.9,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB_DIRE",
+          "generator": "pndm",
+          "acc": 99.2,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB_DIRE",
+          "generator": "adm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "RGB_DIRE",
+          "generator": "sdv1",
+          "acc": 62.4,
+          "ap": 92.4
+        },
+        {
+          "representation": "DIRE",
+          "generator": "ddpm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "DIRE",
+          "generator": "iddpm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "DIRE",
+          "generator": "pndm",
+          "acc": 99.7,
+          "ap": 100.0
+        },
+        {
+          "representation": "DIRE",
+          "generator": "adm",
+          "acc": 100.0,
+          "ap": 100.0
+        },
+        {
+          "representation": "DIRE",
+          "generator": "sdv1",
+          "acc": 99.7,
+          "ap": 100.0
+        }
+      ],
+      "sdv1_delta_pp": {
+        "acc": 22.3,
+        "ap": 14.2
+      },
+      "baseline_source": "src/dire_modal/paper_detector_benchmark.tsv · ICCV 2023, Table 2",
+      "table5_source": "src/dire_modal/paper_table5.tsv · ICCV 2023, Table 5"
     }
   },
   "status": {
@@ -266,37 +491,15 @@
       {
         "name": "Train lại detector (FR-8)",
         "state": "todo",
-        "note": "**chỉ để đối chiếu** trọng số tác giả; KHÔNG dùng làm số của paper. 400 epoch ước $32–56 ⇒ phải đo 1 epoch trước",
+        "note": "chưa train; không có kết quả repo để báo cáo",
         "ref": "spec.md FR-8"
       },
       {
         "name": "Stage-2: compute DIRE toàn bộ",
         "state": "run",
-        "note": "30–60 A100-h ⇒ ngoài ngân sách free tier",
+        "note": "chưa chạy toàn bộ; chưa có số đo compute để báo cáo",
         "ref": "compute_dire.py"
       }
     ]
-  },
-  "roadmap": [
-    {
-      "what": "Sửa `eval --tiers` để lọc thật",
-      "why": "tham số đang bị bỏ qua (`eval.py:869` dùng `rglob` cả `/raw/dire/test`) ⇒ `--tiers e2` vẫn chấm 24 cặp: tốn tiền và bẩn số",
-      "cost": "~30 phút"
-    },
-    {
-      "what": "`aero.py` (FR-3)",
-      "why": "chưa có ⇒ toàn bộ phần \"cải thiện\" của dự án không tồn tại",
-      "cost": "1 PR"
-    },
-    {
-      "what": "`fusion.py` (FR-5)",
-      "why": "đóng góp riêng; cần FR-3 xong",
-      "cost": "sau FR-3"
-    },
-    {
-      "what": "`manifests/*_sha256.tsv`",
-      "why": "`verify` đang in \"CHƯA đối chiếu sha256\" ⇒ CỔNG 3 chưa đóng",
-      "cost": "1 lần chạy"
-    }
-  ]
+  }
 }
