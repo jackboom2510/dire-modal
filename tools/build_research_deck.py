@@ -44,10 +44,18 @@ OUT_PPTX = SITE / "dire-research-complete.pptx"
 OUT_PDF = SITE / "dire-research-complete.pdf"
 EQ_SOURCE = SITE / "dire-research-equations.tex"
 
+# The research deck must follow the explicit rebuild namespace, not the older
+# default `modal-runs/runs/report.json` artifacts. Update this ID intentionally
+# when a newer validated rebuild is selected; never silently fall back to legacy.
+REBUILD_RUN_ID = "rebuild-2026-10-14"
+REBUILD_ROOT = ROOT / "modal-runs" / "runs" / "rebuild" / REBUILD_RUN_ID
+REPORT_PATH = REBUILD_ROOT / "report.json"
+EVAL_PATH = REBUILD_ROOT / "eval" / "gen-adm" / "eval.json"
+
 sys.path.insert(0, str(ROOT / "platforms/prototype"))
 from data import (  # noqa: E402
-    EVAL_PATH, GALLERY, PAPER_TABLE2_PATH, REPORT_PATH, TABLE4_PATH,
-    TABLE5_ROOT, FIGURE4_ROOT, read_json, table4, table4_rows,
+    GALLERY, PAPER_TABLE2_PATH, TABLE4_PATH, TABLE5_ROOT, FIGURE4_ROOT,
+    read_json, table4, table4_rows,
 )
 
 # Presentation palette: warm paper + deep navy + teal; amber is reserved for
@@ -1069,6 +1077,10 @@ LEDGER = table4()
 T4_ROWS = table4_rows(LEDGER)
 REPORT = read_json(REPORT_PATH) or {}
 EVAL = read_json(EVAL_PATH) or {}
+if REPORT.get("run_id") != REBUILD_RUN_ID:
+    raise RuntimeError(f"Deck requires report for {REBUILD_RUN_ID}: {REPORT_PATH}")
+if EVAL.get("run_id") != REBUILD_RUN_ID:
+    raise RuntimeError(f"Deck requires eval for {REBUILD_RUN_ID}: {EVAL_PATH}")
 GALLERY_SAMPLE = json.loads((GALLERY / "adm_004006349103115c.json").read_text(encoding="utf-8"))
 T4_RUNS = {s: block for s, block in (LEDGER or {}).get("by_steps", {}).items()}
 
@@ -1099,17 +1111,20 @@ def paper_value(det: str, gen: str, metric: str) -> float:
     return PAPER_MAP[(det, gen)][0 if metric == "acc" else 1]
 
 
-def gallery_pair_for(generator: str) -> tuple[Path, Path] | None:
-    """Return a display pair for a generator; never invent reconstructions."""
-    for meta_path in sorted(GALLERY.glob(f"{generator}_*.json")):
-        meta = read_json(meta_path)
-        name = (meta or {}).get("name")
-        if not isinstance(name, str) or Path(name).name != name:
+def gallery_entries_for(generator: str) -> list[tuple[dict[str, Any], Path, Path]]:
+    """Return every hash-verified original/map pair recorded for a model."""
+    entries = []
+    for meta_path in sorted(GALLERY.glob("*.json")):
+        meta = read_json(meta_path) or {}
+        if meta.get("generator") != generator:
             continue
-        orig, dire = GALLERY / f"{name}_orig.png", GALLERY / f"{name}_diff.png"
-        if orig.is_file() and dire.is_file():
-            return orig, dire
-    return None
+        name = meta.get("name")
+        if not isinstance(name, str) or Path(name).name != name:
+            raise RuntimeError(f"Unsafe gallery sample name in {meta_path}")
+        if not GALLERY_HASH_OK.get(name, False):
+            raise RuntimeError(f"Gallery display PNG hash check failed for {name}")
+        entries.append((meta, GALLERY / f"{name}_orig.png", GALLERY / f"{name}_diff.png"))
+    return entries
 
 
 class Page:
@@ -1427,11 +1442,11 @@ def build_deck() -> Deck:
     p.note()
 
     # 02 executive overview
-    p = d.page("01 · Tóm tắt", "Báo cáo tách biệt kết quả bài báo, số đo pilot và phần chưa có dữ liệu",
-        "handoff.md · report R1+R2 · sổ Table 4 · metadata gallery",
-        notes_for("handoff.md; modal-runs/runs/report.json; Table 4 ledger; gallery/*.json",
-                  "Các số liệu được giữ theo đúng nguồn và phạm vi; chưa xác minh bản nhị phân checkpoint và trạng thái lưu trữ ngoài repo."))
-    heading_sub(p, "Trong checkout có report R1+R2, pilot Table 4 và 64 mẫu gallery; Table 5/Figure 4 chưa có sổ kết quả.")
+    p = d.page("01 · Tóm tắt", "Báo cáo tách biệt kết quả bài báo, bản rebuild và phần chưa có dữ liệu",
+        f"{REPORT_PATH.relative_to(ROOT)} · Table 4 ledger · metadata gallery",
+        notes_for(f"{REPORT_PATH.relative_to(ROOT)}; Table 4 ledger; gallery/*.json",
+                  "Các số liệu được giữ theo đúng nguồn và phạm vi; rebuild là run_id hiển thị, chưa xác minh bản nhị phân checkpoint ngoài repo."))
+    heading_sub(p, f"Trong checkout có rebuild {REBUILD_RUN_ID}, pilot Table 4 và 64 mẫu gallery; Table 5/Figure 4 chưa có sổ kết quả.")
     label_value(p, 48, 157, 205, "Các mức S đã đo", "5 / 10 / 20", "teal", 22)
     label_value(p, 266, 157, 205, "Mỗi ô kiểm thử", "n = 400", "teal", 23)
     label_value(p, 484, 157, 205, "Mẫu gallery", "64", "teal", 25)
@@ -1448,10 +1463,10 @@ def build_deck() -> Deck:
     p.note()
 
     # 03 timeline/evidence discipline
-    p = d.page("01 · Cách đọc bằng chứng", "Mốc ghi nhận trong repo nằm sau ngày phiên làm việc",
-        "Git metadata · report.json:data.created · developer session date",
-        notes_for("git commit 174e8cf (2026-11-25); report.json created=2026-11-17T03:17:09Z; system date=2026-10-14",
-                  "Mốc của checkout và report đều sau ngày hiện tại do môi trường khai báo. Vì vậy deck trích chúng như 'repository-recorded', không khẳng định thời điểm thực nghiệm; cần giải quyết timeline provenance trước khi công bố."))
+    p = d.page("01 · Cách đọc bằng chứng", "Run rebuild được ghi nhận nhưng timestamp dữ liệu cần đối soát",
+        f"Git metadata · {REPORT_PATH.relative_to(ROOT)} · ngày phiên làm việc",
+        notes_for(f"{REPORT_PATH.relative_to(ROOT)} data.created=2026-11-17T03:17:09Z; system date=2026-10-14",
+                  "Run ID là namespace rebuild; mốc data.created vẫn ở tương lai so với ngày phiên được khai báo. Deck ghi nhận đúng provenance, không tự kết luận ngày chạy; cần đối soát timeline trước khi công bố."))
     p.rect(52, 145, 856, 77, "goldp", stroke="gold", radius=12)
     p.text(72, 159, 815, 48,
            "CẢNH BÁO PROVENANCE  ·  Repo commit: 25-11-2026   |   report.created: 17-11-2026   |   ngày phiên: 14-10-2026",
@@ -2005,28 +2020,35 @@ def build_deck() -> Deck:
     p.text(139, 457, 685, 25, "Related work, not a result or feature implemented by this project's prototype.", 11.2, "muted", italic=True, align="center")
     p.note()
 
-    # 32 R1+R2 report
-    p = d.page("15 · Project measurements", "R1+R2 report records a broader run — but bookkeeping counters need reconciliation",
-        "modal-runs/runs/report.json · runs/eval/gen-adm/eval.json",
-        notes_for("modal-runs/runs/report.json; its data.created field is future-dated relative to session 2026-10-14; treat as repository-recorded only"))
-    report_cards=[("Map inventory", "5,900", "maps.total/by_split_generator"),
-                  ("DDIM setting", "S=20", "steps_mixed=[20]"),
-                  ("NFE in report", "234,760", "reported field"),
-                  ("Eval scope", "ADM / test", "held-out evaluation")]
+    # 32 Rebuild report inventory
+    dire = REPORT.get("dire", {})
+    distinct_maps = int(dire.get("n_distinct_maps", dire.get("n", 0)))
+    nfe_total = int(dire.get("nfe_total", 0))
+    run_count = int(dire.get("n_runs", 0))
+    n_new = int(dire.get("n_new_cumulative", 0))
+    n_reused = int(dire.get("n_reused_cumulative", 0))
+    p = d.page("15 · Project measurements", f"Rebuild {REBUILD_RUN_ID} records {distinct_maps:,} distinct DIRE maps",
+        str(REPORT_PATH.relative_to(ROOT)),
+        notes_for(f"{REPORT_PATH.relative_to(ROOT)}; run_id={REBUILD_RUN_ID}; "
+                  "report's n_note defines unique maps separately from cumulative counters"))
+    report_cards=[("Distinct maps", f"{distinct_maps:,}", "n_distinct_maps"),
+                  ("DDIM setting", f"S={dire.get('steps', '—')}", "steps_mixed=[20]"),
+                  ("NFE recorded", f"{nfe_total:,}", "rebuild report"),
+                  ("DIRE runs", str(run_count), "per run ledger")]
     for i,(a,b,c) in enumerate(report_cards):
         label_value(p,52+i*221,158,198,a,b,"gold" if i==3 else "teal",18 if i==3 else 21,"paper")
         p.text(63+i*221, 246, 176, 26, c, 9.6, "muted", align="center")
-    p.rect(80, 299, 800, 123, "goldp", stroke="gold", radius=12)
+    p.rect(80, 299, 800, 123, "bluep", stroke="teal", radius=12)
     p.text(99, 311, 761, 92,
-           "AUDIT FLAG: report.dire.n = 5,900; n_new = 5,869; n_reused = 2,431. The latter two sum to 8,300, not 5,900. NFE=234,760 equals 5,869×40, not 5,900×40. Keep these fields separate until their definitions / denominator are reconciled.",
+           f"Rebuild ledger: n_new cumulative={n_new:,}; n_reused cumulative={n_reused:,}. These counters span {run_count} runs and are not counts of unique files; the report defines n_distinct_maps={distinct_maps:,} separately. Do not sum cumulative counters as a distinct-map total.",
            12.2, "ink", bold=True, align="center", valign="mid")
-    p.text(104, 438, 755, 35, "Do not recompute, combine or call these counters a reconciled total.", 12, "red", bold=True, align="center")
+    p.text(104, 438, 755, 35, "Source: rebuild namespace only; do not mix with modal-runs/runs/report.json.", 12, "teal", bold=True, align="center")
     p.note()
 
-    # 33 report metrics across generators
-    p = d.page("15 · Project measurements", "The R1+R2 artifact records heterogeneous scores across generator-trained runs",
-        "modal-runs/runs/report.json:train_by_generator · project warnings",
-        notes_for("modal-runs/runs/report.json; artifact identifies R1+R2 and lists warnings on sample counts / comparability"))
+    # 33 latest per-generator training metrics in the rebuild namespace
+    p = d.page("15 · Project measurements", f"Rebuild {REBUILD_RUN_ID} reports different results by trained generator",
+        f"{REPORT_PATH.relative_to(ROOT)}:train_by_generator",
+        notes_for(f"{REPORT_PATH.relative_to(ROOT)} train_by_generator; per-generator split and provenance in {REBUILD_ROOT.relative_to(ROOT)}/train/gen-*/train.json"))
     names=[k.removeprefix("gen-") for k in REPORT.get("train_by_generator",{})]
     rows=[]
     for name in names:
@@ -2035,33 +2057,33 @@ def build_deck() -> Deck:
     p.table(73, 150, 814, ["Run tag", "ACC", "AP", "AUC", "n", "Best epoch"], rows,
             [202,122,122,122,106,140], 31, 9.8)
     p.rect(91, 465, 778, 31, "goldp", stroke="gold", radius=8)
-    p.text(104, 470, 750, 21, "Repo metrics, not paper Table 2; fake cell n=700 and report warnings limit direct interpretation.", 9.8, "ink", bold=True, align="center", valign="mid")
+    p.text(104, 470, 750, 21, "Rebuild R1+R2 · hash split · scratch init · n=2,000/test per row; not paper Table 2.", 9.8, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    # 34 heldout eval
-    p = d.page("15 · Project measurements", "ADM held-out eval reports AP=0.911 on the self-computed-map path",
-        "modal-runs/runs/eval/gen-adm/eval.json · threshold chosen on val",
-        notes_for("modal-runs/runs/eval/gen-adm/eval.json; the artifact itself states this is not comparable to paper Table 2"))
+    # 34 heldout eval from the matching rebuild namespace
     m=EVAL.get("metrics",{})
+    p = d.page("15 · Project measurements", f"Rebuild ADM eval reports AP={m.get('ap',0):.3f} on self-computed DIRE maps",
+        str(EVAL_PATH.relative_to(ROOT)),
+        notes_for(f"{EVAL_PATH.relative_to(ROOT)}; run_id={REBUILD_RUN_ID}; score is repository-recorded and not comparable to paper Table 2"))
     for i,(label,val) in enumerate([("Test n",str(m.get("n","—"))),
                                     ("ACC · val threshold",f"{m.get('acc',0)*100:.1f}%"),
                                     ("AP",f"{m.get('ap',0)*100:.1f}%"),
                                     ("AUC",f"{m.get('auc',0)*100:.1f}%")]):
         label_value(p,58+i*214,158,190,label,val,"teal",22)
-    p.rect(75, 277, 810, 111, "redp", stroke="red", radius=12)
-    p.text(94, 291, 770, 81,
-           "AUDIT FLAG: eval.json lists ACC=78.1% at threshold 0.50029 (chosen on val), but `acc_ci95=[0.47,0.529]` is centered near 50%, inconsistent with that ACC. Do not publish this CI until corrected. At threshold 0.5, ACC is separately 50.0%.",
-           12.4, "red", bold=True, align="center", valign="mid")
+    p.rect(75, 277, 810, 111, "goldp", stroke="gold", radius=12)
+    p.text(94, 287, 770, 91,
+           f"CHECKPOINT / THRESHOLD CAVEAT: val-selected P(fake) threshold={EVAL.get('threshold_prob', 0.5):.6f}; fixed-threshold ACC@0.5={m.get('acc_at_0.5', 0)*100:.1f}%. The rebuild report also warns that eval SHA {str(EVAL.get('detector_sha256', '—'))[:12]} differs from the current ADM detector checkpoint; re-run evaluate before calling this the latest checkpoint result.",
+           11.0, "ink", bold=True, align="center", valign="mid")
     p.text(123, 410, 706, 50,
-           "This is a project evaluation on self-computed DIRE maps with a from-scratch detector; it is not an absolute Table 2 comparison.",
+           "R1+R2 · hash split · from-scratch detector · repository-recorded evaluation, not an absolute Table 2 comparison.",
            12, "ink", bold=True, align="center")
     p.note()
 
     # 35 · Confusion matrix: counts, not only a single accuracy percentage.
     cm = EVAL.get("metrics", {}).get("confusion", {})
-    p = d.page("15 · Project measurements", "Ma trận nhầm lẫn cho thấy số mẫu đúng và sai ở từng lớp",
-        "modal-runs/runs/eval/gen-adm/eval.json · test split · threshold chọn trên validation",
-        notes_for("modal-runs/runs/eval/gen-adm/eval.json; confusion counts are shown as recorded, with positive class = generated/fake"))
+    p = d.page("15 · Project measurements", "Rebuild ADM confusion matrix at the validation-selected threshold",
+        str(EVAL_PATH.relative_to(ROOT)) + " · test split · threshold selected on validation",
+        notes_for(f"{EVAL_PATH.relative_to(ROOT)}; confusion counts with positive class = generated/fake"))
     p.text(111, 155, 710, 25, "Dự đoán của detector", 14, "muted", bold=True, align="center")
     p.text(363, 182, 210, 22, "Dự đoán: ảnh thật", 11, "teal", bold=True, align="center")
     p.text(583, 182, 210, 22, "Dự đoán: ảnh sinh", 11, "red", bold=True, align="center")
@@ -2088,44 +2110,53 @@ def build_deck() -> Deck:
            10.6, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    # 36–37 · Multi-generator examples. Never invent reconstructions from residual maps.
-    def generator_examples_slide(section: str, title: str, generators: list[str]):
-        p = d.page(section, title,
-            "modal-runs/gallery · PNG hiển thị đã lưu cùng metadata nguồn",
-            notes_for("modal-runs/gallery; shown originals and maps are committed display PNGs; no reconstruction images or source NPY files are present in this checkout"))
-        columns = [(160, "ẢNH GỐC"), (390, "TÁI TẠO  x̂₀"), (620, "DIRE MAP")]
-        for x, label in columns:
-            p.text(x, 157, 200, 18, label, 9.5, "muted", bold=True, align="center")
-        for row, generator in enumerate(generators):
-            y = 194 + row*143
-            pair = gallery_pair_for(generator)
-            generator_label = {"ddpm": "DDPM", "iddpm": "iDDPM", "dalle2": "DALL·E 2",
-                               "diff-stylegan": "Diffusion StyleGAN"}.get(generator, generator)
-            p.text(42, y+45, 106, 30, generator_label,
-                   8.4, "teal", bold=True, align="center", valign="mid")
-            if pair:
-                p.rect(160, y, 200, 118, "paper", stroke="line", radius=8)
-                p.image(pair[0], 166, y+5, 188, 108, f"Ảnh gốc · {generator}")
-                p.rect(620, y, 200, 118, "paper", stroke="line", radius=8)
-                p.image(pair[1], 626, y+5, 188, 108, f"DIRE map hiển thị · {generator}")
-            else:
-                for x in (160, 620):
-                    p.rect(x, y, 200, 118, "grayp", stroke="line", radius=8)
-                    p.text(x+8, y+37, 184, 42, "Chưa có ảnh trong gallery", 10, "muted", align="center", valign="mid")
-            p.rect(390, y, 200, 118, "grayp", stroke="gold", radius=8)
-            p.text(402, y+24, 176, 67,
-                   "Chưa có ảnh tái tạo x̂₀\n(checkpoint / output chưa có trong checkout)",
-                   9.5, "muted", align="center", valign="mid")
-        p.rect(101, 468, 758, 29, "goldp", stroke="gold", radius=8)
-        p.text(111, 473, 738, 19,
-               "Không suy dựng reconstruction từ DIRE map: map chỉ lưu |x − x̂₀|, không chứa dấu của sai số.",
-               9.5, "ink", bold=True, align="center", valign="mid")
-        p.note()
-
-    generator_examples_slide("16 · Ví dụ đa bộ sinh", "Ảnh gốc và DIRE map từ DDPM, iDDPM",
-                             ["ddpm", "iddpm"])
-    generator_examples_slide("16 · Ví dụ đa bộ sinh", "Ảnh gốc và DIRE map từ DALL·E 2, StyleGAN khuếch tán",
-                             ["dalle2", "diff-stylegan"])
+    # 36+ · Exhaustive gallery: every hash-verified original/DIRE pair, grouped
+    # by generator and paginated; reconstruction images are never fabricated.
+    generator_labels = {
+        "adm": "ADM", "dalle2": "DALL·E 2", "ddpm": "DDPM",
+        "diff-projectedgan": "Diff.-ProjectedGAN", "iddpm": "iDDPM",
+        "diff-stylegan": "Diff.-StyleGAN", "if": "IF", "real": "Real control",
+    }
+    gallery_generators = sorted({
+        (read_json(path) or {}).get("generator")
+        for path in GALLERY.glob("*.json")
+        if (read_json(path) or {}).get("generator")
+    })
+    gallery_total = sum(len(gallery_entries_for(generator)) for generator in gallery_generators)
+    for generator in gallery_generators:
+        entries = gallery_entries_for(generator)
+        label = generator_labels.get(generator, generator)
+        for batch_start in range(0, len(entries), 4):
+            batch = entries[batch_start:batch_start + 4]
+            batch_end = batch_start + len(batch)
+            p = d.page(
+                "16 · Ví dụ đa bộ sinh",
+                f"{label} · gallery {batch_start + 1}–{batch_end}/{len(entries)} · đủ ảnh gốc và DIRE map",
+                "modal-runs/gallery · hash-verified display PNGs · metadata kèm theo",
+                notes_for(
+                    f"modal-runs/gallery/*.json; all {len(entries)} entries for {generator}; "
+                    "original and display-map PNG SHA-256 verified against metadata. "
+                    "The gallery does not contain reconstructions or source NPY files."
+                ),
+            )
+            columns = [(231, "ẢNH GỐC"), (646, "DIRE MAP")]
+            for x, column_label in columns:
+                p.text(x, 137, 330, 18, column_label, 9.5, "muted", bold=True, align="center")
+            for row, (meta, original, dire_map) in enumerate(batch):
+                y = 160 + row * 83
+                sample_name = meta["name"].removeprefix(generator + "_")
+                p.text(43, y + 15, 112, 18, label, 8.4, "teal", bold=True, align="center")
+                p.text(43, y + 36, 112, 24, sample_name, 7.0, "muted", align="center")
+                for x in (160, 575):
+                    p.rect(x, y, 380, 72, "paper", stroke="line", radius=6)
+                p.image(original, 164, y + 3, 372, 66, f"Ảnh gốc · {meta['name']}")
+                p.image(dire_map, 579, y + 3, 372, 66, f"DIRE map hiển thị · {meta['name']}")
+            p.rect(89, 462, 782, 30, "goldp", stroke="gold", radius=8)
+            p.text(99, 467, 762, 20,
+                   f"Đã đưa {len(batch)}/{len(entries)} mẫu của {label} lên trang này · toàn gallery: {gallery_total} cặp. "
+                   "Reconstruction ADM/DDIM không có sẵn; không được suy ra từ DIRE map.",
+                   8.7, "ink", bold=True, align="center", valign="mid")
+            p.note()
 
     # 38 Table4 design
     p = d.page("17 · Table 4 pilot", "Pilot protocol shares a fixed 200-per-cell subset across S settings",
