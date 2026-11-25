@@ -173,6 +173,13 @@ def test_the_upload_path_defaults_to_local_and_returns_a_map_never_a_probability
     assert "p_fake" not in line and "P(fake)" not in line
 
 
+def test_gallery_root_is_whitelisted_for_gradio_file_outputs(gradio_app, monkeypatch, tmp_path):
+    monkeypatch.setattr(gradio_app, "GALLERY_DIR", tmp_path)
+    assert gradio_app.gallery_allowed_paths() == [str(tmp_path.resolve())]
+    monkeypatch.setattr(gradio_app, "GALLERY_DIR", tmp_path / "missing")
+    assert gradio_app.gallery_allowed_paths() == []
+
+
 def test_numpy_compatibility_remediation_is_visible_in_live_status(gradio_app, monkeypatch):
     monkeypatch.setattr(gradio_app.live, "status", lambda: gradio_app.live.LiveStatus(
         False, "—", False, "adm.pt", "NumPy 2.x không tương thích với torch==2.4.0", [

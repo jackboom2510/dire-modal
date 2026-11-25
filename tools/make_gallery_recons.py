@@ -100,7 +100,8 @@ def make_recons(
             continue
         seconds = live.estimate_seconds(sample.steps)
         print(f"[{'dry-run' if dry_run else 'queue'}] {sample.name} · S={sample.steps} · "
-              f"~{seconds:.0f}s CPU · {sample.orig.name} → {destination.name}")
+              f"~{seconds:.0f}s CPU · input original {sample.orig.name} → {destination.name} · "
+              f"giữ DIRE map {sample.diff.name} nguyên trạng (không dùng map làm ảnh đầu vào)")
         todo.append((sample, destination))
 
     total_seconds = sum(live.estimate_seconds(sample.steps) for sample, _ in todo)

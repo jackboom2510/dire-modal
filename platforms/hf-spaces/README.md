@@ -264,6 +264,7 @@ Chỉ những dòng sau là lỗi thật, và mỗi dòng có một nguyên nhâ
 | `GRADIO_HOT_RELOAD: Launching demo not found` | thiếu `demo` ở cấp module — xem mục dưới |
 | `ModuleNotFoundError` | `requirements.txt` thiếu gói, hoặc import một tệp không được đóng gói |
 | `Traceback (most recent call last)` | app ném lỗi lúc import; đọc dòng cuối, đó là nơi sửa |
+| `gradio.exceptions.InvalidPathError` với `*_orig.png` / `*_diff.png` | ảnh gallery nằm ngoài cwd; app chỉ allowlist đúng thư mục gallery qua `launch(allowed_paths=...)` |
 | `Stopping Node.js server...` | SSR bật mà app không phục vụ; app đã tắt SSR (`GRADIO_SSR_MODE=False`) |
 
 Kiểm Space đang sống, không cần mở trình duyệt — `$SPACE` đặt như ở §Deploy:
@@ -332,7 +333,7 @@ python -c "import numpy, torch; print(numpy.__version__, torch.__version__); tor
 
 Nếu cài lại project dependencies, dùng `python -m pip install -r platforms/hf-spaces/requirements.txt`. Trang cũng kiểm tra NumPy↔Torch trước khi bật ADM và hiện lệnh khắc phục thay vì chờ lỗi giữa inference.
 
-Gallery có ảnh gốc cho mẫu sinh và ảnh thật; recon chỉ hiện nếu đã được tính bằng ADM+DDIM thật. Script dùng **đúng file ảnh gốc** được metadata gallery trỏ tới (không suy recon từ DIRE map), lưu `<stem>_recon.png` và cập nhật hash/phương pháp vào JSON. Để tính tự động cho **mọi mẫu hợp lệ** trong gallery mà Gradio đang dùng:
+Gallery có ảnh gốc cho mẫu sinh và ảnh thật; recon chỉ hiện nếu đã được tính bằng ADM+DDIM thật. Script dùng **đúng file ảnh gốc** `_orig.png` được metadata gallery trỏ tới để chạy ADM/DDIM. Cặp `_diff.png` (DIRE map) được giữ nguyên trong gallery, không bị đưa nhầm làm ảnh đầu vào hay ghi đè; output lưu thành `<stem>_recon.png` và hash/phương pháp được cập nhật vào JSON. Để tính tự động cho **mọi mẫu hợp lệ** trong gallery mà Gradio đang dùng:
 
 ```bash
 # Bash: xem ảnh nguồn, output và ước tính; dry-run không cần checkpoint

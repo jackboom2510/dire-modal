@@ -21,7 +21,8 @@ def test_all_dry_run_uses_gallery_originals_and_needs_no_checkpoint(capsys):
     gallery = ROOT / "modal-runs" / "gallery"
     assert tool.main(["--all", "--dry-run", "--gallery", str(gallery)]) == 0
     output = capsys.readouterr().out
-    assert "_orig.png →" in output
+    assert "input original " in output and "_orig.png →" in output
+    assert "giữ DIRE map" in output and "_diff.png" in output
     assert "_recon.png" in output
     assert "recon cần tính" in output
     assert "giờ CPU" in output
