@@ -98,7 +98,7 @@ def test_app_builds_and_has_every_tab(gradio_app):
 
     walk(demo)
     text = " ".join(labels)
-    for expected in ("Gallery", "Tính DIRE thật", "Thí nghiệm 2 chiều", "Lịch & chi phí",
+    for expected in ("Gallery", "2 · Mô phỏng & tính DIRE", "Thí nghiệm 2 chiều", "Lịch & chi phí",
                      "Bảng 2 & tái lập"):
         assert expected in text, (expected, labels)
 
@@ -133,37 +133,37 @@ def test_empty_gallery_is_an_honest_state(gradio_app, monkeypatch):
     assert gradio_app.gallery_choices() == []
 
 
-def test_the_upload_path_returns_a_map_never_a_probability(gradio_app, monkeypatch):
-    """Tab *Tính DIRE thật*: đầu ra là **map**, không phải `P(fake)`.
-
-    Đây chính là lỗi của bản Gradio đầu tiên (`docs/demo-web-plan.md` §2). Test
-    kiểm cả hai phía: khi chưa cấu hình thì không chạy, khi chạy thì không có
-    khoá xác suất nào trong kết quả.
-    """
+def test_the_upload_path_defaults_to_local_and_returns_a_map_never_a_probability(gradio_app, monkeypatch, tmp_path):
+    """Upload defaults to local DIRE; it returns maps, never detector scores."""
     monkeypatch.delenv("DEMO_URL", raising=False)
     monkeypatch.delenv("DEMO_TOKEN", raising=False)
-    out = gradio_app.run_dire("/tmp/không-có.png", 5)
-    assert out[:3] == (None, None, None) and "DEMO_URL" in out[3]
+    img = tmp_path / "in.png"
+    img.write_bytes(_png(img))
+    run = {
+        "steps": 5, "nfe": 10, "seconds": 0.92,
+        "map_values": {"mean": 0.01, "p99": 0.05, "max": 0.2},
+        "map_png": _png(img), "recon_png": _png(img, (1, 2, 3)),
+        "cache_hit": False,
+    }
+    filmstrip = [(str(img), "frame")]
+    monkeypatch.setattr(gradio_app, "_local_result", lambda *a, **k: (img.read_bytes(), run, filmstrip, "abc123"))
+    monkeypatch.setattr(gradio_app.remote, "call", lambda *a, **k: pytest.fail("Modal must not be called by default"))
 
-    class _Res:
-        steps, nfe, seconds, resized = 5, 10, 0.92, False
-        stats = {"mean": 0.01, "p99": 0.05, "max": 0.2}
-        line = "DIRE: modal A10G · detector: không có · nhãn: không áp dụng · S=5"
-        map_png = _png(Path("."))
-        recon_png = _png(Path("."), (1, 2, 3))
-
-    monkeypatch.setenv("DEMO_URL", "https://example.invalid")
-    monkeypatch.setenv("DEMO_TOKEN", "tok")
-    monkeypatch.setattr(gradio_app.remote, "call", lambda *a, **k: _Res())
-
-    import tempfile
-
-    img = Path(tempfile.mkdtemp()) / "in.png"
-    img.write_bytes(_png(Path(".")))
-    orig, recon, dmap, line = gradio_app.run_dire(str(img), 5)
+    orig, recon, dmap, frames, line = gradio_app.run_dire(str(img), 5)
     assert all(p and Path(p).exists() for p in (orig, recon, dmap))
+    assert frames == filmstrip
+    assert "DIRE: local ADM" in line and "cache miss" in line
     assert "không phải kết luận thật/giả" in line
     assert "p_fake" not in line and "P(fake)" not in line
+
+
+def test_modal_requires_explicit_selection_and_credentials(gradio_app, monkeypatch, tmp_path):
+    monkeypatch.delenv("DEMO_URL", raising=False)
+    monkeypatch.delenv("DEMO_TOKEN", raising=False)
+    img = tmp_path / "in.png"
+    img.write_bytes(_png(img))
+    out = gradio_app.run_dire(str(img), 5, backend="modal")
+    assert out[:3] == (None, None, None) and "DEMO_URL/DEMO_TOKEN" in out[4]
 
 
 def test_source_never_claims_the_paper_accuracy(gradio_app):

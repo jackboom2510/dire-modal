@@ -29,32 +29,32 @@ nên **không có con số nào khác nhau** giữa hai giao diện: chúng ch�
 Test của hai bản nằm ở `tests/test_hf_spaces_demo.py` (Streamlit) và
 `tests/test_hf_spaces_gradio.py` (Gradio).
 
-Cả hai có **cùng một tab gallery** (ảnh gốc · DIRE map · điểm detector, kèm `.json`
-nguồn gốc), tab thí nghiệm 2 chiều, tab lịch/chi phí, và tab Table 2.
+Gradio là giao diện Space mặc định; Streamlit được giữ làm bản dự phòng độc lập.
+Gallery Gradio có biểu đồ độ phủ theo generator và hai gallery map tách riêng (ảnh sinh / ảnh thật); biểu đồ chỉ đếm mẫu hợp lệ, không phải metric detector. Cả hai giao diện không tự chấm ảnh upload.
 
 ## Demo này làm gì
 
 | Tab (Gradio) | Nội dung | Chạy ở đâu | Nhãn |
 |---|---|---|---|
 | 1 | **Gallery**: ảnh gốc · DIRE map · điểm detector, kèm `.json` nguồn gốc | ảnh tính trước | `R0` / `R1+R2` |
-| 2 | **Tính DIRE thật**: upload ảnh → **DIRE map** (không trả `P(fake)`), qua endpoint Modal | GPU Modal, **mặc định tắt** | `R1` |
+| 2 | **Mô phỏng & tính DIRE**: chuỗi DDIM tổng hợp đã cache; tính ADM tại chỗ nếu có checkpoint | cache có sẵn; local là backend mặc định | minh hoạ / `R1` |
 | 3 | **Thí nghiệm 2 chiều**: mô hình khuếch tán có score chính xác, đo DIRE | ngay trên Space, 61 ms | minh hoạ lý thuyết |
 | 4 | Lịch nhiễu `ᾱ_t`, NFE, và chi phí | ngay trên Space | công thức |
 | 5 | Bảng 2 của bài + đường tái lập + hạn chế | tĩnh | số của paper |
 
 ## Demo này **không** làm gì
 
-- **Không có ô upload ảnh.** Một ResNet-50 học trên DIRE map không có nghĩa gì khi
-  nhận ảnh RGB thô. Bản Gradio trước đây trả `P(fake)` cho ảnh upload; đó là lỗi bị
-  ghi ở `docs/demo-web-plan.md` §2 và nó đã bị bỏ, không được dựng lại.
+- Tab 2 có thể nhận ảnh **chỉ để tính DIRE map tại chỗ** nếu ADM checkpoint sẵn sàng;
+  không trả `P(fake)` từ ảnh RGB. ResNet-50 học trên DIRE map không có nghĩa gì khi
+  nhận ảnh RGB thô. Bản Gradio cũ từng chấm ảnh upload trực tiếp; lỗi đó được ghi ở
+  `docs/demo-web-plan.md` §2 và không được dựng lại.
 - **Không** ghi "độ chính xác 99 %" ở bất kỳ đâu. Số của bài luôn kèm chữ
   *"số của paper (ICCV 2023), không phải của demo này"*.
 - **Không** hiện `p_fake` khi chưa qua cổng kiểm: `detector.gate` phải là `passed`
   và ngưỡng phải chọn trên `val`.
-- **Không** tính DIRE lúc chạy **theo mặc định**: một lượt forward ADM 256² là
-  **10,1 s** trên 2 vCPU (đo), nên `S = 5` là **101 s**/ảnh và `S = 20` là 404 s.
-  Trang 3 làm được nhưng phải bật thủ công (`DIRE_CKPT` + torch) và phải tick xác
-  nhận thời gian chờ; lý do và số đo ở `docs/demo-hf-spaces-plan.md` §13.
+- **Backend mặc định là local CPU**, nhưng inference chỉ bắt đầu sau khi người dùng chọn ảnh và bấm nút; import/mở trang không nạp checkpoint hay tự khởi chạy inference. Modal chỉ được gọi nếu chọn backend Modal rõ ràng. Khi torch và checkpoint đã sẵn sàng, cache miss chạy `2S` forward rồi lưu từng frame; cache hit đọc lại. ADM 256² mất **10,1 s / lượt forward** trên 2 vCPU (đã đo): S=5 ước tính khoảng 101 s, S=20 khoảng 404 s. Space xếp hàng tối đa một lượt đồng thời; tải checkpoint (~2,5 GB) không tự động và không nằm trong repo.
+- Cache inference nằm tại `DIRE_FRAME_CACHE_DIR`, mặc định thư mục tạm `dire-frame-cache`; khóa gồm version pipeline, S, SHA-256 checkpoint và bytes ảnh. Tối đa 8 lượt, không lưu bản gốc riêng; các frame trung gian vẫn có thể lộ nội dung ảnh. Nút **Xóa cache frame cục bộ** xóa chỉ cache inference. Khi thiếu checkpoint, local inference trả thông báo lỗi rõ ràng, còn mô phỏng tổng hợp dựng sẵn vẫn xem được.
+- Mô phỏng DDIM dựng sẵn ở `cache/ddim-illustration/` là chuỗi synthetic với oracle noise cố định (S=5/10/20; ảnh frame đã render 128×128). Manifest đánh dấu `is_adm_inference=false`, `is_measurement=false`; đây không phải map DIRE hay kết quả thực nghiệm. Thiếu tệp/manifest thì tab minh họa báo lỗi, không giả lập inference trực tiếp.
 
 ## Cấu trúc
 
@@ -132,7 +132,11 @@ hf repos create "$HF_USER/$SPACE" --repo-type space --space-sdk gradio
 # 2. Đẩy nội dung thư mục này lên
 git clone "https://huggingface.co/spaces/$HF_USER/$SPACE" /tmp/space && cd /tmp/space
 cp -r "$REPO/platforms/hf-spaces/." .
-git add -A && git commit -m "DIRE demo (gradio, CPU free)" && git push
+cp -r "$REPO/src/dire_zero" .   # local ADM inference implementation; Space repo is standalone
+mkdir -p gallery
+cp -r "$REPO/modal-runs/gallery/." gallery/   # 64 metadata-backed samples, several generators
+# If no ADM checkpoint is mounted, the bundled cached DDIM illustration still works.
+git add -A && git commit -m "DIRE demo (gradio, local CPU + cached DDIM)" && git push
 
 # 3. Kiểm trước khi push (2 giây, tránh đẩy nhầm lên GitHub)
 git remote -v      # phải là huggingface.co/spaces/$HF_USER/$SPACE
@@ -292,22 +296,17 @@ của Space chỉ cần khi bạn muốn bật lại).
 
 | Biến | Ý nghĩa | Mặc định |
 |---|---|---|
-| `DIRE_GALLERY_DIR` | thư mục gallery, tuyệt đối hoặc tương đối với `app.py` | `gallery` |
-| `DIRE_CKPT` | đường dẫn checkpoint ADM (bật tab DIRE **tại chỗ** của bản Streamlit); cần thêm `torch==2.4.0` | `ckpt/adm_lsun.pt` |
-| `DEMO_URL` | địa chỉ endpoint GPU trên Modal, dạng `https://$WS--dire-demo-api.modal.run` (`$WS` = workspace Modal của bạn) — bật tab DIRE **qua GPU** | *(trống = tắt)* |
-| `DEMO_TOKEN` | token của endpoint; **chỉ đặt trong Secrets**, không bao giờ gửi xuống trình duyệt | *(trống)* |
+| `DIRE_GALLERY_DIR` | thư mục gallery | `gallery` |
+| `DIRE_CKPT` | đường dẫn checkpoint ADM 256×256 dùng bởi local inference Gradio/Streamlit; cần torch + `dire_zero` | `platforms/hf-spaces/ckpt/adm_lsun.pt` |
+| `DIRE_FRAME_CACHE_DIR` | thư mục cache inference chứa map, reconstruction và frame trung gian | `tempfile.gettempdir()/dire-frame-cache` |
+| `DEMO_URL` | endpoint GPU Modal, chỉ dùng sau khi người dùng chọn backend Modal | *(trống)* |
+| `DEMO_TOKEN` | token endpoint Modal; lưu trong Space Secrets, không gửi tới trình duyệt | *(trống)* |
 
-**Không có secret nào là bắt buộc.** Thiếu `DEMO_URL`/`DEMO_TOKEN` thì Space chạy
-y như trước: tab *Tính DIRE thật* hiện lời giải thích thay vì nút chạy, 0 đồng,
-không gọi mạng ngoài.
+Không cần secret để xem gallery hoặc mô phỏng tổng hợp. Thiếu checkpoint thì nút local vẫn hiện; khi bấm sẽ báo checkpoint chưa sẵn sàng và không gọi mạng/tải trọng số. Để bật inference local, cung cấp `torch` và `dire_zero`, rồi gắn ADM checkpoint (~2,5 GB) vào ổ đĩa Space có thể đọc và đặt `DIRE_CKPT` trỏ đúng tệp. Không commit checkpoint vào Git. Cold start nạp checkpoint lần đầu sau khi bấm chạy; model được giữ trong cache tiến trình. Đã đo 10,1 s/forward trên máy 2-vCPU cục bộ (S=5 khoảng 101 s, S=20 khoảng 404 s), nhưng chưa benchmark cold-start, RAM và timeout trên HF Space; xác minh các giới hạn này trước khi mở public inference.
 
-Đặt `DEMO_URL` + `DEMO_TOKEN` (Settings → Secrets) thì trang 3 gọi endpoint GPU:
-`S = 5` còn **0,92 s** thay vì 101 s. Trình duyệt **không** thấy token — nó gọi
-server của Space, server gọi Modal. Dựng endpoint: `docs/demo-modal-plan.md`
-(`modal secret create dire-demo …` rồi `modal deploy -m dire_zero.demo_api`).
+Modal là tùy chọn riêng: đặt `DEMO_URL` và `DEMO_TOKEN` (Settings → Secrets), rồi người dùng phải chọn **Modal GPU** trước khi bấm. Server của Space mới gọi endpoint; trình duyệt không nhận token. Triển khai endpoint: `docs/demo-modal-plan.md`.
 
-Ảnh người dùng vẫn không bị lưu ở đâu: Space chỉ chuyển bytes sang Modal, endpoint
-tính rồi trả PNG, không ghi đĩa.
+Ảnh người dùng chỉ được đọc cục bộ khi dùng local; ở chế độ Modal bytes được gửi sang endpoint đã chọn. Cache local giữ ảnh trung gian x_t/x̂₀ (có khả năng tiết lộ nội dung), giới hạn 8 lượt và có nút xóa; quyền ghi phụ thuộc mount/đĩa của Space. Kiểm tra chính sách lưu trữ Space trước khi xử lý ảnh nhạy cảm.
 
 ## Nguồn & bản quyền
 

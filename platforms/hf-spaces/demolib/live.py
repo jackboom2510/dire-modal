@@ -18,9 +18,10 @@ S = 20       404 s (6,7 phút)    40 forward — cấu hình của bài báo
 1 forward @128²  2,6 s           **không dùng được**: ADM chỉ học ở 256²
 ===========  ==================  ==========================
 
-Vì thế chế độ này **mặc định tắt** (`docs/demo-web-plan.md` §3 chốt: p95 > 45 s
-thì tắt chế độ tự tính). Bật bằng biến môi trường, và chỉ bật khi có người thật
-sự ngồi xem — nếu không thì nó chỉ làm Space chậm và tốn RAM.
+Trong Gradio, local là backend mặc định nhưng inference chỉ chạy sau thao tác rõ ràng
+của người dùng (chọn ảnh rồi bấm nút); app không tự nạp checkpoint khi khởi động.
+Một lượt S=5 vẫn mất khoảng 101 s trên CPU đo được, vì vậy queue chỉ cho một job
+đồng thời và UI báo rõ giới hạn thời gian trước khi chạy.
 
 Số học không được tự viết lại
 -----------------------------
@@ -120,9 +121,9 @@ def status() -> LiveStatus:
         return LiveStatus(
             False, ver, True, str(p),
             f"chưa có checkpoint ADM ở {p}",
-            ["đặt biến DIRE_CKPT trỏ tới 256x256_diffusion_uncond.pt",
-             "hoặc để tệp ở ckpt/adm_lsun.pt trong Space",
-             "ckpt ~2,5 GB ⇒ Hosting: dùng HF Hub (DIRE_CKPT_REPO) chứ đừng commit"],
+            ["gắn checkpoint 256×256 vào ổ đĩa mà Space đọc được rồi đặt DIRE_CKPT",
+             "hoặc để tệp ở platforms/hf-spaces/ckpt/adm_lsun.pt khi chạy từ monorepo",
+             "checkpoint ~2,5 GB: không commit; không tự tải xuống khi khởi động"],
         )
     return LiveStatus(True, ver, True, str(p), "sẵn sàng", [])
 
@@ -148,7 +149,7 @@ def load_checkpoint(path: Path | None = None):
     try:
         from dire_zero.checkpoint import sha256_file  # noqa: PLC0415
 
-        digest = sha256_file(str(p))[:12]
+        digest = sha256_file(str(p))
     except Exception:  # pragma: no cover
         digest = "?"
     return model, digest
@@ -223,15 +224,19 @@ def run_steps(model, image, steps: int = 5, on_frame=None, seed: int = 0) -> dic
     t_start = time.time()
     nfe = 0
 
-    def frame(phase: str, i: int, t: int, x0h, eps, sec: float) -> None:
+    def frame(phase: str, i: int, t: int, xt, x0h, eps, sec: float) -> None:
         nonlocal nfe
         nfe += 1
+        xt_png = _png_bytes(_to_uint8_hwc(xt))
+        x0_png = _png_bytes(_to_uint8_hwc(x0h))
         d = {
             "phase": phase,
             "i": i,
             "t": int(t),
             "sec": round(sec, 2),
-            "x0_png": _png_bytes(_to_uint8_hwc(x0h)),
+            "x_t_png": xt_png,
+            "x0_hat_png": x0_png,
+            "x0_png": x0_png,
             "eps_rms": round(float(eps.pow(2).mean().sqrt()), 5),
             "map_mean": round(float((x0_img - x0h).abs().mean()), 5),
         }
@@ -245,7 +250,7 @@ def run_steps(model, image, steps: int = 5, on_frame=None, seed: int = 0) -> dic
         for i, t in enumerate(ts):
             t0 = time.time()
             x0h, eps = _eval(sched, model, x, t)
-            frame("invert", i, t, x0h, eps, time.time() - t0)
+            frame("invert", i, t, x, x0h, eps, time.time() - t0)
             t_next = ts[min(i + 1, len(ts) - 1)]
             a_next = sched.a(t_next, dtype=x.dtype)
             x = a_next.sqrt() * x0h + (1 - a_next).sqrt() * eps
@@ -257,7 +262,7 @@ def run_steps(model, image, steps: int = 5, on_frame=None, seed: int = 0) -> dic
         for i in range(len(ts) - 1, -1, -1):
             t0 = time.time()
             x0h, eps = _eval(sched, model, x, ts[i])
-            frame("reconstruct", i, ts[i], x0h, eps, time.time() - t0)
+            frame("reconstruct", i, ts[i], x, x0h, eps, time.time() - t0)
             if i == 0:
                 recon = x0h
                 break

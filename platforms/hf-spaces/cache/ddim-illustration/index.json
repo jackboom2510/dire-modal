@@ -1,0 +1,471 @@
+{
+  "version": 1,
+  "label": "MINH HỌA TOÁN HỌC · ẢNH TỔNG HỢP · NHIỄU ORACLE",
+  "is_adm_inference": false,
+  "is_measurement": false,
+  "noise_seed": 3407,
+  "schedule": "linear beta, 1000 training steps; selected DDIM timesteps",
+  "steps": {
+    "5": [
+      {
+        "phase": "Thêm nhiễu",
+        "t": 0,
+        "x_t": "S05/forward-00-t0000-xt.png",
+        "x0_hat": "S05/forward-00-t0000-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 200,
+        "x_t": "S05/forward-01-t0200-xt.png",
+        "x0_hat": "S05/forward-01-t0200-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 400,
+        "x_t": "S05/forward-02-t0400-xt.png",
+        "x0_hat": "S05/forward-02-t0400-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 600,
+        "x_t": "S05/forward-03-t0600-xt.png",
+        "x0_hat": "S05/forward-03-t0600-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 800,
+        "x_t": "S05/forward-04-t0800-xt.png",
+        "x0_hat": "S05/forward-04-t0800-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 800,
+        "t_next": 600,
+        "x_t": "S05/reverse-00-t0800-xt.png",
+        "x0_hat": "S05/reverse-00-t0800-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 600,
+        "t_next": 400,
+        "x_t": "S05/reverse-01-t0600-xt.png",
+        "x0_hat": "S05/reverse-01-t0600-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 400,
+        "t_next": 200,
+        "x_t": "S05/reverse-02-t0400-xt.png",
+        "x0_hat": "S05/reverse-02-t0400-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 200,
+        "t_next": 0,
+        "x_t": "S05/reverse-03-t0200-xt.png",
+        "x0_hat": "S05/reverse-03-t0200-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 0,
+        "t_next": -1,
+        "x_t": "S05/reverse-04-t0000-xt.png",
+        "x0_hat": "S05/reverse-04-t0000-x0hat.png"
+      }
+    ],
+    "10": [
+      {
+        "phase": "Thêm nhiễu",
+        "t": 0,
+        "x_t": "S10/forward-00-t0000-xt.png",
+        "x0_hat": "S10/forward-00-t0000-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 100,
+        "x_t": "S10/forward-01-t0100-xt.png",
+        "x0_hat": "S10/forward-01-t0100-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 200,
+        "x_t": "S10/forward-02-t0200-xt.png",
+        "x0_hat": "S10/forward-02-t0200-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 300,
+        "x_t": "S10/forward-03-t0300-xt.png",
+        "x0_hat": "S10/forward-03-t0300-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 400,
+        "x_t": "S10/forward-04-t0400-xt.png",
+        "x0_hat": "S10/forward-04-t0400-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 500,
+        "x_t": "S10/forward-05-t0500-xt.png",
+        "x0_hat": "S10/forward-05-t0500-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 600,
+        "x_t": "S10/forward-06-t0600-xt.png",
+        "x0_hat": "S10/forward-06-t0600-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 700,
+        "x_t": "S10/forward-07-t0700-xt.png",
+        "x0_hat": "S10/forward-07-t0700-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 800,
+        "x_t": "S10/forward-08-t0800-xt.png",
+        "x0_hat": "S10/forward-08-t0800-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 900,
+        "x_t": "S10/forward-09-t0900-xt.png",
+        "x0_hat": "S10/forward-09-t0900-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 900,
+        "t_next": 800,
+        "x_t": "S10/reverse-00-t0900-xt.png",
+        "x0_hat": "S10/reverse-00-t0900-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 800,
+        "t_next": 700,
+        "x_t": "S10/reverse-01-t0800-xt.png",
+        "x0_hat": "S10/reverse-01-t0800-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 700,
+        "t_next": 600,
+        "x_t": "S10/reverse-02-t0700-xt.png",
+        "x0_hat": "S10/reverse-02-t0700-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 600,
+        "t_next": 500,
+        "x_t": "S10/reverse-03-t0600-xt.png",
+        "x0_hat": "S10/reverse-03-t0600-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 500,
+        "t_next": 400,
+        "x_t": "S10/reverse-04-t0500-xt.png",
+        "x0_hat": "S10/reverse-04-t0500-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 400,
+        "t_next": 300,
+        "x_t": "S10/reverse-05-t0400-xt.png",
+        "x0_hat": "S10/reverse-05-t0400-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 300,
+        "t_next": 200,
+        "x_t": "S10/reverse-06-t0300-xt.png",
+        "x0_hat": "S10/reverse-06-t0300-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 200,
+        "t_next": 100,
+        "x_t": "S10/reverse-07-t0200-xt.png",
+        "x0_hat": "S10/reverse-07-t0200-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 100,
+        "t_next": 0,
+        "x_t": "S10/reverse-08-t0100-xt.png",
+        "x0_hat": "S10/reverse-08-t0100-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 0,
+        "t_next": -1,
+        "x_t": "S10/reverse-09-t0000-xt.png",
+        "x0_hat": "S10/reverse-09-t0000-x0hat.png"
+      }
+    ],
+    "20": [
+      {
+        "phase": "Thêm nhiễu",
+        "t": 0,
+        "x_t": "S20/forward-00-t0000-xt.png",
+        "x0_hat": "S20/forward-00-t0000-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 50,
+        "x_t": "S20/forward-01-t0050-xt.png",
+        "x0_hat": "S20/forward-01-t0050-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 100,
+        "x_t": "S20/forward-02-t0100-xt.png",
+        "x0_hat": "S20/forward-02-t0100-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 150,
+        "x_t": "S20/forward-03-t0150-xt.png",
+        "x0_hat": "S20/forward-03-t0150-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 200,
+        "x_t": "S20/forward-04-t0200-xt.png",
+        "x0_hat": "S20/forward-04-t0200-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 250,
+        "x_t": "S20/forward-05-t0250-xt.png",
+        "x0_hat": "S20/forward-05-t0250-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 300,
+        "x_t": "S20/forward-06-t0300-xt.png",
+        "x0_hat": "S20/forward-06-t0300-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 350,
+        "x_t": "S20/forward-07-t0350-xt.png",
+        "x0_hat": "S20/forward-07-t0350-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 400,
+        "x_t": "S20/forward-08-t0400-xt.png",
+        "x0_hat": "S20/forward-08-t0400-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 450,
+        "x_t": "S20/forward-09-t0450-xt.png",
+        "x0_hat": "S20/forward-09-t0450-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 500,
+        "x_t": "S20/forward-10-t0500-xt.png",
+        "x0_hat": "S20/forward-10-t0500-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 550,
+        "x_t": "S20/forward-11-t0550-xt.png",
+        "x0_hat": "S20/forward-11-t0550-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 600,
+        "x_t": "S20/forward-12-t0600-xt.png",
+        "x0_hat": "S20/forward-12-t0600-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 650,
+        "x_t": "S20/forward-13-t0650-xt.png",
+        "x0_hat": "S20/forward-13-t0650-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 700,
+        "x_t": "S20/forward-14-t0700-xt.png",
+        "x0_hat": "S20/forward-14-t0700-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 750,
+        "x_t": "S20/forward-15-t0750-xt.png",
+        "x0_hat": "S20/forward-15-t0750-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 800,
+        "x_t": "S20/forward-16-t0800-xt.png",
+        "x0_hat": "S20/forward-16-t0800-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 850,
+        "x_t": "S20/forward-17-t0850-xt.png",
+        "x0_hat": "S20/forward-17-t0850-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 900,
+        "x_t": "S20/forward-18-t0900-xt.png",
+        "x0_hat": "S20/forward-18-t0900-x0hat.png"
+      },
+      {
+        "phase": "Thêm nhiễu",
+        "t": 950,
+        "x_t": "S20/forward-19-t0950-xt.png",
+        "x0_hat": "S20/forward-19-t0950-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 950,
+        "t_next": 900,
+        "x_t": "S20/reverse-00-t0950-xt.png",
+        "x0_hat": "S20/reverse-00-t0950-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 900,
+        "t_next": 850,
+        "x_t": "S20/reverse-01-t0900-xt.png",
+        "x0_hat": "S20/reverse-01-t0900-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 850,
+        "t_next": 800,
+        "x_t": "S20/reverse-02-t0850-xt.png",
+        "x0_hat": "S20/reverse-02-t0850-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 800,
+        "t_next": 750,
+        "x_t": "S20/reverse-03-t0800-xt.png",
+        "x0_hat": "S20/reverse-03-t0800-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 750,
+        "t_next": 700,
+        "x_t": "S20/reverse-04-t0750-xt.png",
+        "x0_hat": "S20/reverse-04-t0750-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 700,
+        "t_next": 650,
+        "x_t": "S20/reverse-05-t0700-xt.png",
+        "x0_hat": "S20/reverse-05-t0700-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 650,
+        "t_next": 600,
+        "x_t": "S20/reverse-06-t0650-xt.png",
+        "x0_hat": "S20/reverse-06-t0650-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 600,
+        "t_next": 550,
+        "x_t": "S20/reverse-07-t0600-xt.png",
+        "x0_hat": "S20/reverse-07-t0600-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 550,
+        "t_next": 500,
+        "x_t": "S20/reverse-08-t0550-xt.png",
+        "x0_hat": "S20/reverse-08-t0550-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 500,
+        "t_next": 450,
+        "x_t": "S20/reverse-09-t0500-xt.png",
+        "x0_hat": "S20/reverse-09-t0500-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 450,
+        "t_next": 400,
+        "x_t": "S20/reverse-10-t0450-xt.png",
+        "x0_hat": "S20/reverse-10-t0450-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 400,
+        "t_next": 350,
+        "x_t": "S20/reverse-11-t0400-xt.png",
+        "x0_hat": "S20/reverse-11-t0400-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 350,
+        "t_next": 300,
+        "x_t": "S20/reverse-12-t0350-xt.png",
+        "x0_hat": "S20/reverse-12-t0350-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 300,
+        "t_next": 250,
+        "x_t": "S20/reverse-13-t0300-xt.png",
+        "x0_hat": "S20/reverse-13-t0300-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 250,
+        "t_next": 200,
+        "x_t": "S20/reverse-14-t0250-xt.png",
+        "x0_hat": "S20/reverse-14-t0250-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 200,
+        "t_next": 150,
+        "x_t": "S20/reverse-15-t0200-xt.png",
+        "x0_hat": "S20/reverse-15-t0200-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 150,
+        "t_next": 100,
+        "x_t": "S20/reverse-16-t0150-xt.png",
+        "x0_hat": "S20/reverse-16-t0150-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 100,
+        "t_next": 50,
+        "x_t": "S20/reverse-17-t0100-xt.png",
+        "x0_hat": "S20/reverse-17-t0100-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 50,
+        "t_next": 0,
+        "x_t": "S20/reverse-18-t0050-xt.png",
+        "x0_hat": "S20/reverse-18-t0050-x0hat.png"
+      },
+      {
+        "phase": "Khử nhiễu DDIM (η=0)",
+        "t": 0,
+        "t_next": -1,
+        "x_t": "S20/reverse-19-t0000-xt.png",
+        "x0_hat": "S20/reverse-19-t0000-x0hat.png"
+      }
+    ]
+  }
+}
