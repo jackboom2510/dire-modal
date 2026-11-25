@@ -275,6 +275,11 @@ def detector_path_for_ui(source: str, generator: str = "gen-adm") -> str:
     return suggested_path(source, generator)
 
 
+def gallery_allowed_paths() -> list[str]:
+    """Only whitelist the configured gallery root for Gradio file outputs."""
+    return [str(GALLERY_DIR.resolve())] if GALLERY_DIR.is_dir() else []
+
+
 def _local_result(image_path: str, steps: int, progress=None):
     status = live.status()
     if not status.available:
@@ -759,8 +764,14 @@ if __name__ == "__main__":  # pragma: no cover - chỉ chạy khi phục vụ th
     _kw = {}
     import inspect as _inspect  # noqa: PLC0415
 
-    if "ssr_mode" in _inspect.signature(demo.launch).parameters:
+    _launch_params = _inspect.signature(demo.launch).parameters
+    if "ssr_mode" in _launch_params:
         _kw["ssr_mode"] = False
+    if "allowed_paths" in _launch_params:
+        # Gallery callbacks return real files outside the Space cwd (for example
+        # the monorepo's modal-runs/gallery). Whitelist only that configured root,
+        # not the repository or entire drive; otherwise Gradio rejects them.
+        _kw["allowed_paths"] = gallery_allowed_paths()
     demo.launch(
         css=IMAGE_FIT_CSS,
         server_name=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
