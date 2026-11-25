@@ -86,6 +86,20 @@ def test_mapping_rejects_unknown_checkpoint_key():
         map_state_dict({**{r: None for r in dict(iter_name_pairs(model)).values()}, "không.tồn.tại": None}, model)
 
 
+def test_mapping_identifies_author_detector_instead_of_generic_unknown_keys():
+    with torch.device("meta"):
+        model = ZeroUNet(TINY)
+    state = {
+        "backbone.fc.bias": None,
+        "backbone.fc.weight": None,
+        "backbone.stages.0.bn1.bias": None,
+    }
+    with pytest.raises(ValueError, match="không phải ADM diffusion U-Net") as exc:
+        map_state_dict(state, model)
+    assert "lsun_adm.pth" in str(exc.value)
+    assert "256x256_diffusion_uncond.pt" in str(exc.value)
+
+
 def test_tiny_model_roundtrip_shape_and_no_nan():
     torch.manual_seed(0)
     model = ZeroUNet(TINY).eval()

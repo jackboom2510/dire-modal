@@ -6,8 +6,8 @@ những chỗ dễ sai khi đổi giao diện:
 * app dựng được và có đủ tab, không exception lúc `build_app()`;
 * `P(fake)` vẫn bị chặn bởi **cùng** một hàm (`provenance.Sample.score`), không
   phải bởi một `if` viết lại trong giao diện;
-* đường **nhận ảnh** (tab *Tính DIRE thật*) không bao giờ trả xác suất — đây là
-  lỗi của bản Gradio đầu tiên và không được quay lại;
+* đường **nhận ảnh** (tab *Tính DIRE thật*) không bao giờ chấm ảnh RGB thô; chỉ
+  được dự đoán tùy chọn từ map DIRE RGB vừa tính, và không lộ `P(fake)` chưa qua gate;
 * không có câu nào tự nhận độ chính xác của bài báo.
 """
 
@@ -171,6 +171,43 @@ def test_the_upload_path_defaults_to_local_and_returns_a_map_never_a_probability
     assert "DIRE: local ADM" in line and "cache miss" in line
     assert "không phải kết luận thật/giả" in line
     assert "p_fake" not in line and "P(fake)" not in line
+
+
+def test_numpy_compatibility_remediation_is_visible_in_live_status(gradio_app, monkeypatch):
+    monkeypatch.setattr(gradio_app.live, "status", lambda: gradio_app.live.LiveStatus(
+        False, "—", False, "adm.pt", "NumPy 2.x không tương thích với torch==2.4.0", [
+            'python -m pip install --force-reinstall "numpy<2"',
+            "khởi động lại Gradio",
+        ],
+    ))
+    text = gradio_app.local_status_markdown()
+    assert "NumPy 2.x" in text
+    assert 'pip install --force-reinstall "numpy<2"' in text
+
+
+def test_upload_can_score_the_computed_map_with_selected_checkpoint(gradio_app, monkeypatch, tmp_path):
+    import numpy as np
+    from demolib import detector
+
+    img = tmp_path / "in.png"
+    img.write_bytes(_png(img))
+    run = {
+        "steps": 5, "nfe": 10, "seconds": 0.92,
+        "map_values": {"mean": 0.01, "p99": 0.05, "max": 0.2},
+        "map_png": _png(img), "recon_png": _png(img, (1, 2, 3)),
+        "map_array": np.zeros((3, 256, 256), dtype=np.float16), "cache_hit": False,
+    }
+    monkeypatch.setattr(gradio_app, "_local_result", lambda *a, **k: (img.read_bytes(), run, [], "abc123"))
+    monkeypatch.setattr(detector, "predict_map", lambda arr, path, source: {
+        "prediction": "ẢNH SINH", "p_fake": 0.87, "logit": 1.901, "threshold": 0.5,
+        "threshold_note": "val", "weights": "detector.pth", "source": source,
+    })
+    result = gradio_app.run_dire(str(img), 5, "local", "project", "gen-adm", "/mounted/detector.pth")
+    assert "ResNet · dự đoán ẢNH SINH" in result[4]
+    assert "P(fake)=**" not in result[4]
+    assert "logit kết quả **+1.9010**" in result[4]
+    assert "ngưỡng P(fake) cuối cùng **0.5000**" in result[4]
+    assert "detector.pth" in result[4]
 
 
 def test_modal_requires_explicit_selection_and_credentials(gradio_app, monkeypatch, tmp_path):
