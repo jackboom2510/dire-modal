@@ -103,6 +103,22 @@ def test_app_builds_and_has_every_tab(gradio_app):
         assert expected in text, (expected, labels)
 
 
+def test_image_views_fit_without_gallery_scrollbars(gradio_app):
+    demo = gradio_app.build_app()
+    galleries = [block for block in demo.blocks.values()
+                 if isinstance(block, gradio_app.gr.Gallery)]
+    image_outputs = [block for block in demo.blocks.values()
+                     if isinstance(block, gradio_app.gr.Image)]
+
+    assert len(galleries) >= 5
+    assert all(gallery.height is None for gallery in galleries)
+    outputs = [image for image in image_outputs if image.label in {"Ảnh gốc", "Tái tạo x̂₀", "DIRE map"}]
+    assert len(outputs) == 3
+    assert all(image.height == "min(60vh, 560px)" for image in outputs)
+    assert all("fit-image" in image.elem_classes for image in outputs)
+    assert "object-fit: contain" in gradio_app.IMAGE_FIT_CSS
+
+
 def test_gallery_page_uses_the_shared_gate_not_its_own_if(gradio_app, gallery):
     """Cùng một mẫu, hai trạng thái cổng ⇒ chỉ khác nhau ở việc **có số hay không**.
 
