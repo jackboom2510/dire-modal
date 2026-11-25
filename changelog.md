@@ -9,6 +9,14 @@
 - Không sao chép toàn bộ metrics/run history vào đây; trỏ tới ledger phù hợp.
 - Dùng dạng mới nhất ở đầu file.
 
+## 2026-10-14 — Thêm Kaggle read-only preflight trước smoke/train
+
+- **Branch:** `arena/1abd31d0-dire-modal` (đang active khi ghi).
+- **Đã thay đổi:** thêm `src/dire_modal/kaggle_preflight.py` để xác minh manifest và 8 archive CelebA-HQ (SHA-256, byte size, regular/image/suffix counts), kiểm tra dung lượng trống và khả năng ghi vào thư mục làm việc ngoài input; hỗ trợ truy vấn thông tin GPU bằng `nvidia-smi` mà không khởi tạo CUDA hay workload.
+- Tích hợp cell preflight vào `platforms/kaggle/notebook.ipynb` sau bước chuẩn bị source nhưng trước mọi smoke/pack/train cell; bỏ CUDA query khỏi cell kiểm tra môi trường và bỏ nhánh tự tải mẫu trong bước tìm data. Notebook yêu cầu Accelerator Off khi preflight, dừng nếu fail và ghi rõ `/kaggle/working` không tự bảo đảm persistence qua phiên.
+- **Kiểm chứng:** `tests/test_kaggle_preflight.py`, `tests/test_kaggle_maps_inventory.py`, `tests/test_docs_index.py` — 17 passed; notebook JSON và code cells parse; pyflakes, py_compile và `git diff --check` sạch.
+- **Chưa làm:** chưa chạy trên Kaggle nên chưa có kết quả xác minh archive, GPU, quota hay persistence thật; không train/benchmark và không khóa seed/budget. Preflight không xác minh pixel/provenance hoặc việc export artifacts qua nhiều phiên.
+
 ## 2026-10-14 — Chuẩn hóa tài liệu agent và lịch sử dataset runs
 
 - **Branch:** `arena/3e9b6e2a-dire-modal` (đang active khi ghi).
@@ -49,3 +57,11 @@
 - Người dùng xác nhận các maps local là tar riêng theo split/generator; gồm train `real+sdv2`, test `real`, bốn họ holdout và SDv2 control. Không có archive nào được truy cập từ checkout.
 - Thêm `tools/kaggle_maps_inventory.py` (read-only, không giải nén/upload) để ghi archive SHA-256, counts/member names, candidate IDs/overlaps; `--hash-members` kiểm bytes thành viên tùy chọn. Thêm 6 test mới; **6 passed**, cùng `tests/test_docs_index.py` **5 passed** (tổng **11 passed**). Pyflakes, py_compile và `git diff --check` sạch.
 - Test toàn repo chưa thể collect trong môi trường hiện tại: thiếu các dependency ngoài (`modal`, `gradio`, `numpy`); không cài GPU stack/không chạy train. Bộ test mới fail 6/6 trên base commit trước khi thêm tool, pass 6/6 trên nhánh này.
+- Người dùng gửi inventory local: train real 28.000 / SDv2 40.000; test real 1.000, DALL-E2 500, Imagen 1.000, Midjourney 100, StarGAN 1.000, SDv2 1.000; tổng archive 5.769.522.447 byte. Đây là user-provided archive counts/sizes, chưa độc lập kiểm chứng.
+- Inventory nêu candidate basename SDv2 `0..999` xuất hiện ở cả train/test và train có basename lặp. Phát hiện v1 chỉ so sánh member đầu tiên khi candidate lặp; sửa overlap audit để xét toàn bộ members, in counts/member paths và số duplicate candidate IDs. Hai test mới fail trên base `97ab83f`, pass trên nhánh hiện tại.
+- Kiểm chứng nhánh hiện tại: inventory 7 passed + docs index 5 passed; pyflakes, py_compile, `git diff --check` sạch. AP prevalence theo test generator không đồng nhất; người dùng chốt metric chính macro-AP chuẩn hóa prior 50:50 bằng sample weights, đồng thời báo cáo AP thô theo prevalence làm sensitivity.
+- Người dùng xác nhận basename SDv2 `0..999` là chỉ số cục bộ, không phải ID ảnh nguồn; không diễn giải candidate basename overlap thành leakage. Validation locator sẽ dựa trên full member path, còn content/provenance overlap phải được kiểm riêng.
+- Người dùng chọn class-weighted loss cho train real/SDv2: giữ toàn bộ maps và cân bằng tổng đóng góp loss theo class; weights chỉ tính lại từ member counts/IDs đã được kiểm tra, không khóa theo counts manifest chưa audit.
+- Người dùng chốt validation 10% riêng cho train real và SDv2, tách theo deterministic hash trên full archive-relative member path (không dùng basename index). Tỷ lệ và locator đã khóa; hash salt/rounding, file hashes và realized counts vẫn cần ghi trong preflight manifest.
+- Người dùng chốt CI là paired stratified bootstrap 95%: giữ cùng real test IDs qua các họ, bootstrap fake IDs riêng theo generator; seed variability sẽ tách riêng hoặc thêm tầng bootstrap sau khi chốt số seed.
+- Người dùng hoãn chốt số seed và training budget tới khi hoàn tất preflight dữ liệu/tài nguyên trên Kaggle; không bắt đầu train hoặc benchmark trước đó.

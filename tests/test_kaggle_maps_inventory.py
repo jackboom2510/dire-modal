@@ -23,10 +23,11 @@ EXPECTED = [
 ]
 
 
-def _write_tar(path: Path, members: dict[str, bytes]) -> None:
+def _write_tar(path: Path, members: dict[str, bytes] | list[tuple[str, bytes]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+    rows = members.items() if isinstance(members, dict) else members
     with tarfile.open(path, "w:gz") as tf:
-        for name, data in members.items():
+        for name, data in rows:
             info = tarfile.TarInfo(name)
             info.size = len(data)
             tf.addfile(info, io.BytesIO(data))
@@ -111,6 +112,32 @@ def test_hash_members_can_confirm_exact_duplicate_bytes(tmp_path: Path) -> None:
     )
 
 
+def test_overlap_audits_every_member_when_candidate_ids_repeat(tmp_path: Path) -> None:
+    root = tmp_path / "source"
+    out = tmp_path / "manifest.json"
+    _dataset(root)
+    shared = b"same map bytes"
+    _write_tar(root / EXPECTED[1], [
+        ("class-a/0.png", b"different map bytes"),
+        ("class-b/0.png", shared),
+    ])
+    _write_tar(root / EXPECTED[7], {"0.png": shared})
+
+    result = _run(root, out, "--hash-members")
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    data = json.loads(out.read_text(encoding="utf-8"))
+    overlap = next(
+        row for row in data["candidate_id_overlaps"]
+        if row["generator"] == "sdv2" and row["candidate_id"] == "0"
+    )
+    assert overlap["left_member_count"] == 2
+    assert overlap["right_member_count"] == 1
+    assert overlap["map_bytes_identical"] is True
+    assert overlap["content_sha256"] == hashlib.sha256(shared).hexdigest()
+    assert "class-b/0.png" in overlap["left_member_paths"]
+
+
 def test_inventory_records_repeated_candidate_basenames(tmp_path: Path) -> None:
     root = tmp_path / "source"
     out = tmp_path / "manifest.json"
@@ -126,6 +153,7 @@ def test_inventory_records_repeated_candidate_basenames(tmp_path: Path) -> None:
     data = json.loads(out.read_text(encoding="utf-8"))
     train_real = next(row for row in data["archives"] if row["path"] == EXPECTED[0])
     assert train_real["duplicate_candidate_ids"] == ["duplicate"]
+    assert train_real["duplicate_candidate_id_count"] == 1
 
 
 def test_manifest_output_must_not_modify_source_tree(tmp_path: Path) -> None:
