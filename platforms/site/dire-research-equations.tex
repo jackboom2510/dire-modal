@@ -1,0 +1,51 @@
+% Source equations for dire-research-complete.pptx / PDF.
+% Rendered visually with matplotlib mathtext; project slides remain editable.
+\[
+q(x_t\mid x_{t-1})=\mathcal{N}\!\left(\sqrt{\alpha_t}x_{t-1},\,\beta_t I\right)
+\]
+\[
+\bar{\alpha}_t=\prod_{s=1}^{t}\alpha_s,\qquad x_t=\sqrt{\bar{\alpha}_t}x_0+\sqrt{1-\bar{\alpha}_t}\,\epsilon,
+\quad \epsilon\sim\mathcal{N}(0,I)
+\]
+\[
+\mathcal{L}_{\epsilon}=\mathbb{E}_{x_0,\epsilon,t}\left[\left\|\epsilon-\epsilon_{\theta}(x_t,t)\right\|_2^2\right]
+\]
+\[
+\hat{x}_0=\frac{x_t-\sqrt{1-\bar{\alpha}_t}\,\epsilon_{\theta}(x_t,t)}{\sqrt{\bar{\alpha}_t}}
+\]
+\[
+x_{t-1}=\sqrt{\bar{\alpha}_{t-1}}\,\hat{x}_0+\sqrt{1-\bar{\alpha}_{t-1}}\,\epsilon_{\theta}(x_t,t)\quad(\eta=0)
+\]
+\[
+x_{t+1}=\sqrt{\bar{\alpha}_{t+1}}\,\hat{x}_0+\sqrt{1-\bar{\alpha}_{t+1}}\,\hat{\epsilon}_{\theta}(x_t,t)
+\]
+\[
+\mathrm{DIRE}(x_0)=\left|x_0-\mathcal{R}\!\left(\mathcal{I}(x_0)\right)\right|
+\]
+\[
+\mathrm{NFE}_{\mathrm{per\ image}}=S_{\mathrm{invert}}+S_{\mathrm{reconstruct}}=2S
+\]
+\[
+\mathcal{L}_{\mathrm{BCE}}=-\left[y\log\sigma(z)+(1-y)\log\left(1-\sigma(z)\right)\right]
+\]
+\[
+\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^{\mathsf T}}{\sqrt{d}}\right)V
+\]
+\[
+\mathrm{ELBO}=\mathbb{E}_{q_\phi(z\mid x)}[\log p_\theta(x\mid z)]-D_{\mathrm{KL}}(q_\phi(z\mid x)\parallel p(z))
+\]
+\[
+\min_G\max_D\;\mathbb{E}_{x\sim p_{data}}\log D(x)+\mathbb{E}_{z\sim p_z}\log(1-D(G(z)))
+\]
+\\[
+z_q=e_{k^*},\qquad k^*=\arg\min_k\|z_e-e_k\|_2
+\\]
+\\[
+\log p_X(x)=\log p_Z(f(x))+\log\left|\det J_f(x)\right|
+\]
+\[
+\mathrm{ACC}(\tau)=\frac{1}{N}\sum_{i=1}^{N}\mathbf{1}\!\left[(s_i>\tau)=y_i\right]
+\]
+\[
+\mathrm{AUC}=\int_0^1\mathrm{TPR}(u)\,du
+\]

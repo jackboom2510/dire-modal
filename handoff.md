@@ -2390,3 +2390,94 @@
 
 ❯ /exit                                                                         
   ⎿  Bye!
+---
+
+## 2026-10-14 continuation update (Arena): read-only research prototype MVP
+
+The checked-in artifacts now provide stronger evidence than the earlier section
+above (which described a Modal inventory at that earlier point in time). Treat
+the following as **local repository evidence only**; it does not confirm current
+live Modal app state or prove that the files have not since changed on the Volume.
+The repository's artifact/report timestamps include dates later than this review
+(2026-10-14); this provenance anomaly remains unresolved and is not evidence of
+when a live job ran.
+
+### Newly verified from the current checkout
+
+- Table 4 ledger exists at
+  `modal-runs/experiments/experiments/table4/table4-lsun-pilot/subsets/per-cell-000200/table4.json`.
+- It records `lsun-pilot`, 200 images/cell, seed 3407; the recorded S values are
+  5, 10 and 20. S=50 is explicitly in `missing_steps`.
+- Each of S=5/10/20 has five test-generator cells marked `ran` (ADM, DDPM,
+  iDDPM, PNDM, SD-v2). The ledger records AP/AUC/ACC and sample counts. The
+  result is a 200-per-cell pilot, not a full-paper reproduction. The ledger's
+  per-generator ACC is reported at threshold 0.5; the `train.test` ADM summaries
+  separately use the validation-selected threshold.
+- The table4 `train.json` artifacts include ImageNet initialization, epoch
+  counts and detector SHA-256 identifiers, but no detector checkpoint binary
+  was found under `modal-runs/`. A hash in a ledger is not an available or
+  inference-verified checkpoint.
+- Table 5 has a protocol/input record at
+  `modal-runs/experiments/experiments/table5/table5-lsun-pilot/inputs/_protocol.json`
+  naming REC/RGB/RGB_DIRE/DIRE, steps=20 and NFE/image=40. No `table5.json` result
+  ledger is present in the checked-in table5 tree: display as **inputs only**,
+  not completed measurements.
+- No Figure 4 result directory/ledger is present under
+  `modal-runs/experiments/experiments/figure4`: display as **not run / missing**.
+- `modal-runs/gallery/` contains 64 metadata JSON records and 128 image assets
+  (64 original + 64 display-map PNGs), about 24 MB across `modal-runs/`. The PNG
+  map is display-only; source map arrays on the Volume remain authoritative.
+- Paper Table 2 source is `src/dire_modal/paper_table2.tsv`; dashboard keeps its
+  paper-reported values separate from project measurements. Pilot SD-v2 is not
+  equivalent to the paper's SD-v1 condition.
+- Existing `modal-runs/runs/report.json` and `runs/eval/gen-adm/eval.json` are
+  separate R1+R2 / evaluation artifacts; they are explicitly not paper Table 2
+  results.
+
+### Work completed in this continuation
+
+Created `platforms/prototype/`, a standalone Streamlit, read-only research MVP:
+
+- Paper-reported Table 2, sourced from the TSV and labelled separately.
+- Existing R1+R2 and ADM evaluation reports, clearly labelled project evidence.
+- Recorded Table 4 S sweep with test metrics; missing S=50 is an explicit `not
+  run` row, and the chart uses recorded AP values only (no interpolation).
+- Explicit partial/missing states for Table 5 and Figure 4.
+- Metadata-backed original/DIRE display-map gallery.
+- Pipeline/DIRE explainer, protocol/checkpoint identifiers, plus a local image
+  preview sandbox. Upload is display-only: the app sends nothing to Modal, does
+  not persist uploads, and has no prediction action.
+- Hard-cap warning ($30 all-in) and no on-demand run control. Current cost
+  headroom is **not verified** by the dashboard.
+- README and five unit tests in `tests/test_research_prototype_data.py`.
+
+Run from repo root:
+
+```bash
+python -m pip install -r platforms/prototype/requirements.txt
+streamlit run platforms/prototype/app.py --server.address 0.0.0.0
+```
+
+Validation performed: all five prototype data tests pass; compileall and
+`git diff --check` pass; Streamlit AppTest rendered all five tabs with no app
+exceptions; local HTTP health returned 200. A live preview server was started on
+port 8501. The `modal` CLI is not installed in the current environment, so no
+live Modal status or cost query was performed; do not infer that the earlier
+reported App is still running or stopped.
+
+### Remaining / next steps
+
+1. Verify live Modal state and account-level GPU spend/headroom read-only using a
+   configured Modal CLI/MCP before any remote run or deployment. Hard cap remains
+   $30 for the entire pilot, including accrued and active-job spend. No further
+   GPU job has been launched by this continuation.
+2. Review the dashboard visually and check all displayed evidence against current
+   Volume contents before treating repository copies as current.
+3. Once applicable, implement a verified checkpoint inference workflow only
+   after confirming actual checkpoint binaries and preprocessing compatibility;
+   the upload sandbox is deliberately not represented as a detector.
+4. Add on-demand execution only as a separate explicit action with cost/time
+   estimation, provenance, and a hard cost guard; keep the $30 aggregate cap.
+5. Prepare editable PPTX + PDF with paper-reported and project-measured sections
+   separated, once inputs/ledger state has been audited. Do not fill missing
+   cells or claim the pilot reproduces the full paper.
