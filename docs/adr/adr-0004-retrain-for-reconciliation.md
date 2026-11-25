@@ -2,7 +2,7 @@
 
 - **Trạng thái:** Accepted
 - **Liên quan:** `spec.md` §3 N1, §6 C3, §7 FR-8, §12.1; `src/dire_modal/train.py`,
-  `docs/adr-0003-demo-training.md`, `docs/runbook-free.md` §7
+  `docs/adr/adr-0003-demo-training.md`, `docs/runbook-free.md` §7
 
 ## Bối cảnh
 

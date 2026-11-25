@@ -26,7 +26,7 @@ dire batch ./thu_muc --out scores.csv
 dire serve --port 8000                            # FastAPI + uvicorn
 ```
 
-Ba lớp, **một chiều phụ thuộc** — xem [`docs/adr-0005-local-first-modal-wrapper.md`](docs/adr-0005-local-first-modal-wrapper.md):
+Ba lớp, **một chiều phụ thuộc** — xem [`docs/adr/adr-0005-local-first-modal-wrapper.md`](docs/adr/adr-0005-local-first-modal-wrapper.md):
 
 ```
 dire_core    ← lõi thuần (tiền xử lý, đọc checkpoint, logit → P(fake))
@@ -66,7 +66,7 @@ không có secret thì `/healthz` báo `auth: "disabled"` và endpoint mở.
 
 Đường đi đầy đủ từ đầu tới demo: **[`docs/runbook-free.md`](docs/runbook-free.md)** (~$3–6: **eval checkpoint tác giả**, bỏ hẳn khoản $8–20 của A100).
 
-> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/full-paper-reproduction-plan.md)** — phạm vi bảng/ablation, clean-room, train/evaluate matrix và audit. Đã có dữ liệu/artefact thì bắt đầu bằng **[runbook tiếp tục từ trạng thái hiện có](docs/full-paper-continuation-runbook.md)**. Runbook riêng cho **[Table 4, Table 5 và Figure 4](docs/table4-table5-figure4-runbook.md)** có lệnh chạy, yêu cầu checkpoint và bước dựng bảng/hình.
+> Muốn đi xa hơn demo: **[kế hoạch tái hiện đầy đủ thực nghiệm gốc](docs/plans/research/full-paper-reproduction-plan.md)** — phạm vi bảng/ablation, clean-room, train/evaluate matrix và audit. Đã có dữ liệu/artefact thì bắt đầu bằng **[runbook tiếp tục từ trạng thái hiện có](docs/full-paper-continuation-runbook.md)**. Runbook riêng cho **[Table 4, Table 5 và Figure 4](docs/table4-table5-figure4-runbook.md)** có lệnh chạy, yêu cầu checkpoint và bước dựng bảng/hình.
 
 > **Windows / Git Bash**: MSYS2 đổi mọi tham số bắt đầu bằng `/` thành đường dẫn
 > Windows (`--path /raw` → `C:/Program Files/Git/raw`) và container Linux không
@@ -163,7 +163,7 @@ Demo:     HF Spaces (CPU free)
 Local:    git + modal CLI + xem mẫu nhỏ (máy mỏng — không giữ dataset)
 ```
 
-Chi tiết quyết định: [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) · [`docs/adr-0002-iaas.md`](docs/adr-0002-iaas.md).
+Chi tiết quyết định: [`docs/adr/adr-0001-storage.md`](docs/adr/adr-0001-storage.md) · [`docs/adr/adr-0002-iaas.md`](docs/adr/adr-0002-iaas.md).
 
 ## Bản clean-room — `dire_zero`
 
@@ -204,19 +204,19 @@ Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-roo
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
 | [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
 | [`docs/dataset-own.md`](docs/dataset-own.md) | Dùng **dataset riêng trên ổ** (`DiffusionForensics`): đọc tar.gz, nhãn theo generator, chặn rò rỉ, `dire/` bị từ chối, nhãn `R1+R2` vs `R1+R2+R3` |
-| [`docs/demo-hf-spaces-plan.md`](docs/demo-hf-spaces-plan.md) | **Kế hoạch chạy demo trên HF Spaces (Streamlit)**: 1 phụ thuộc, không torch, không ô upload; số đo cold start/RAM; cấu hình Space; deploy 5 bước; 8 điểm kiểm sau deploy; rollback; bảng rủi ro |
-| [`docs/demo-modal-plan.md`](docs/demo-modal-plan.md) | **Modal làm backend GPU cho demo**: vì sao Space làm cửa còn Modal chỉ tính; endpoint `POST /dire` (token, 10 MB, 6 ảnh/phút, `S ≤ 20`); chi phí từng ảnh từ bảng giá (0,0011 USD/ảnh ở `S=20`, 0,020 USD/phút khi ấm); cold start ước tính và memory snapshot; quy trình buổi nói; danh sách *đã kiểm / chưa kiểm* |
-| [`docs/demo-web-plan.md`](docs/demo-web-plan.md) | **Kế hoạch demo web**: 3 chế độ (gallery R0 / upload CPU / GPU), cổng kiểm trước khi công khai, lỗi "chấm ảnh RGB bằng model học DIRE" phải sửa, chữ bắt buộc trên UI, chi phí, chia PR D1–D5 |
+| [`docs/plans/demos/demo-hf-spaces-plan.md`](docs/plans/demos/demo-hf-spaces-plan.md) | **Kế hoạch chạy demo trên HF Spaces (Streamlit)**: 1 phụ thuộc, không torch, không ô upload; số đo cold start/RAM; cấu hình Space; deploy 5 bước; 8 điểm kiểm sau deploy; rollback; bảng rủi ro |
+| [`docs/plans/demos/demo-modal-plan.md`](docs/plans/demos/demo-modal-plan.md) | **Modal làm backend GPU cho demo**: vì sao Space làm cửa còn Modal chỉ tính; endpoint `POST /dire` (token, 10 MB, 6 ảnh/phút, `S ≤ 20`); chi phí từng ảnh từ bảng giá (0,0011 USD/ảnh ở `S=20`, 0,020 USD/phút khi ấm); cold start ước tính và memory snapshot; quy trình buổi nói; danh sách *đã kiểm / chưa kiểm* |
+| [`docs/plans/demos/demo-web-plan.md`](docs/plans/demos/demo-web-plan.md) | **Kế hoạch demo web**: 3 chế độ (gallery R0 / upload CPU / GPU), cổng kiểm trước khi công khai, lỗi "chấm ảnh RGB bằng model học DIRE" phải sửa, chữ bắt buộc trên UI, chi phí, chia PR D1–D5 |
 | [`docs/table4-table5-figure4-runbook.md`](docs/table4-table5-figure4-runbook.md) | Runner Table 4 (S=5/10/20/50), Table 5 (REC/RGB/RGB+DIRE/DIRE), Figure 4 (blur/JPEG), checkpoint, output ledgers và giới hạn reproduction |
-| [`docs/figures-plan.md`](docs/figures-plan.md) | Kế hoạch/registry figure của paper; `f4-robustness` dựng AP từ ledger điều kiện blur/JPEG, kèm cảnh báo baseline chưa tái hiện |
+| [`docs/plans/research/figures-plan.md`](docs/plans/research/figures-plan.md) | Kế hoạch/registry figure của paper; `f4-robustness` dựng AP từ ledger điều kiện blur/JPEG, kèm cảnh báo baseline chưa tái hiện |
 | [`notebooks/`](notebooks/README.md) | **Notebook sinh figure**: 4 file theo thứ tự phụ thuộc dữ liệu, chỉ gọi `tools/figures.py` (không tự vẽ ⇒ không có bản hình thứ hai) |
 | [`docs/from-zero-clean-room.md`](docs/from-zero-clean-room.md) | **Clean-room**: viết lại U-Net/DDIM/DIRE/ResNet-50 từ công thức, không dùng một dòng code tác giả — 4 lớp chứng minh, 3 lỗi tìm được trong code cũ, cách chạy và đọc số |
 | [`docs/download-manual.md`](docs/download-manual.md) | Tải dữ liệu **bằng tay**: danh sách file, vị trí dưới `data/raw/`, tên dễ sai, kiểm offline, đẩy lên Volume |
 | [`docs/runbook-local-manual.md`](docs/runbook-local-manual.md) | Runbook 11 bước trên **máy cá nhân**: kiểm máy → tải tay → ingest → bench → gen → dire → train, kèm tiền và cách sửa lỗi |
 | [`docs/iaas-options.md`](docs/iaas-options.md) | So sánh ~16 nền tảng IaaS × 28 tiêu chí, ánh xạ workload, decision tree, 10 cái bẫy |
 | [`docs/storage-comparison.md`](docs/storage-comparison.md) | Modal Volume vs R2 vs Local vs Kaggle/HF — 18 tiêu chí, điểm hoà vốn, quy tắc ngưỡng |
-| [`docs/adr-0001-storage.md`](docs/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |
-| [`docs/adr-0002-iaas.md`](docs/adr-0002-iaas.md) | ADR: chiến lược đa nền tảng + ngưỡng rời Modal |
+| [`docs/adr/adr-0001-storage.md`](docs/adr/adr-0001-storage.md) | ADR: vai trò từng lớp lưu trữ |
+| [`docs/adr/adr-0002-iaas.md`](docs/adr/adr-0002-iaas.md) | ADR: chiến lược đa nền tảng + ngưỡng rời Modal |
 | [`spec.md`](spec.md) | **SPEC-001** (SDD): tái tạo experiment DIRE + cải thiện theo AEROBLADE. 7 yêu cầu `FR-*` có tiêu chí nghiệm thu, 6 mốc, bảng rủi ro |
 | [`AGENT.md`](AGENT.md) | Điểm vào cho agent: bản đồ repo, 6 lỗi dễ làm hỏng nhất, nguồn sự thật |
 | [`instructions.md`](instructions.md) | Quy tắc làm việc: test phải "cắn", stub đúng ngữ nghĩa, tiền, dữ liệu, git |
@@ -329,7 +329,7 @@ Detector DIRE (`vendor/networks/resnet.py`: `conv1=Conv2d(3,64)`, `num_classes=2
 Docs từng ghi "Tier A ≈ 40–70 GB" — đó là số của **cả cây** gán nhầm cho Tier A;
 sai 5.4–9.4 lần. Vì 77% cây là dữ liệu train mà đường báo cáo chính chỉ cần
 *eval checkpoint tác giả*, phần bỏ được rất lớn: **eval đầy đủ chỉ 10.35 GB**.
-Chỉ khi làm **FR-8** (train lại để đối chiếu trọng số — xem `docs/adr-0004-retrain-for-reconciliation.md`)
+Chỉ khi làm **FR-8** (train lại để đối chiếu trọng số — xem `docs/adr/adr-0004-retrain-for-reconciliation.md`)
 mới cần thêm tier `train` (4 file / 5.74 GB).
 
 Alias cũ vẫn chạy được: `ckpt`→`ckpts` · `A`→`e2,train` · `B`→`e3` · `C`→`rawx` ·
@@ -401,7 +401,7 @@ manifests/          # manifest sha256 (commit); *.tsv size thật (gitignore)
 | Tái lập Table 2 | ✅ code + quy trình xong (`scripts/01_repro.sh`) — **số của mình chưa có**, cần chạy thật |
 | Video giải thích (manim) | ✅ code 5 scene xong — **chưa render** (máy cần cairo/pango; hoặc image Modal riêng, xem `tools/manim/README.md`) |
 | `demo_train` (train demo để quay video) | ✅ code + 29 test — **chưa chạy thật** (cần tier `train`) |
-| Train lại (FR-8) | ⚠ **được phép nhưng chỉ để đối chiếu** — không dùng làm số của paper; xem `docs/adr-0004-retrain-for-reconciliation.md` |
+| Train lại (FR-8) | ⚠ **được phép nhưng chỉ để đối chiếu** — không dùng làm số của paper; xem `docs/adr/adr-0004-retrain-for-reconciliation.md` |
 | Stage-2 (compute DIRE toàn dataset) | ⏳ code viết theo API guided-diffusion, **chưa chạy thử**; cần ~30–60 A100-h |
 | Demo HF Spaces | ✅ code + hướng dẫn; ⏳ chờ checkpoint & gallery |
 

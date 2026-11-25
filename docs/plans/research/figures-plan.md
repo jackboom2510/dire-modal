@@ -4,7 +4,7 @@
 - **Liên quan:** `docs/dataset-own.md` (dữ liệu + nhãn R0/R1+R2/R1+R2+R3),
   `docs/from-zero-clean-room.md` (đường chạy `dire_zero`),
   `tools/triplet_view.py` (đã có: panel gốc | tái tạo | DIRE + kiểm chứng),
-  `docs/manim-video-plan.md` (video, khác mục đích)
+  `docs/plans/presentations/manim-video-plan.md` (video, khác mục đích)
 - **Mục đích:** chốt *hình nào*, *số nào*, *nhãn nào* **trước** khi viết code vẽ.
   Một hình vẽ sai nhãn tệ hơn không có hình: nó đi vào báo cáo và không ai kiểm lại.
 

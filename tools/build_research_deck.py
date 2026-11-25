@@ -2024,8 +2024,8 @@ def build_deck() -> Deck:
 
     # 23 provenance levels
     p = d.page("11 · Nguồn gốc kết quả", "R1+R2 là tự tính bản đồ và huấn luyện bộ phân loại, không phải tự tạo ảnh",
-        "docs/adr-0006-reproduction-levels.md · trường nguồn gốc trong report.json",
-        notes_for("docs/adr-0006-reproduction-levels.md; modal-runs/runs/report.json data.note"))
+        "docs/adr/adr-0006-reproduction-levels.md · trường nguồn gốc trong report.json",
+        notes_for("docs/adr/adr-0006-reproduction-levels.md; modal-runs/runs/report.json data.note"))
     labels=[("R0", "Chấm lại", "bản đồ và bộ phân loại của tác giả", "grayp", "muted"),
             ("R1", "Tính lại bản đồ", "DIRE do nhóm tự tính", "bluep", "teal"),
             ("R2", "Huấn luyện lại", "bộ phân loại của nhóm", "greenp", "teal"),
@@ -2381,7 +2381,7 @@ def build_deck() -> Deck:
     # 43 subset architecture
     p = d.page("20 · Tập con / chạy tiếp", "Một bản kê giữ nguyên mã mẫu giữa các Bảng 4, 5 và Hình 4",
         "Giao thức tập con · bản kê mẫu",
-        notes_for("docs/incremental-paper-subsets.md; subset manifest SHA from Table 4 ledger"))
+        notes_for("docs/plans/research/incremental-paper-subsets.md; subset manifest SHA from Table 4 ledger"))
     p.rect(74, 167, 312, 235, "bluep", stroke="teal", radius=13)
     p.text(99, 183, 262, 25, "BẢN CHỤP · 200 / Ô", 14, "teal", bold=True, align="center")
     for i in range(4):
@@ -2547,7 +2547,7 @@ def build_deck() -> Deck:
         "Dinh, L. et al. Density Estimation using Real NVP. ICLR 2017. arXiv:1605.08803.",
         "Rombach, R. et al. High-Resolution Image Synthesis with Latent Diffusion Models. CVPR 2022. arXiv:2112.10752.",
         "Gu, S. et al. Vector Quantized Diffusion Model for Text-to-Image Synthesis. CVPR 2022.",
-        "Nguồn bài báo và tài liệu: docs/dire-tu-so-0.pdf; docs/paper-cac-mo-hinh-sinh.html; docs/paper-code-walkthrough.md; docs/adr-0006-reproduction-levels.md.",
+        "Nguồn bài báo và tài liệu: docs/dire-tu-so-0.pdf; docs/paper-cac-mo-hinh-sinh.html; docs/paper-code-walkthrough.md; docs/adr/adr-0006-reproduction-levels.md.",
         "Số liệu và tư liệu của nhóm: src/dire_modal/paper_table2.tsv; modal-runs/runs/; modal-runs/experiments/; modal-runs/gallery/.",
     ]
     for i,ref in enumerate(refs):

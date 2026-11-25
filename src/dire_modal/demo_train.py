@@ -4,7 +4,7 @@
 Vì sao file này tồn tại, và vì sao nó KHÔNG phải `train.py`
 -----------------------------------------------------------
 `train.py` (resumable, A100, 400 epoch) là đường **đối chiếu trọng số tác giả**
-(FR-8 — xem ``docs/adr-0004-retrain-for-reconciliation.md``); nó vẫn là
+(FR-8 — xem ``docs/adr/adr-0004-retrain-for-reconciliation.md``); nó vẫn là
 ``NotImplementedError``. File này phục vụ một mục đích khác hẳn: có **một đường
 loss thật** để vẽ/animate khi giải thích DIRE hoạt động ra sao, thay vì vẽ một
 đường cong bịa.

@@ -111,10 +111,10 @@ Mặc định ghi vào `docs/slide-assets/generated/`. Mở `index.html` để x
 |---|---|
 | [`docs/paper-code-walkthrough.md`](paper-code-walkthrough.md) | Câu hỏi khoa học, công thức DIRE Eq. 9, DDIM, data preprocessing, mapping paper→code và các sai khác đã biết. |
 | [`docs/table4-table5-figure4-runbook.md`](table4-table5-figure4-runbook.md) | Protocol, điều kiện Table 4/5/Figure 4, requirements, checkpoint, giới hạn và lệnh runner. |
-| [`docs/incremental-paper-subsets.md`](incremental-paper-subsets.md) | Subset snapshots, seed/algorithm, 10 cells, lồng 200→400, cache/reuse, namespaces và lệnh theo stage. |
-| [`docs/full-paper-reproduction-plan.md`](full-paper-reproduction-plan.md) | Ranh giới khoa học, ma trận tái hiện rộng và tiêu chí hoàn thành. |
+| [`docs/plans/research/incremental-paper-subsets.md`](plans/research/incremental-paper-subsets.md) | Subset snapshots, seed/algorithm, 10 cells, lồng 200→400, cache/reuse, namespaces và lệnh theo stage. |
+| [`docs/plans/research/full-paper-reproduction-plan.md`](plans/research/full-paper-reproduction-plan.md) | Ranh giới khoa học, ma trận tái hiện rộng và tiêu chí hoàn thành. |
 | [`docs/full-paper-continuation-runbook.md`](full-paper-continuation-runbook.md) | Inventory, provenance của nguồn dữ liệu, trạng thái cần xác minh và runner roadmap. Các log được ghi là chưa xác minh từ sandbox. |
-| [`docs/adr-0006-reproduction-levels.md`](adr-0006-reproduction-levels.md) | Ý nghĩa provenance R0/R1/R2/R3, điều gì được và không được tuyên bố. |
+| [`docs/adr/adr-0006-reproduction-levels.md`](adr/adr-0006-reproduction-levels.md) | Ý nghĩa provenance R0/R1/R2/R3, điều gì được và không được tuyên bố. |
 | [`platforms/site/README.md`](../platforms/site/README.md) + [`platforms/site/index.html`](../platforms/site/index.html) | Deck web 12 slide hiện hữu; tham khảo nhịp kể, nhưng đây là pitch deck project khác, không phải nguồn cho số liệu Table 4/5/Figure 4. |
 | [`src/dire_modal/paper_table2.tsv`](../src/dire_modal/paper_table2.tsv) | Bảng số Table 2 của tác giả, chỉ dùng nếu được gắn nhãn `paper-reported`. |
 | [`src/dire_zero/subsets.py`](../src/dire_zero/subsets.py) + [`src/dire_zero/modal_app.py`](../src/dire_zero/modal_app.py) | Algorithm ID, selection semantics, subset validation, runner/namespace behavior. |

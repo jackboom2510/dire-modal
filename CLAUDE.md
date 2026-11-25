@@ -70,5 +70,5 @@ trên `main` cũ") → **phần chưa làm**. Nếu harness của mình sai, nó
 
 Nếu cần thêm tài liệu mới: kiểm xem có file nào đã nói điều đó chưa. Repo này
 đã có `AGENT.md`, `instructions.md`, `plan.md`, `skills.md`, `spec.md`,
-`README.md`, `docs/runbook-free.md`, `docs/adr-000*.md` — thêm file thứ tám cho cùng một nội
+`README.md`, `docs/runbook-free.md`, `docs/adr/adr-000*.md` — thêm file thứ tám cho cùng một nội
 dung là tạo chỗ để lệch nhau.

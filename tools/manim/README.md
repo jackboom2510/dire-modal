@@ -97,7 +97,7 @@ image lần đầu ~5 phút (apt + build cairo), sau đó cache.
 ## 4. Dữ liệu cho `TrainMechanism`
 
 ```bash
-# 1. train thật (xem docs/adr-0003-demo-training.md) — L4, ~1 phút, ~$0.013
+# 1. train thật (xem docs/adr/adr-0003-demo-training.md) — L4, ~1 phút, ~$0.013
 modal run -m dire_modal.demo_train::main --mode run
 
 # 2. kéo log về

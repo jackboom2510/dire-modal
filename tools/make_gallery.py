@@ -323,7 +323,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--map-source", default="", help="câu mô tả nguồn map, hiện thẳng trên UI")
     ap.add_argument("--scores", default="", help="JSON {tên mẫu: {p_fake,…}} — tuỳ chọn")
     ap.add_argument("--gate", default="failed", choices=["passed", "failed", "missing"],
-                    help="cổng 2 của docs/demo-web-plan.md §5; mặc định `failed` để KHÔNG hiện điểm")
+                    help="cổng 2 của docs/plans/demos/demo-web-plan.md §5; mặc định `failed` để KHÔNG hiện điểm")
     ap.add_argument("--threshold", type=float, default=0.5)
     ap.add_argument("--gamma", type=float, default=0.5, help="chỉ ảnh hưởng PNG hiển thị")
     ap.add_argument("--prefix", default="", help="tiền tố tên mẫu (tránh trùng giữa các split)")

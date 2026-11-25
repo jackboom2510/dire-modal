@@ -46,7 +46,7 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | `docs/agent-docs-and-skills.md` | Khảo sát AGENTS.md/SKILL.md và skills repos; quy tắc progressive disclosure |
 | `docs/history/00-index.md` | Quy ước ghi lịch sử run; phân biệt inventory, unique maps và train/eval counts |
 | `docs/history/01-modal-dataset-runs.md` | Snapshot kích thước/phạm vi các run đã có trong repo; không phải Modal live history |
-| `docs/adr-0006-reproduction-levels.md` | ADR: R0 = *chấm lại*, không phải tái lập; ba trục độc lập; nhãn vào `run.json` + CSV |
+| `docs/adr/adr-0006-reproduction-levels.md` | ADR: R0 = *chấm lại*, không phải tái lập; ba trục độc lập; nhãn vào `run.json` + CSV |
 | `src/dire_core/provenance.py` | **Mức tái lập** R0/R1/R2/R3 — thành phần nào của tác giả. R0 = *chấm lại*, **không** được gọi là tái lập. Ghi vào `run.json` + cột `data_source` |
 | `src/dire_local/` | Chạy ở máy nhà: `dire info|detect|batch|serve` + FastAPI (`server.py`) |
 | `src/dire_modal/api.py` | Wrapper SaaS: `/v1/detect`, `/healthz`, `max_containers=2`, weight nhúng image |
@@ -63,7 +63,7 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | `tests/` | 117 test; 2 test trong `test_real_modal_import.py` cần `modal` thật (skip nếu không có) |
 | `spec.md` | **SPEC-001** — đặc tả tái tạo DIRE + cải thiện theo AEROBLADE. Yêu cầu đánh số `FR-*`, mỗi cái có tiêu chí chấp nhận. Đọc trước khi viết `eval.py`, `aero.py`, `fusion.py` |
 | `docs/runbook-free.md` | Runbook đầy đủ, có 10 cổng |
-| `docs/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
+| `docs/adr/adr-000*.md` | Quyết định kiến trúc đã chốt — **đọc trước khi đổi thiết kế** |
 | `platforms/hf-spaces/` | Demo Streamlit trên HF Spaces (CPU free) |
 
 ## Ba sự thật về tải Baidu (đã đo, đừng suy lại)
@@ -128,7 +128,7 @@ python3 -m venv /tmp/venv && /tmp/venv/bin/pip install -r requirements-dev.txt
 | Số tham chiếu của paper (Table 2) | `src/dire_modal/paper_table2.tsv` — **số của tác giả**, không phải của mình; `tests/test_paper_table.py` canh từng ô |
 | Danh sách file của từng tier | `src/dire_modal/manifest.py` (`TIERS`) |
 | Quy ước bí mật / env | `.env.example` |
-| Quyết định kiến trúc | `docs/adr-000*.md` |
+| Quyết định kiến trúc | `docs/adr/adr-000*.md` |
 | Chi phí, hạn mức free tier | `docs/iaas-options.md` |
 
 `configs/tiers.yaml` **chỉ là bảng tra cứu cho người đọc** — code không đọc nó.

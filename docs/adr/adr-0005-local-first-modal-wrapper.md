@@ -4,7 +4,7 @@
 - **Ngày:** 2026-10-14
 - **Liên quan:** `src/dire_core/`, `src/dire_local/`, `src/dire_modal/api.py`,
   `src/dire_modal/eval.py`, `src/dire_modal/common.py`, `spec.md` FR-9,
-  `tests/test_core_parity.py`, `docs/adr-0002-iaas.md`
+  `tests/test_core_parity.py`, `docs/adr/adr-0002-iaas.md`
 
 ## Bối cảnh
 

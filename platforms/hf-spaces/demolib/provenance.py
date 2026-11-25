@@ -36,7 +36,7 @@ Lược đồ `.json` (khoá bắt buộc, không có khoá "tuỳ chọn" cho p
 
 Ba điều kiện để `score()` trả về một con số, và cả ba đều là điều kiện *từ chối*:
 
-1. ``detector.gate == "passed"`` — cổng 2 của `docs/demo-web-plan.md` §5 đã chạy;
+1. ``detector.gate == "passed"`` — cổng 2 của `docs/plans/demos/demo-web-plan.md` §5 đã chạy;
 2. ``detector.threshold_split == "val"`` — ngưỡng chọn trên val, không bao giờ trên test;
 3. ``p_fake`` là số thực trong ``[0, 1]``.
 
@@ -104,7 +104,7 @@ class Sample:
         if gate != "passed":
             return None, (
                 "chưa có điểm: detector chưa qua **cổng 2** "
-                f"(`gate = {gate!r}`) — xem `docs/demo-web-plan.md` §5"
+                f"(`gate = {gate!r}`) — xem `docs/plans/demos/demo-web-plan.md` §5"
             )
         if det.get("threshold_split") != "val":
             return None, (

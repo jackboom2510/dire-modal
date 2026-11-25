@@ -4,10 +4,10 @@
 |---|---|
 | **ID** | SPEC-001 |
 | **Trạng thái** | `draft` — chờ duyệt trước khi code |
-| **Phiên bản** | 1.1 — nới N1: cho phép train lại ở chế độ **đối chiếu** (FR-8), xem [ADR-0004](docs/adr-0004-retrain-for-reconciliation.md) |
+| **Phiên bản** | 1.1 — nới N1: cho phép train lại ở chế độ **đối chiếu** (FR-8), xem [ADR-0004](docs/adr/adr-0004-retrain-for-reconciliation.md) |
 | **Ngày** | 2026-10-24 |
 | **Người viết** | Agent (Arena) |
-| **Tài liệu liên quan** | [AGENT.md](AGENT.md) · [instructions.md](instructions.md) · [plan.md](plan.md) · [skills.md](skills.md) · [docs/runbook-free.md](docs/runbook-free.md) · [docs/adr-0002-iaas.md](docs/adr-0002-iaas.md) |
+| **Tài liệu liên quan** | [AGENT.md](AGENT.md) · [instructions.md](instructions.md) · [plan.md](plan.md) · [skills.md](skills.md) · [docs/runbook-free.md](docs/runbook-free.md) · [docs/adr/adr-0002-iaas.md](docs/adr/adr-0002-iaas.md) |
 
 **Spec này dùng để làm gì.** Đây là bản đặc tả *cái gì và tại sao*, viết **trước**
 khi code. Mỗi yêu cầu có ID và tiêu chí chấp nhận kiểm được. Khi thực thi, mỗi
@@ -69,7 +69,7 @@ Nhãn này **suy ra từ cờ**, không khai bằng tay: `eval::main` nhận
 `--dire-maps-self` / `--detector-self` / `--images-self`, ghi vào
 `run.json → reproduction` và cột `data_source` của CSV, in ở đầu mọi báo cáo
 (`dire_core/provenance.py`, `tests/test_provenance.py`, quyết định ở
-`docs/adr-0006-reproduction-levels.md`).
+`docs/adr/adr-0006-reproduction-levels.md`).
 
 > **Vì sao phải khắt khe:** dùng lại map của tác giả thì một lỗi trong cách họ
 > tính DIRE sẽ **không** làm hỏng kết quả của mình — mình dùng đúng map sai đó.
