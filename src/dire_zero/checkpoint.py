@@ -159,7 +159,16 @@ def map_state_dict(
     mapping = dict(iter_name_pairs(model))
     if ref_keys is not None:
         check_bijection(model, ref_keys)
-    unknown = sorted(set(state) - set(mapping.values()))
+    keys = set(state)
+    if ("backbone.fc.weight" in keys or "backbone.fc.bias" in keys
+            or any(k.startswith("backbone.stages.") for k in keys)):
+        raise ValueError(
+            "checkpoint nhận được là ResNet/DIRE detector (`backbone.*`), không phải ADM diffusion U-Net. "
+            "`lsun_adm.pth` của tác giả là detector để chấm DIRE map; không thể chuyển nó thành ADM bằng cách đổi tên hoặc copy. "
+            "Local inference cần trọng số bộ sinh `256x256_diffusion_uncond.pt` (~2,5 GB). "
+            "Đặt đúng tệp tại `platforms/hf-spaces/ckpt/adm_lsun.pt` hoặc trỏ `DIRE_CKPT` tới nó."
+        )
+    unknown = sorted(keys - set(mapping.values()))
     assert not unknown, f"checkpoint có {len(unknown)} key lạ, vd {unknown[:3]}"
     out = {}
     for my_name, ref_name in mapping.items():

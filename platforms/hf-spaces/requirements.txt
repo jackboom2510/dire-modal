@@ -2,4 +2,6 @@
 # torch chỉ được dùng nếu ADM checkpoint được gắn qua DIRE_CKPT; không tự tải weights.
 # Cache demo tổng hợp được render sẵn nên vẫn xem được từng bước khi chưa có checkpoint.
 gradio==6.32.0
+# PyTorch 2.4 wheels are built against NumPy 1.x; NumPy 2.x breaks Tensor.numpy/from_numpy.
+numpy<2
 torch==2.4.0

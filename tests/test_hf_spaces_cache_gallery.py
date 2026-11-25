@@ -27,6 +27,7 @@ class FrameCacheTests(unittest.TestCase):
                 "map_values": {"mean": 0.1, "p99": 0.2, "max": 0.3},
                 "map_png": b"map-png",
                 "recon_png": b"recon-png",
+                "map_array": __import__("numpy").arange(3 * 224 * 224, dtype="float32").reshape(3, 224, 224) / 100000,
                 "timings": [0.5, 0.6],
                 "frames": [{
                     "phase": "invert", "i": 0, "t": 0, "sec": 0.5,
@@ -40,6 +41,8 @@ class FrameCacheTests(unittest.TestCase):
             self.assertIsNotNone(loaded)
             self.assertEqual(loaded["map_png"], b"map-png")
             self.assertEqual(loaded["recon_png"], b"recon-png")
+            self.assertEqual(loaded["map_array"].shape, (3, 224, 224))
+            self.assertTrue((loaded["map_array"] >= 0).all())
             self.assertEqual(loaded["frames"][0]["x_t_png"], b"x-t-png")
             self.assertEqual(loaded["frames"][0]["x0_hat_png"], b"x0-hat-png")
             self.assertTrue((root / key / "x_t-000.png").is_file())
@@ -68,11 +71,26 @@ class GalleryOverviewTests(unittest.TestCase):
     def test_overview_shows_generator_maps_and_separates_real_map(self):
         samples, problems = provenance.discover(ROOT / "modal-runs" / "gallery")
         self.assertEqual(problems, [])
-        chart, fake_maps, real_maps = gradio_app.gallery_map_overview(samples)
+        chart, fake_items, real_items = gradio_app.gallery_map_overview(samples)
         self.assertIn("<svg", chart)
-        self.assertEqual(len(fake_maps), 56)
-        self.assertEqual(len(real_maps), 8)
-        self.assertTrue(all("Map" not in cap or Path(path).is_file() for path, cap in fake_maps))
+        self.assertEqual(len(fake_items), 112)  # original + map for 56 generated samples
+        self.assertEqual(len(real_items), 16)    # original + map for 8 real samples
+        self.assertTrue(all(Path(path).is_file() for path, _ in fake_items + real_items))
+        self.assertTrue(any("Ảnh gốc" in cap and "Ảnh sinh" in cap for _, cap in fake_items))
+        self.assertTrue(any("DIRE map" in cap for _, cap in fake_items))
+        self.assertIn("Ảnh gốc", fake_items[0][1])
+        self.assertIn("DIRE map", fake_items[1][1])
+
+        # Khi ảnh tái tạo ADM+DDIM thật đã được lưu, overview chèn đúng panel đó
+        # giữa original và map; không tự tạo recon từ map tuyệt đối.
+        from dataclasses import replace
+        with tempfile.TemporaryDirectory() as td:
+            recon = Path(td) / "sample_recon.png"
+            recon.write_bytes(b"PNG fixture")
+            with_recon = [replace(samples[0], recon=recon), *samples[1:]]
+            _, fake_with_recon, _ = gradio_app.gallery_map_overview(with_recon)
+            self.assertEqual(len(fake_with_recon), 113)
+            self.assertIn("Ảnh tái tạo", fake_with_recon[1][1])
         self.assertNotIn("ACC", chart)
         self.assertNotIn("AP", chart)
 

@@ -12,9 +12,9 @@ thẩm mỹ: SDK `gradio` của HF Spaces tự lo hàng đợi, trạng thái ph
 trông hợp lý, và không có nghĩa gì. Lý do đầy đủ: `docs/demo-web-plan.md` §2.
 
 Vì thế, ở đây **chỉ có một chỗ nhận ảnh của người xem**: tab *Tính DIRE thật*.
-Nó tính **map** rồi hiện map — và nói rõ là không chấm. Muốn có điểm phân loại
-thì phải có DIRE map **đã tính** đem qua detector, tức là tab *Gallery*, nơi mỗi
-mẫu có `.json` ghi lại map đến từ đâu.
+Nó tính **map** rồi hiện map. Có thể tùy chọn một checkpoint ResNet để chấm
+chính DIRE map RGB đó (không phải ảnh đầu vào); checkpoint tác giả và checkpoint
+train theo generator dùng loader/ngưỡng riêng. Nếu không chọn trọng số, chỉ hiện map.
 
 Dùng chung `demolib/` với bản Streamlit
 --------------------------------------
@@ -124,9 +124,10 @@ def show_sample(selector: str):
     if s is None:
         return [], "Chưa chọn mẫu nào.", "", None
 
-    panels: list[tuple[str, str]] = [(str(s.orig), "ảnh gốc 256×256"), (str(s.diff), "|x − x̂₀| · DIRE map")]
+    panels: list[tuple[str, str]] = [(str(s.orig), "ảnh gốc 256×256")]
     if s.recon:
         panels.append((str(s.recon), "ảnh tái tạo (ADM, DDIM)"))
+    panels.append((str(s.diff), "|x − x̂₀| · DIRE map"))
 
     score, reason = s.score()
     if score:
@@ -177,8 +178,12 @@ def gallery_map_overview(samples=None):
         group = sorted(group, key=lambda sample: (sample.split, sample.name))
         target = real if gen == "real" else fake
         kind = "Ảnh thật" if gen == "real" else "Ảnh sinh"
-        target.extend((str(sample.diff), f"{kind} · {caption} · {sample.split} · {sample.steps} bước")
-                      for sample in group)
+        for sample in group:
+            suffix = f"{kind} · {caption} · {sample.split} · {sample.steps} bước"
+            target.append((str(sample.orig), f"Ảnh gốc · {suffix}"))
+            if sample.recon:
+                target.append((str(sample.recon), f"Ảnh tái tạo x̂₀ · {suffix}"))
+            target.append((str(sample.diff), f"DIRE map · {suffix}"))
     chart = map_coverage_svg({g: len(v) for g, v in sorted(by_gen.items())})
     return chart, fake, real
 
@@ -251,16 +256,23 @@ def local_status_markdown() -> str:
             f"· torch {status.torch}. Ảnh đầu vào không rời máy chủ này. "
             "Kết quả và từng frame được lưu cache cục bộ theo hash ảnh + checkpoint + S."
         )
+    hints = "\n\nCách xử lý:\n" + "\n".join(f"- `{hint}`" for hint in status.hints) if status.hints else ""
     return (
         "**Backend mặc định: tại chỗ.** Mô phỏng DDIM tổng hợp đã có sẵn trong cache để xem từng bước. "
         f"Tính DIRE thật bằng ADM hiện chưa sẵn sàng: {status.reason}. "
         "Khi torch và checkpoint ADM 256×256 được gắn tại chỗ, cùng nút sẽ chạy local và cache từng ảnh x_t / x̂₀; "
         "không tự gọi Modal hay tải checkpoint."
+        + hints
     )
 
 
 def dire_status_markdown() -> str:
     return local_status_markdown()
+
+
+def detector_path_for_ui(source: str, generator: str = "gen-adm") -> str:
+    from demolib.detector import suggested_path  # noqa: PLC0415
+    return suggested_path(source, generator)
 
 
 def _local_result(image_path: str, steps: int, progress=None):
@@ -301,8 +313,16 @@ def _local_result(image_path: str, steps: int, progress=None):
     return raw, result, filmstrip, key
 
 
-def run_dire(image_path: str | None, steps: int, backend: str = "local", progress=gr.Progress()):
-    """Local ADM is default; remote GPU requires explicit backend selection."""
+def run_dire(
+    image_path: str | None,
+    steps: int,
+    backend: str = "local",
+    detector_source: str = "none",
+    detector_generator: str = "gen-adm",
+    detector_path: str = "",
+    progress=gr.Progress(),
+):
+    """Compute DIRE, then optionally score its raw three-channel map with ResNet."""
     if not image_path:
         return None, None, None, [], "Hãy chọn ảnh đầu vào. Có thể dùng mô phỏng cache bên dưới nếu chưa có checkpoint."
     if not 1 <= int(steps) <= 20:
@@ -323,6 +343,26 @@ def run_dire(image_path: str | None, steps: int, backend: str = "local", progres
             f"DIRE trung bình **{result['map_values']['mean']:.4f}** · p99 **{result['map_values']['p99']:.4f}** · "
             f"lớn nhất **{result['map_values']['max']:.4f}**. Đây là map, không phải kết luận thật/giả."
         )
+        if detector_source not in (None, "none", ""):
+            if not detector_path:
+                line += "\n\n⚠️ Chưa có đường dẫn checkpoint ResNet."
+            elif "map_array" not in result:
+                line += "\n\n⚠️ Cache cũ không có tensor DIRE RGB; chạy lại DIRE để chấm bằng ResNet."
+            else:
+                try:
+                    from demolib.detector import predict_map  # noqa: PLC0415
+                    scored = predict_map(result["map_array"], detector_path, detector_source)
+                    line += (
+                        f"\n\n**ResNet · dự đoán {scored['prediction']}** · logit kết quả "
+                        f"**{scored['logit']:+.4f}** · ngưỡng P(fake) cuối cùng "
+                        f"**{scored['threshold']:.4f}** "
+                        f"({scored['threshold_note']}) · `{scored['weights']}`. "
+                        "Đây là dự đoán của checkpoint đã chọn, không phải kết luận chắc chắn."
+                    )
+                except Exception as e:
+                    line += f"\n\n⚠️ Không chấm được bằng ResNet: {type(e).__name__}: {e}"
+        else:
+            line += " Dự đoán thật/giả chưa chạy; hãy chọn checkpoint ResNet bên dưới."
         return orig, recon, dmap, filmstrip, line
 
     if backend == "modal":
@@ -339,9 +379,12 @@ def run_dire(image_path: str | None, steps: int, backend: str = "local", progres
         dmap = _materialize(res.map_png, "map.png")
         line = (
             f"`{res.line}`\n\nDIRE trung bình **{res.stats['mean']:.4f}** · "
-            f"p99 **{res.stats.get('p99', float('nan')):.4f}** · {res.nfe} NFE · {res.seconds:.2f} s GPU. "
-            "Map, không phải kết luận thật/giả."
+            f"p99 **{res.stats.get('p99', float('nan')):.4f}** · {res.nfe} NFE · {res.seconds:.2f} s GPU."
         )
+        if detector_source not in (None, "none", ""):
+            line += "\n\nℹ️ Endpoint Modal hiện chỉ trả DIRE map dạng ảnh hiển thị, không trả tensor RGB gốc; ResNet chưa thể chấm chính xác ở backend này. Hãy dùng backend local."
+        else:
+            line += " Dự đoán thật/giả chưa chạy; hãy chọn checkpoint ResNet bên dưới."
         return orig, recon, dmap, [], line
     return None, None, None, [], "Backend không hợp lệ; chọn local (mặc định) hoặc Modal (chủ động)."
 
@@ -458,14 +501,14 @@ def build_app() -> gr.Blocks:
         with gr.Tab("1 · Gallery"):
             gr.Markdown(gallery_header())
             gr.Markdown(
-                "### So sánh DIRE map theo generator\n"
-                "Các ô dưới chỉ so **map với map**, cùng cấu hình hiển thị [0, 2] + gamma 0,5. "
-                "Ảnh thật là nhóm riêng. Biểu đồ đếm số mẫu metadata hợp lệ, không phải điểm chất lượng."
+                "### Ảnh gốc · ảnh tái tạo (nếu đã tính) · DIRE map theo generator\n"
+                "Ảnh gốc và map được lưu riêng cho từng mẫu; cột tái tạo chỉ xuất hiện khi có output ADM+DDIM thật. "
+                "Ảnh thật vẫn được tách nhóm. Biểu đồ đếm mẫu metadata hợp lệ, không phải điểm chất lượng."
             )
             coverage_chart = gr.HTML()
-            fake_map_gallery = gr.Gallery(label="DIRE map · toàn bộ mẫu ảnh sinh, nhóm theo generator", columns=4,
+            fake_map_gallery = gr.Gallery(label="Ảnh sinh · ảnh gốc, tái tạo nếu có, và DIRE map theo generator", columns=4,
                                           object_fit="contain", height=None)
-            real_map_gallery = gr.Gallery(label="DIRE map · toàn bộ ảnh thật (nhóm riêng)", columns=4,
+            real_map_gallery = gr.Gallery(label="Ảnh thật · ảnh gốc, tái tạo nếu có, và DIRE map", columns=4,
                                           object_fit="contain", height=None)
             demo.load(gallery_map_overview, outputs=[coverage_chart, fake_map_gallery, real_map_gallery])
             choices = gallery_choices()
@@ -522,6 +565,33 @@ def build_app() -> gr.Blocks:
                 [("Tại chỗ · mặc định", "local"), ("Modal GPU · chọn chủ động", "modal")],
                 value="local", label="Backend", info="Modal chỉ được gọi sau khi chọn rõ backend và bấm nút."
             )
+            gr.Markdown(
+                "#### Tùy chọn · phân loại trên DIRE map vừa tính\n"
+                "Checkpoint không được tải tự động. Đường dẫn phải tồn tại **trên máy chủ chạy Gradio**; "
+                "các đường dẫn Windows gợi ý chỉ dùng nếu đúng là đã mount tại máy chủ. "
+                "Checkpoint train lấy ngưỡng xác suất từ `train.json` cùng thư mục nếu có."
+            )
+            detector_source = gr.Radio(
+                [("Không chấm", "none"), ("ResNet gốc tác giả", "author"),
+                 ("ResNet tự train", "project")],
+                value="none", label="Trọng số ResNet",
+            )
+            with gr.Row():
+                detector_generator = gr.Dropdown(
+                    [("ADM", "gen-adm"), ("iDDPM", "gen-iddpm"),
+                     ("PNDM", "gen-pndm"), ("StyleGAN", "gen-stylegan")],
+                    value="gen-adm", label="Generator của checkpoint tự train",
+                )
+                detector_path = gr.Textbox(
+                    value="", label="Đường dẫn checkpoint trên máy chủ", lines=1,
+                    placeholder="Chọn loại trọng số để điền đường dẫn gợi ý; có thể sửa tay",
+                )
+            detector_source.change(
+                detector_path_for_ui, [detector_source, detector_generator], detector_path
+            )
+            detector_generator.change(
+                detector_path_for_ui, [detector_source, detector_generator], detector_path
+            )
             with gr.Row():
                 with gr.Column():
                     image_in = gr.Image(type="filepath", label="Ảnh đầu vào (bất kỳ kích thước)",
@@ -547,8 +617,11 @@ def build_app() -> gr.Blocks:
             cache_notice = gr.Markdown()
             clear_cache_button = gr.Button("Xóa cache frame cục bộ", variant="secondary")
             clear_cache_button.click(clear_local_frame_cache, outputs=cache_notice)
-            go.click(run_dire, [image_in, steps_in, backend],
-                     [img_orig, img_recon, img_map, live_frames, out_line])
+            go.click(
+                run_dire,
+                [image_in, steps_in, backend, detector_source, detector_generator, detector_path],
+                [img_orig, img_recon, img_map, live_frames, out_line],
+            )
 
         # -- 3 · Thí nghiệm 2 chiều -----------------------------------------
         with gr.Tab("3 · Thí nghiệm 2 chiều"):

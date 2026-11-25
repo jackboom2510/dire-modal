@@ -81,10 +81,33 @@ class LiveStatus:
 
 
 def _try_import():
+    # Check NumPy before importing PyTorch: older binary wheels can emit a long
+    # _ARRAY_API traceback on NumPy 2.x, then fail later at Tensor.numpy().
+    try:
+        import numpy as np  # noqa: PLC0415
+    except Exception as e:  # pragma: no cover - phụ thuộc môi trường
+        return None, None, f"không import được NumPy ({e})"
+    try:
+        numpy_major = int(np.__version__.split(".", 1)[0])
+    except (AttributeError, ValueError):  # pragma: no cover
+        numpy_major = 0
+    if numpy_major >= 2:
+        return None, None, (
+            f"NumPy {np.__version__} không tương thích với torch==2.4.0; "
+            "cài numpy<2 rồi khởi động lại môi trường"
+        )
     try:
         import torch  # noqa: PLC0415
     except Exception as e:  # pragma: no cover - phụ thuộc môi trường
         return None, None, f"không import được torch ({e})"
+    try:
+        # Validate the exact NumPy↔Torch bridge used by the ADM pipeline.
+        torch.from_numpy(np.zeros(1, dtype=np.float32)).numpy()
+    except Exception as e:  # pragma: no cover - phụ thuộc môi trường
+        return None, None, (
+            f"NumPy/Torch không tương thích ({type(e).__name__}: {e}); "
+            "cài numpy<2 rồi khởi động lại môi trường"
+        )
     try:
         from dire_zero import diffusion  # noqa: PLC0415
         from dire_zero.checkpoint import load_adm  # noqa: PLC0415
@@ -109,8 +132,14 @@ def status() -> LiveStatus:
     """Mọi thứ cần để trả lời "bật được chưa" — không bao giờ ném exception."""
     torch, mods, err = _try_import()
     if torch is None:
-        return LiveStatus(False, "—", False, str(ckpt_path()), err,
-                          ["pip install torch==2.4.0", "hoặc bật chế độ tính sẵn (gallery)"])
+        if "numpy" in err.lower():
+            hints = [
+                'python -m pip install --force-reinstall "numpy<2"',
+                "khởi động lại terminal/Jupyter/Gradio sau khi cài",
+            ]
+        else:
+            hints = ["pip install torch==2.4.0", "hoặc bật chế độ tính sẵn (gallery)"]
+        return LiveStatus(False, "—", False, str(ckpt_path()), err, hints)
     ver = torch.__version__
     if mods is None:
         return LiveStatus(False, ver, False, str(ckpt_path()), err,
@@ -280,6 +309,9 @@ def run_steps(model, image, steps: int = 5, on_frame=None, seed: int = 0) -> dic
         "nfe": nfe,
         "seconds": round(time.time() - t_start, 2),
         "map_png": _map_png(dmap),
+        # Keep the unrendered RGB DIRE tensor for optional ResNet scoring. The
+        # grayscale PNG is display-only and must never be fed to the detector.
+        "map_array": dmap.squeeze(0).cpu().numpy().astype("float16"),
         "map_values": dict(stats),
         "recon_png": _png_bytes(_to_uint8_hwc(recon), max_side=256),
         "frames": frames,

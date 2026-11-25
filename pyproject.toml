@@ -16,11 +16,11 @@ dire = "dire_local.cli:main"
 
 [project.optional-dependencies]
 # Chỉ cần cho `dire detect/batch/serve` và cho eval thật.
-infer = ["torch>=2.0", "torchvision>=0.15", "pillow>=10.0"]
+infer = ["torch>=2.0", "torchvision>=0.15", "numpy<2", "pillow>=10.0"]
 # `dire serve` / `dire_modal.api`.
 api = ["fastapi>=0.110", "uvicorn>=0.29"]
 # Bản viết lại clean-room (`dire_zero`) — torch + numpy + pillow là đủ.
-zero = ["torch>=2.0", "numpy>=1.24", "pillow>=10.0"]
+zero = ["torch>=2.0", "numpy>=1.24,<2", "pillow>=10.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

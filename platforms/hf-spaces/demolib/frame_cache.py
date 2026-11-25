@@ -14,7 +14,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-CACHE_VERSION = "dire-ddim-frames-v1"
+CACHE_VERSION = "dire-ddim-frames-v2"
 
 
 def cache_root() -> Path:
@@ -41,6 +41,9 @@ def load(key: str, root: Path | None = None) -> dict[str, Any] | None:
         for field in ("map_png", "recon_png"):
             if field in data:
                 data[field] = (folder / data[field]).read_bytes()
+        if data.pop("map_array_file", None):
+            import numpy as np  # noqa: PLC0415
+            data["map_array"] = np.load(folder / "map.npy", allow_pickle=False)
         frames = []
         for item in data.pop("frames"):
             frame = dict(item)
@@ -62,12 +65,16 @@ def store(key: str, result: dict[str, Any], root: Path | None = None, max_entrie
     if load(key, base) is not None:
         return destination
     temp = Path(tempfile.mkdtemp(prefix=f".{key[:10]}-", dir=base))
-    manifest: dict[str, Any] = {k: v for k, v in result.items() if k not in ("frames", "map_png", "recon_png")}
+    manifest: dict[str, Any] = {k: v for k, v in result.items() if k not in ("frames", "map_png", "recon_png", "map_array")}
     for field in ("map_png", "recon_png"):
         if field in result:
             name = f"{field}.png"
             (temp / name).write_bytes(result[field])
             manifest[field] = name
+    if "map_array" in result:
+        import numpy as np  # noqa: PLC0415
+        np.save(temp / "map.npy", np.asarray(result["map_array"], dtype=np.float16), allow_pickle=False)
+        manifest["map_array_file"] = "map.npy"
     manifest["key"] = key
     serialized_frames = []
     try:

@@ -30,7 +30,7 @@ Test của hai bản nằm ở `tests/test_hf_spaces_demo.py` (Streamlit) và
 `tests/test_hf_spaces_gradio.py` (Gradio).
 
 Gradio là giao diện Space mặc định; Streamlit được giữ làm bản dự phòng độc lập.
-Gallery Gradio có biểu đồ độ phủ theo generator và hai gallery map tách riêng (ảnh sinh / ảnh thật); biểu đồ chỉ đếm mẫu hợp lệ, không phải metric detector. Cả hai giao diện không tự chấm ảnh upload.
+Gallery Gradio có biểu đồ độ phủ theo generator và hai gallery map tách riêng (ảnh sinh / ảnh thật); biểu đồ chỉ đếm mẫu hợp lệ, không phải metric detector. Upload chỉ được phân loại nếu operator chủ động chọn một checkpoint ResNet sau khi tính DIRE.
 
 ## Demo này làm gì
 
@@ -44,10 +44,20 @@ Gallery Gradio có biểu đồ độ phủ theo generator và hai gallery map t
 
 ## Demo này **không** làm gì
 
-- Tab 2 có thể nhận ảnh **chỉ để tính DIRE map tại chỗ** nếu ADM checkpoint sẵn sàng;
-  không trả `P(fake)` từ ảnh RGB. ResNet-50 học trên DIRE map không có nghĩa gì khi
-  nhận ảnh RGB thô. Bản Gradio cũ từng chấm ảnh upload trực tiếp; lỗi đó được ghi ở
+- Tab 2 nhận ảnh để tính DIRE map tại chỗ nếu ADM checkpoint sẵn sàng; tùy chọn
+  ResNet chỉ nhận tensor DIRE RGB `[0,2]` vừa tính, tuyệt đối không nhận ảnh RGB
+  gốc hay ảnh PNG xám dùng để hiển thị. Không chọn checkpoint thì không chấm.
+  Bản Gradio cũ từng chấm ảnh upload trực tiếp; lỗi đó được ghi ở
   `docs/demo-web-plan.md` §2 và không được dựng lại.
+- Sau khi tính DIRE, operator có thể chọn checkpoint tác giả hoặc checkpoint tự
+  train theo ADM/iDDPM/PNDM/StyleGAN. UI gợi ý `F:\DiffusionForensics\checkpoints\lsun_adm.pth`
+  và `D:\Documents\Code\dire-modal\modal-runs\runs\rebuild\rebuild-2026-10-14\train\gen-*\detector.pth`,
+  nhưng không tải checkpoint tự động: đường dẫn phải tồn tại trên máy Gradio (mount
+  nếu cần), có thể sửa tay. Checkpoint tự train phải là state_dict 3-kênh phù hợp;
+  ngưỡng được lấy từ `train.json` cùng thư mục; trường lịch sử gắn nhãn `logit` được dùng nguyên trạng vì trainer lưu/đánh giá cutoff trên đầu ra sigmoid.
+  Nếu metadata/ngưỡng không hợp lệ thì dùng ngưỡng dự phòng 0,5 và ghi rõ. Backend
+  Modal hiện không trả tensor RGB DIRE nên chỉ hỗ trợ phân loại ở backend local.
+  Luồng upload chỉ hiện nhãn thật/giả, không hiện `P(fake)` số khi chưa qua gate gallery; đây không phải chứng nhận chất lượng/paper metric.
 - **Không** ghi "độ chính xác 99 %" ở bất kỳ đâu. Số của bài luôn kèm chữ
   *"số của paper (ICCV 2023), không phải của demo này"*.
 - **Không** hiện `p_fake` khi chưa qua cổng kiểm: `detector.gate` phải là `passed`
@@ -302,7 +312,44 @@ của Space chỉ cần khi bạn muốn bật lại).
 | `DEMO_URL` | endpoint GPU Modal, chỉ dùng sau khi người dùng chọn backend Modal | *(trống)* |
 | `DEMO_TOKEN` | token endpoint Modal; lưu trong Space Secrets, không gửi tới trình duyệt | *(trống)* |
 
-Không cần secret để xem gallery hoặc mô phỏng tổng hợp. Thiếu checkpoint thì nút local vẫn hiện; khi bấm sẽ báo checkpoint chưa sẵn sàng và không gọi mạng/tải trọng số. Để bật inference local, cung cấp `torch` và `dire_zero`, rồi gắn ADM checkpoint (~2,5 GB) vào ổ đĩa Space có thể đọc và đặt `DIRE_CKPT` trỏ đúng tệp. Không commit checkpoint vào Git. Cold start nạp checkpoint lần đầu sau khi bấm chạy; model được giữ trong cache tiến trình. Đã đo 10,1 s/forward trên máy 2-vCPU cục bộ (S=5 khoảng 101 s, S=20 khoảng 404 s), nhưng chưa benchmark cold-start, RAM và timeout trên HF Space; xác minh các giới hạn này trước khi mở public inference.
+Không cần secret để xem gallery hoặc mô phỏng tổng hợp. Thiếu checkpoint thì nút local vẫn hiện; khi bấm sẽ báo checkpoint chưa sẵn sàng và không gọi mạng/tải trọng số. Để bật inference local, cung cấp `torch` và `dire_zero`, rồi gắn ADM checkpoint (~2,5 GB) vào ổ đĩa Space có thể đọc và đặt `DIRE_CKPT` trỏ đúng tệp. **Checkpoint cần dùng là `256x256_diffusion_uncond.pt` (ADM diffusion U-Net), không phải `lsun_adm.pth` của tác giả.** `lsun_adm.pth` là ResNet-50 detector đã huấn luyện trên DIRE map; đổi tên/copy nó thành `adm_lsun.pt` không biến nó thành bộ sinh và sẽ bị từ chối. Bản ADM đúng có thể đặt tên cục bộ như sau:
+
+```bash
+mkdir -p platforms/hf-spaces/ckpt
+cp /path/to/256x256_diffusion_uncond.pt platforms/hf-spaces/ckpt/adm_lsun.pt
+```
+
+Không commit checkpoint vào Git. Cold start nạp checkpoint lần đầu sau khi bấm chạy; model được giữ trong cache tiến trình. Đã đo 10,1 s/forward trên máy 2-vCPU cục bộ (S=5 khoảng 101 s, S=20 khoảng 404 s), nhưng chưa benchmark cold-start, RAM và timeout trên HF Space; xác minh các giới hạn này trước khi mở public inference.
+
+### Khắc phục `RuntimeError: Numpy is not available` trên Windows
+
+PyTorch 2.4 được build với NumPy 1.x; NumPy 2.x (ví dụ `2.5.2`) không tương thích với wheel này. `requirements.txt` và extra `zero`/`infer` đã giới hạn NumPy dưới 2. Với môi trường cũ đã cài sẵn, chạy trong đúng Python/conda environment của Gradio rồi **khởi động lại terminal và app**:
+
+```powershell
+python -m pip install --force-reinstall "numpy<2"
+python -c "import numpy, torch; print(numpy.__version__, torch.__version__); torch.from_numpy(numpy.zeros(1)).numpy()"
+```
+
+Nếu cài lại project dependencies, dùng `python -m pip install -r platforms/hf-spaces/requirements.txt`. Trang cũng kiểm tra NumPy↔Torch trước khi bật ADM và hiện lệnh khắc phục thay vì chờ lỗi giữa inference.
+
+Gallery có ảnh gốc cho mẫu sinh và ảnh thật; recon chỉ hiện nếu đã được tính bằng ADM+DDIM thật. Script dùng **đúng file ảnh gốc** được metadata gallery trỏ tới (không suy recon từ DIRE map), lưu `<stem>_recon.png` và cập nhật hash/phương pháp vào JSON. Để tính tự động cho **mọi mẫu hợp lệ** trong gallery mà Gradio đang dùng:
+
+```bash
+# Bash: xem ảnh nguồn, output và ước tính; dry-run không cần checkpoint
+DIRE_GALLERY_DIR=gallery python tools/make_gallery_recons.py --all --dry-run
+DIRE_GALLERY_DIR=gallery python tools/make_gallery_recons.py --all
+```
+
+Trên PowerShell (chạy tại thư mục gốc repo):
+
+```powershell
+$env:DIRE_GALLERY_DIR = "gallery"
+python tools/make_gallery_recons.py --all --dry-run
+# Sau khi gắn đúng ADM U-Net:
+python tools/make_gallery_recons.py --all
+```
+
+Nếu không đặt biến môi trường, script dò gallery mặc định như Gradio (`modal-runs/gallery`, hoặc `platforms/hf-spaces/gallery` nếu gallery chính không có). Có thể truyền `--gallery <đường-dẫn-gallery>`. Chạy một số mẫu riêng vẫn hỗ trợ `--name <stem>` lặp lại; `--force` tính lại và thay recon đã có. Mỗi mẫu S=20 cần 40 lượt ADM forward (~404 giây trên CPU 2-vCPU đã đo), nên xem tổng ước tính trước khi chạy cả gallery. Nếu thiếu/sai checkpoint, script dừng thay vì sinh ảnh giả.
 
 Modal là tùy chọn riêng: đặt `DEMO_URL` và `DEMO_TOKEN` (Settings → Secrets), rồi người dùng phải chọn **Modal GPU** trước khi bấm. Server của Space mới gọi endpoint; trình duyệt không nhận token. Triển khai endpoint: `docs/demo-modal-plan.md`.
 
