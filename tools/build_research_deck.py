@@ -1588,22 +1588,30 @@ def build_deck() -> Deck:
     p.card(481, 362, 363, 88, "Research target", "Tìm biểu diễn có ích khi generator test ≠ generator train.", "teal", "greenp", 14, 11)
     p.note()
 
-    # 05 taxonomy
-    p = d.page("03 · Các họ mô hình sinh", "Các họ khác nhau về khả năng hợp lý, số bước và phép nghịch đảo",
-        "docs/paper-cac-mo-hinh-sinh.html §§01–07 · docs/dire-tu-so-0.pdf §4",
-        notes_for("docs/paper-cac-mo-hinh-sinh.html, §§01–07; citations ở phụ lục"))
-    heading_sub(p, "DIRE không hỏi mô hình nào 'mạnh hơn'; nó cần một đường đi–về tái lập được nhưng không phải nghịch đảo hoàn hảo.")
-    rows = [
-        ["VAE", "bộ mã hóa → không gian ẩn → bộ giải mã", "xấp xỉ · một lượt", "Có bộ mã hóa; không nghịch đảo chính xác", "Không dùng làm phép đảo/tái tạo DIRE"],
-        ["GAN / StyleGAN", "z → G(z)", "không có phép nghịch đảo tích hợp", "Tìm ảnh ngược cần tối ưu bổ sung", "Không có phép đảo/tái tạo gốc"],
-        ["Dòng chuẩn hóa", "ánh xạ song ánh f", "nghịch đảo chính xác (lý tưởng)", "R∘I ≈ đồng nhất", "DIRE lý tưởng bằng 0"],
-        ["VQ / VQ-Diffusion", "mã rời rạc / bảng mã + bộ giải mã", "rời rạc; VQ-Diffusion có nhiều bước", "Có lượng tử hóa và động lực token", "Phân biệt bản đồ điểm ảnh với token"],
-        ["LDM / SD", "khuếch tán trong không gian ẩn VAE", "nhiều bước trong không gian ẩn", "DDIM có thể đảo xấp xỉ", "Có trong bộ kiểm chuẩn bài báo"],
-        ["Khuếch tán điểm ảnh / ADM", "U-Net khử nhiễu trên điểm ảnh", "T bước → S bước", "Đảo DDIM và lấy mẫu", "Mạng nền dùng cho DIRE"],
-    ]
-    p.table(48, 153, 864, ["Họ", "Đường sinh", "Inverse / trajectory", "Hệ quả lý thuyết", "Vị trí với DIRE"],
-            rows, [104, 179, 169, 210, 202], 50, 9.4)
-    p.text(52, 483, 850, 15, "Mô hình tự hồi quy, EBM và flow-matching nằm ngoài phạm vi tài liệu tổng quan; không suy rộng từ bảng này.", 9, "muted", italic=True)
+    # 05 · Reconstruction models documented in the DIRE paper
+    p = d.page("03 · Cơ sở tái tạo DIRE", "ADM là mô hình tái tạo; hai cấu hình khác nhau ở miền huấn luyện",
+        "Wang et al. (2023), §4.1 & Appendix A · docs/paper-tung-trang.html",
+        notes_for("Wang et al. (2023), Sec. 4.1 and Appendix A; the paper fixes ADM-LSUN for main experiments and additionally releases ImageNet DIRE maps."))
+    heading_sub(p, "Chỉ so sánh các cấu hình ADM được dùng để tạo DIRE; các bộ sinh ảnh khác không phải mô hình tái tạo.")
+
+    p.card(70, 170, 395, 196, "ADM-LSUN · cấu hình chính",
+           "Mô hình: ADM không điều kiện, huấn luyện trên LSUN-Bedroom.\n"
+           "Vai trò: mô hình tái tạo cố định trong thí nghiệm chính.\n"
+           "Quy trình: DDIM inversion và tái tạo, S = 20.",
+           "red", "redp", 15, 11.8)
+    p.card(495, 170, 395, 196, "ADM-ImageNet · bản DIRE bổ sung",
+           "Mô hình: ADM không điều kiện, huấn luyện trên ImageNet.\n"
+           "Vai trò: tạo thêm DIRE cho ảnh ImageNet bằng DDIM, 20 bước.\n"
+           "Giới hạn: bài báo không báo cáo kết quả detector trên biến thể này.",
+           "teal", "bluep", 15, 11.8)
+    p.rect(70, 389, 820, 48, "grayp", stroke="line", radius=4)
+    p.text(88, 397, 784, 34,
+           "Cơ sở lý thuyết: cùng họ ADM nhưng khác miền huấn luyện; không xem đây là so sánh hiệu năng vì bài báo không có đánh giá đối đầu.",
+           11.2, "ink", bold=True, align="center", valign="mid")
+    p.rect(70, 450, 820, 42, "goldp", stroke="gold", radius=4)
+    p.text(88, 455, 784, 32,
+           "DDPM, iDDPM, PNDM, StyleGAN, LDM / SD và VQ-Diffusion là bộ sinh ảnh nguồn — không phải mô hình tái tạo của DIRE.",
+           10.8, "ink", bold=True, align="center", valign="mid")
     p.note()
 
     # 03a · Generative-model foundations (theory source: supplementary HTML)
@@ -1916,20 +1924,36 @@ def build_deck() -> Deck:
     p.note()
 
     # 20 bottleneck
-    p = d.page("09 · ResNet-50 block", "Bottleneck block giảm–xử lý–mở rộng kênh và cộng nhánh tắt",
+    p = d.page("09 · Khối ResNet-50", "Bottleneck ResNet-50: nén, lọc, mở rộng kênh rồi cộng hai nhánh",
         "docs/dire-tu-so-0.pdf §3.3 · ResNet-50 code walkthrough",
         notes_for("docs/dire-tu-so-0.pdf pp. 23–24; ResNet bottleneck architecture"))
-    flow=[("Input", "C channels", "bluep"),("1×1 Conv", "reduce → P", "grayp"),
-          ("3×3 Conv", "spatial mix", "teal"),("1×1 Conv", "expand → 4P", "grayp"),
-          ("Add + ReLU", "output", "greenp")]
+    flow=[("Đầu vào x", "đặc trưng C kênh", "bluep"),
+          ("1×1 Conv", "giảm kênh\nC → P", "grayp"),
+          ("3×3 Conv", "lọc không gian\ntrên feature map", "bluep"),
+          ("1×1 Conv", "mở rộng kênh\nP → 4P", "grayp"),
+          ("Cộng + ReLU", "nhánh chính +\nnhánh tắt → y", "greenp")]
+    centers=[]
     for i,(t,b,fill) in enumerate(flow):
-        x=66+i*174; arrow_box(p,x,230,143,100,t,b,fill,"teal" if fill!="teal" else "white")
-        if i<4:p.arrow(x+145,280,x+168,280,"muted",1.1)
-    p.arrow(105, 202, 770, 202, "gold", 1.6); p.arrow(770, 202, 770, 225, "gold", 1.6)
-    p.text(333, 175, 240, 20, "identity / projection shortcut", 10, "gold", bold=True, align="center")
-    show_equation(p, r"y=\mathrm{ReLU}\!\left(F(x)+W_s x\right)", 228, 369, 504, 53,
-                  "Projection W_s is used when stride or channel count changes.", 21)
-    p.text(125, 445, 710, 24, "Residual path supports gradient flow; it does not itself guarantee generalization.", 11.4, "muted", align="center")
+        x=66+i*174; centers.append(x+71.5)
+        arrow_box(p,x,157,143,88,t,b,fill,"teal" if fill!="teal" else "white")
+        if i<4:p.arrow(x+145,201,x+168,201,"muted",1.1)
+    # The skip path carries x around the convolution sequence to the addition.
+    p.arrow(centers[0], 247, centers[0], 277, "gold", 1.5)
+    p.arrow(centers[0], 277, centers[4], 277, "gold", 1.5)
+    p.arrow(centers[4], 277, centers[4], 247, "gold", 1.5)
+    p.text(300, 252, 370, 21, "Nhánh tắt đưa tensor đầu vào x thẳng tới phép cộng", 10.2,
+           "gold", bold=True, align="center", valign="mid")
+    p.card(75, 305, 390, 89, "Đường chính F(x)",
+           "Ba Conv lần lượt giảm kênh, lọc đặc trưng không gian, rồi mở rộng kênh.",
+           "teal", "bluep", 13, 10.8)
+    p.card(495, 305, 390, 89, "Nhánh tắt",
+           "Giữ x nếu kích thước khớp; nếu kích thước đặc trưng hoặc số kênh đổi, phép chiếu 1×1 căn chỉnh trước khi cộng.",
+           "gold", "goldp", 13, 10.4)
+    p.text(350, 407, 260, 30, "y = ReLU(F(x) + Wₛx)", 13, "ink", align="center", valign="mid")
+    p.text(116, 444, 728, 36,
+           "F(x): đầu ra của ba lớp Conv; Wₛx: đầu ra nhánh tắt. ReLU là hàm kích hoạt sau phép cộng.\n"
+           "C, P, 4P lần lượt là số kênh đầu vào, kênh trung gian và kênh sau khi mở rộng.",
+           10.2, "muted", align="center")
     p.note()
 
     # 21 one logit BCE
@@ -2186,9 +2210,9 @@ def build_deck() -> Deck:
     for generator in gallery_generators:
         entries = gallery_entries_for(generator)
         if entries:
-            # First prefer a sample with a correct exact-ID score from a non-ADM
-            # evaluator; then maximize correct predictions and minimize errors.
-            selected = min(entries, key=lambda entry: representative_rank(entry[0]))
+            # Use the first hash-verified sample by filename; no evaluation score
+            # affects which example is displayed.
+            selected = min(entries, key=lambda entry: str(entry[0].get("name", "")))
             representatives.append((generator, generator_labels.get(generator, generator), selected))
     for page_start in range(0, len(representatives), 4):
         batch = representatives[page_start:page_start + 4]
@@ -2196,38 +2220,30 @@ def build_deck() -> Deck:
         p = d.page(
             "16 · Ví dụ đa bộ sinh",
             f"Một ảnh đại diện cho mỗi mô hình · {page_start + 1}–{page_end}/{len(representatives)}",
-            "Thư viện ảnh · chỉ dùng điểm số khớp mã mẫu; bỏ dự đoán ADM",
+            "Thư viện ảnh · ảnh gốc và bản đồ DIRE hiển thị",
             notes_for(
-                "Gallery representative selection prefers an exact-ID correct prediction when available, "
-                "using scores from rebuild eval/gen-* except gen-adm; ties are deterministic. Original and "
-                "display-map PNG SHA-256 are verified against metadata. Unmatched samples are explicitly "
-                "marked and no score is inferred. Applicable report warnings: "
-                + ("; ".join(SCORE_PROVENANCE_WARNINGS) or "none recorded")
+                "One gallery sample is selected deterministically by filename for each generator. "
+                "The original-image and DIRE display-map PNGs are shown; their SHA-256 values "
+                "are verified against metadata."
             ),
         )
         for row, (generator, label, (meta, original, dire_map)) in enumerate(batch):
             x = 44 + (row % 2) * 440
             y = 132 + (row // 2) * 160
             sample_name = meta["name"].removeprefix(generator + "_")
-            p.rect(x, y, 430, 150, "paper", stroke="line", radius=10)
+            p.rect(x, y, 430, 154, "paper", stroke="line", radius=10)
             p.text(x + 12, y + 7, 406, 20, f"{label}  ·  {sample_name}",
                    11.2, "ink", bold=True, font_name=FONT_PPT_DISPLAY)
-            p.text(x + 12, y + 28, 98, 13, "ẢNH GỐC", 7.8, "muted", bold=True, align="center")
-            p.text(x + 118, y + 28, 98, 13, "BẢN ĐỒ DIRE", 7.4, "muted", bold=True, align="center")
-            p.text(x + 224, y + 28, 194, 13, "ĐÁNH GIÁ BỔ SUNG", 7.8, "muted", bold=True, align="center")
-            p.rect(x + 12, y + 43, 98, 98, "paper", stroke="line", radius=6)
-            p.rect(x + 118, y + 43, 98, 98, "paper", stroke="line", radius=6)
-            p.image(original, x + 13, y + 44, 96, 96, f"Ảnh gốc · {meta['name']}")
-            p.image(dire_map, x + 119, y + 44, 96, 96, f"DIRE map hiển thị · {meta['name']}")
-            prediction, has_score = prediction_card_text(meta)
-            p.rect(x + 224, y + 43, 194, 98, "bluep" if has_score else "grayp", stroke="line", radius=6)
-            p.text(x + 233, y + 49, 176, 86, prediction, 8.2, "ink", bold=has_score,
-                   align="left", valign="mid")
+            p.text(x + 12, y + 28, 198, 13, "ẢNH GỐC", 8.2, "ink", bold=True, align="center")
+            p.text(x + 220, y + 28, 198, 13, "BẢN ĐỒ DIRE", 8.2, "ink", bold=True, align="center")
+            p.rect(x + 12, y + 43, 198, 106, "paper", stroke="line", radius=6)
+            p.rect(x + 220, y + 43, 198, 106, "paper", stroke="line", radius=6)
+            p.image(original, x + 13, y + 44, 196, 104, f"Ảnh gốc · {meta['name']}")
+            p.image(dire_map, x + 221, y + 44, 196, 104, f"Bản đồ DIRE hiển thị · {meta['name']}")
         p.rect(65, 453, 830, 40, "goldp", stroke="gold", radius=8)
         p.text(78, 459, 804, 29,
-               "Không dùng dự đoán ADM; chỉ hiển thị điểm số khớp mã mẫu. "
-               "Chưa có ảnh tái tạo ADM/DDIM thực tế.",
-               8.1, "ink", bold=True, align="center", valign="mid")
+               "Thư viện hiển thị ảnh gốc và bản đồ DIRE theo từng bộ sinh.",
+               9.2, "ink", bold=True, align="center", valign="mid")
         p.note()
 
     # 38 Table4 design
