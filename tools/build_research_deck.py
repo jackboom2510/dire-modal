@@ -1667,6 +1667,44 @@ def build_deck() -> Deck:
     p.text(126, 439, 707, 26, "Bộ sinh được phát hiện không nhất thiết là mạng dùng để tái tạo.", 11.4, "red", bold=True, align="center")
     p.note()
 
+    # 05a · Prior image-forensics detector theory, before introducing DIRE.
+    p = d.page("03 · Detector trước DIRE", "Các detector trước DIRE khai thác dấu vết ở pixel, patch và miền tần số",
+        "Wang et al. (2023), §2.2 · docs/book/01-nen-tang.md §1.3 · cited detector papers",
+        notes_for("Wang et al. (2023), Sec. 2.2; Wang et al., CNN-Generated Images Are Surprisingly Easy to Spot... for Now (CVPR 2020); Qian et al., F3-Net (ECCV 2020); docs/book/01-nen-tang.md §1.3. These are conceptual summaries, not claims that every detector uses every cue."))
+    heading_sub(p, "Câu hỏi chung: detector đọc dấu hiệu nào từ ảnh RGB — và dấu hiệu đó có còn khi bộ sinh đổi?")
+    prior_cards = [
+        ("Đặc trưng thủ công", "Màu, độ bão hòa, đồng xuất hiện và dấu vết trộn ảnh.\n\nƯu: tín hiệu dễ diễn giải.\nRủi ro: giả định dấu vết mức pixel ổn định giữa miền dữ liệu.", "gold", "goldp"),
+        ("CNN trên RGB", "CNNDetection dùng classifier ResNet để học artifact không gian / texture từ dữ liệu.\n\nKhả năng chuyển giữa GAN phụ thuộc cả quy mô và độ đa dạng dữ liệu huấn luyện.", "teal", "bluep"),
+        ("Patch / dấu vết cục bộ", "PatchForensics nhấn mạnh tín hiệu cục bộ theo vùng ảnh thay vì chỉ một mô tả toàn ảnh.\n\nDấu vết cục bộ vẫn có thể đổi theo thao tác, nguồn ảnh và bộ sinh.", "purple", "greenp"),
+        ("Tần số / fingerprint", "Upsampling có thể tạo cấu trúc tuần hoàn trong phổ; F3-Net khai thác clue miền tần số, còn fingerprint mô tả dấu riêng của quy trình sinh.\n\nĐổi pipeline có thể đổi dấu vết.", "red", "redp"),
+    ]
+    for i, (head, body, accent, fill) in enumerate(prior_cards):
+        p.card(49 + i*218, 185, 202, 236, head, body, accent, fill, 13.2, 10.5)
+    p.rect(84, 442, 792, 48, "grayp", stroke="line", radius=9)
+    p.text(101, 450, 758, 33,
+           "Hạn chế khái quát: đây là các giả thuyết về dấu vết có thể học, không phải dấu hiệu phổ quát bảo đảm chuyển được sang generator khác.",
+           11.6, "ink", bold=True, align="center", valign="mid")
+    p.note()
+
+    p = d.page("03 · Detector trước DIRE", "Các baseline của bài khác nhau về tín hiệu, dữ liệu huấn luyện và miền ứng dụng",
+        "Wang et al. (2023), §4.2 / Table 2 · src/dire_modal/paper_detector_benchmark.tsv",
+        notes_for("Wang et al. (2023), Sec. 4.2 and Table 2; docs/paper-tung-trang.html pp. 6–7; src/dire_modal/paper_detector_benchmark.tsv; model mechanisms summarized from the cited detector families, not reimplemented results."))
+    heading_sub(p, "Tên mô hình không đủ để diễn giải benchmark: cần xét cả biểu diễn đầu vào và tập mà checkpoint đã học.")
+    detector_rows = [
+        ["CNNDetection", "RGB + CNN / ResNet-50 học artifact phân biệt ảnh thật–giả.", "Checkpoint gốc trong bảng: ProGAN; paper cũng có bản retrain CNNDet* trên ADM."],
+        ["GANDetection", "Ensemble EfficientNet-B4 cho phát hiện ảnh GAN.", "Checkpoint benchmark có nguồn train khác ADM; không đồng nhất với bản retrain có dấu *."],
+        ["PatchForensics", "Phân tích bằng chứng theo patch / vùng cục bộ.", "Checkpoint gốc gắn với FaceForensics++; Patchfor* là bản retrain ADM trong paper."],
+        ["F3-Net", "Khai thác clue tần số theo nhánh đặc trưng chuyên biệt.", "F3-Net* được paper retrain trên ADM để làm đối chứng cùng dữ liệu train."],
+        ["SBI", "Self-Blended Images tạo dữ liệu huấn luyện giả lập thao tác ghép trên khuôn mặt.", "Thiết kế hướng tới face forgery; cần thận trọng khi chuyển sang ảnh sinh khuếch tán tổng quát."],
+    ]
+    p.table(52, 159, 856, ["Mô hình", "Ý tưởng cốt lõi", "Điều cần lưu ý khi đọc so sánh"], detector_rows,
+            [146, 325, 385], 48, 9.6, header_size=9.7)
+    p.rect(83, 449, 794, 46, "goldp", stroke="gold", radius=9)
+    p.text(101, 456, 758, 31,
+           "Dấu * trong Table 2: detector được huấn luyện lại trên tập ADM của bài. So sánh này giảm khác biệt dữ liệu train, nhưng không biến mọi khác biệt miền / tiền xử lý thành giống hệt.",
+           10.6, "ink", bold=True, align="center", valign="mid")
+    p.note()
+
     # 06 conceptual criteria
     p = d.page("03 · Trực giác và giới hạn", "DIRE là sai số của phép vòng lặp xấp xỉ — không phải định lý về ảnh giả",
         "docs/paper-cac-mo-hinh-sinh.html §08 (analysis) · Wang et al. (2023), Eq. 9",
