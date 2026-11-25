@@ -1,0 +1,19 @@
+{
+  "kind": "deterministic toy DDIM trajectory with schematic reconstruction and residual",
+  "training_timesteps": 1000,
+  "ddim_steps": 20,
+  "noise_seed": 3407,
+  "predictor": "fixed known noise plus an artificial bias for trajectory states; the final reconstruction tile is intentionally blurred as a visual schematic",
+  "is_adm_inference": false,
+  "is_measurement": false,
+  "is_detector_score": false,
+  "assets": [
+    "ddim_x0.png",
+    "ddim_xt500.png",
+    "ddim_xt950.png",
+    "ddim_reverse500.png",
+    "ddim_xhat0.png",
+    "toy_dire_residual.png"
+  ],
+  "disclaimer": "Synthetic teaching aid only; not ADM inference, an archived sample, or an experimental result. The final reconstruction is intentionally blurred and the residual is its synthetic absolute difference from the input; they are schematic, not a faithful DDIM network output."
+}
