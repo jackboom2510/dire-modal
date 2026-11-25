@@ -43,6 +43,7 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 |---|---|
 | `src/dire_core/` | **Lõi thuần** — tiền xử lý, đọc checkpoint, `prob_fake`, nhãn, vòng lặp batch. Không import `modal`/`torch` ở tầng module |
 | `docs/README.md` | Chỉ mục tài liệu đánh số theo chủ đề; route tới source phù hợp, không đọc toàn bộ `docs/` |
+| `GLOSSARY.md` | Thuật ngữ domain/experiment đã thống nhất; giữ định nghĩa, không ghi implementation hoặc thay protocol |
 | `docs/agent-docs-and-skills.md` | Khảo sát AGENTS.md/SKILL.md và skills repos; quy tắc progressive disclosure |
 | `docs/history/00-index.md` | Quy ước ghi lịch sử run; phân biệt inventory, unique maps và train/eval counts |
 | `docs/history/01-modal-dataset-runs.md` | Snapshot kích thước/phạm vi các run đã có trong repo; không phải Modal live history |

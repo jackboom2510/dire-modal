@@ -22,6 +22,7 @@ Mã số giúp agent tham chiếu ổn định trong kế hoạch/ghi chú. Các
 | DOC-000 | `docs/README.md` (tài liệu này) | Luôn tra cứu để chọn tài liệu theo task; không cần đọc lại toàn bộ nội dung mỗi lượt. |
 | DOC-010 | [`docs/agent-docs-and-skills.md`](agent-docs-and-skills.md) | Tạo/sửa docs, hướng dẫn agent hoặc skills; xem quy ước phổ biến và nguồn tham khảo. |
 | DOC-020 | [`docs/plans/README.md`](plans/README.md) | Chỉ mục plan theo nhóm research, demo, presentation; phân biệt plan với runbook/history. |
+| GLOSSARY | [`GLOSSARY.md`](../GLOSSARY.md) | Thuật ngữ miền nghiên cứu và ranh giới các representation/domain; không thay protocol. |
 | WF-000 | [`docs/workflows/README.md`](workflows/README.md) | Chọn group workflow theo mục tiêu. |
 | WF-001 | [`docs/workflows/reproduction.md`](workflows/reproduction.md) | Research, chọn reproduction level/protocol, rồi ghi run record. |
 | WF-002 | [`docs/workflows/operations.md`](workflows/operations.md) | Chọn môi trường, chuẩn bị dữ liệu, chạy và xác minh. |
@@ -44,6 +45,7 @@ Mã số giúp agent tham chiếu ổn định trong kế hoạch/ghi chú. Các
 | ADR-0004 | [`adr/adr-0004-retrain-for-reconciliation.md`](adr/adr-0004-retrain-for-reconciliation.md) | Train lại chỉ để đối chiếu. |
 | ADR-0005 | [`adr/adr-0005-local-first-modal-wrapper.md`](adr/adr-0005-local-first-modal-wrapper.md) | Lõi local-first và Modal wrapper. |
 | ADR-0006 | [`adr/adr-0006-reproduction-levels.md`](adr/adr-0006-reproduction-levels.md) | Phân biệt R0/R1/R2/R3. |
+| ADR-0007 | [`adr/adr-0007-kaggle-research-program.md`](adr/adr-0007-kaggle-research-program.md) | Hai track nghiên cứu, miền dữ liệu tách biệt, holdout generator và Kaggle làm môi trường mục tiêu có Modal fallback. |
 
 ### 20 — Nền tảng nghiên cứu và đọc paper
 

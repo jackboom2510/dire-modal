@@ -7,6 +7,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOCS = [
     ROOT / "docs/README.md",
     ROOT / "docs/agent-docs-and-skills.md",
+    ROOT / "docs/adr/adr-0007-kaggle-research-program.md",
+    ROOT / "GLOSSARY.md",
     ROOT / "docs/plans/README.md",
     ROOT / "docs/plans/research/full-paper-reproduction-plan.md",
     ROOT / "docs/plans/research/figures-plan.md",
@@ -59,6 +61,8 @@ def test_document_catalog_has_stable_ids_and_history_routes():
     assert "workflows/operations.md" in index
     assert "workflows/delivery.md" in index
     assert "adr/adr-0001-storage.md" in index
+    assert "adr/adr-0007-kaggle-research-program.md" in index
+    assert "GLOSSARY.md" in index
     assert "plans/README.md" in index
     assert "plans/research/full-paper-reproduction-plan.md" in index
     assert "plans/research/incremental-paper-subsets.md" in index
@@ -74,6 +78,7 @@ def test_architecture_decisions_live_in_the_adr_directory():
         "adr-0004-retrain-for-reconciliation.md",
         "adr-0005-local-first-modal-wrapper.md",
         "adr-0006-reproduction-levels.md",
+        "adr-0007-kaggle-research-program.md",
     }
     assert not list((ROOT / "docs").glob("adr-*.md"))
 
