@@ -44,14 +44,17 @@ OUT_PPTX = SITE / "dire-research-complete.pptx"
 OUT_PDF = SITE / "dire-research-complete.pdf"
 EQ_SOURCE = SITE / "dire-research-equations.tex"
 
-# The research deck must follow the explicit rebuild namespace, not the older
-# default `modal-runs/runs/report.json` artifacts. Update this ID intentionally
-# when a newer validated rebuild is selected; never silently fall back to legacy.
+# Summary ledgers selected as the deck's reporting source, plus the dated rebuild
+# namespace that contains per-detector evaluation score files.
+RUNS_ROOT = ROOT / "modal-runs" / "runs"
+REPORT_PATH = RUNS_ROOT / "report.json"
+TRAIN_PATH = RUNS_ROOT / "train.json"
+EVAL_PATH = RUNS_ROOT / "eval.json"
+DETAIL_EVAL_PATH = RUNS_ROOT / "eval" / "gen-adm" / "eval.json"
 REBUILD_RUN_ID = "rebuild-2026-10-14"
-REBUILD_ROOT = ROOT / "modal-runs" / "runs" / "rebuild" / REBUILD_RUN_ID
-REPORT_PATH = REBUILD_ROOT / "report.json"
-EVAL_PATH = REBUILD_ROOT / "eval" / "gen-adm" / "eval.json"
-ADM_SCORES_PATH = REBUILD_ROOT / "eval" / "gen-adm" / "scores.json"
+REBUILD_ROOT = RUNS_ROOT / "rebuild" / REBUILD_RUN_ID
+REBUILD_REPORT_PATH = REBUILD_ROOT / "report.json"
+SCORES_ROOT = REBUILD_ROOT / "eval"
 
 sys.path.insert(0, str(ROOT / "platforms/prototype"))
 from data import (  # noqa: E402
@@ -59,13 +62,13 @@ from data import (  # noqa: E402
     read_json, table4, table4_rows,
 )
 
-# Presentation palette: warm paper + deep navy + teal; amber is reserved for
-# caveats and unverified evidence, never used as a positive performance signal.
+# Presentation palette: white canvas, black text, red hierarchy and light-gray panels,
+# echoing the attached PTIT reference while retaining evidence-specific accent colors.
 C = {
-    "bg": "F5F7F5", "paper": "FFFFFF", "ink": "122C3A", "navy": "102A3A",
+    "bg": "FFFFFF", "paper": "FFFFFF", "ink": "202124", "navy": "102A3A",
     "navy2": "193F50", "muted": "526A76", "line": "D8E2E3", "teal": "147C80",
-    "mint": "55B7A6", "gold": "D59A35", "goldp": "FCF2DB", "red": "A8484E",
-    "redp": "FBECEE", "bluep": "EAF2F5", "greenp": "EAF5F0", "purple": "7057A3",
+    "mint": "55B7A6", "gold": "D59A35", "goldp": "FCF2DB", "red": "D71920",
+    "redp": "FCE9E9", "bluep": "F1F1F1", "greenp": "F5F5F5", "purple": "7057A3",
     "grayp": "EDF1F1", "white": "FFFFFF", "deepmuted": "B8C8CF",
 }
 PW, PH = 960.0, 540.0  # points; 13.333 x 7.5 inches, 16:9
@@ -681,7 +684,7 @@ VI_COPY = {
     "second": "thứ hai",
     "means": "có nghĩa là",
     "range": "khoảng",
-    "Diffusion Reconstruction Error · nền tảng toán học, kiến trúc mô hình,\\nđối chiếu paper và trạng thái pilot theo artifacts trong repo": "Sai số tái tạo khuếch tán (DIRE) · nền tảng toán học, kiến trúc mô hình,\\nđối chiếu bài báo và trạng thái thử nghiệm theo hiện vật trong kho mã",
+    "Diffusion Reconstruction Error · nền tảng toán học, kiến trúc mô hình,\nđối chiếu paper và trạng thái pilot theo artifacts trong repo": "Sai số tái tạo khuếch tán (DIRE) · nền tảng toán học, kiến trúc mô hình,\nđối chiếu bài báo và trạng thái thử nghiệm theo hiện vật trong kho mã",
     "Editable PPTX + PDF  ·  equations typeset from LaTeX source": "PPTX + PDF có thể chỉnh sửa · công thức được dàn trang từ mã LaTeX",
     "Train and test can differ in p_g: recognizing one generator's fingerprint is not the same as general synthetic-image detection.": "Phân phối bộ sinh p_g có thể khác giữa huấn luyện và kiểm thử: nhận diện dấu vết của một bộ sinh không đồng nghĩa phát hiện ảnh tổng hợp nói chung.",
     "A model may learn generator fingerprints rather than a robust cue.": "Mô hình có thể học dấu vân tay của bộ sinh thay vì dấu hiệu bền vững.",
@@ -726,7 +729,7 @@ VI_COPY = {
     "Why one logit matters": "Vì sao một logit quan trọng",
     "The published head shape is [1, 2048]; a 2-logit softmax head is not interchangeable.": "Đầu ra được công bố có kích thước [1, 2048]; không thể thay bằng head softmax 2 logit.",
     "Why ImageNet initialization": "Vì sao khởi tạo ImageNet",
-    "Transfer learning initializes visual features; the pilot protocol records ImageNet initialization and an independent detector for each S.": "Học chuyển giao khởi tạo đặc trưng thị giác; giao thức pilot ghi nhận khởi tạo ImageNet và một bộ phân loại riêng cho mỗi S.",
+    "Transfer learning initializes visual features; the pilot protocol records ImageNet initialization and an independent detector for each S.": "Khởi tạo ImageNet cung cấp đặc trưng thị giác; mỗi mức S có một bộ phân loại riêng.",
     "Area / discrete sum along precision–recall; threshold-free ranking summary.": "Diện tích / tổng rời rạc theo đường precision–recall; tóm tắt thứ hạng không phụ thuộc ngưỡng.",
     "Area under ROC; compare cautiously under domain shift.": "Diện tích dưới ROC; cần thận trọng khi so sánh nếu miền dữ liệu thay đổi.",
     "Protocol guard: choose epoch and threshold on validation; test is only for final evaluation.": "Ràng buộc giao thức: chọn epoch và ngưỡng trên tập xác thực; tập kiểm thử chỉ dùng đánh giá cuối.",
@@ -765,7 +768,7 @@ VI_COPY.update({
     "schedule": "lịch", "timestep": "bước thời gian", "timesteps": "các bước thời gian", "inference": "suy luận",
     "forward": "thuận", "reverse": "ngược", "deterministic": "tất định", "determinist": "tất định",
     "supervision": "giám sát", "target": "mục tiêu", "embedding": "nhúng", "loss": "hàm mất mát",
-    "resolution": "độ phân giải", "stage": "tầng", "stages": "các tầng", "bottleneck": "nút thắt",
+    "resolution": "độ phân giải", "stage": "tầng", "stages": "các tầng", "bottleneck": "bottleneck",
     "context": "ngữ cảnh", "projection": "phép chiếu", "projections": "các phép chiếu", "positions": "vị trí",
     "kernel": "kernel", "main": "chính", "information": "thông tin", "preserve": "duy trì", "preserves": "duy trì",
     "extracted": "trích xuất", "selected": "được chọn", "absolute": "tuyệt đối", "signed": "có dấu",
@@ -937,7 +940,7 @@ VI_COPY.update({
     "repo": "kho mã", "checkout": "bản mã nguồn", "gallery": "thư viện ảnh", "metadata": "siêu dữ liệu",
     "hash": "mã băm", "map": "bản đồ", "maps": "bản đồ", "benchmark": "bộ kiểm chuẩn",
     "pixel": "điểm ảnh", "pixels": "điểm ảnh", "pipeline": "quy trình", "backbone": "mạng nền",
-    "diffusion": "khuếch tán", "pilot": "thí điểm", "attention": "attention", "self-attention": "tự chú ý",
+    "diffusion": "khuếch tán", "pilot": "thí điểm", "attention": "attention", "self-attention": "self-attention",
     "codebook": "bảng mã", "latent": "không gian ẩn", "threshold": "ngưỡng", "detector": "bộ phân loại",
     "input": "đầu vào", "output": "đầu ra", "real": "thật", "fake": "giả", "flow-matching": "flow-matching",
     "timestep": "timestep", "epsilon-prediction": "dự đoán epsilon", "sampling": "lấy mẫu", "inference": "suy luận",
@@ -1000,16 +1003,72 @@ VI_COPY.update({
     "A completed scientific cell requires a metric, labels, counts and compatible provenance": "Một ô thí nghiệm hoàn chỉnh cần chỉ số, nhãn, số lượng và nguồn gốc tương thích",
 })
 
+# Use evidence-source language that speaks about the paper and the research group,
+# not software-container terms such as "repo" or "kho mã".
+VI_COPY.update({
+    "Paper results and repo results must stay in separate lanes.": "Kết quả trong bài báo và kết quả của nhóm nghiên cứu cần được trình bày tách biệt.",
+    "Paper results and repo results must stay in separate lanes": "Kết quả trong bài báo và kết quả của nhóm nghiên cứu cần được trình bày tách biệt",
+    "Repository extensions": "phần kết quả bổ sung của nhóm",
+    "repo pilot": "thử nghiệm của nhóm",
+    "repo measurements": "số đo của nhóm",
+    "repo results": "kết quả của nhóm",
+    "repo metrics": "chỉ số của nhóm",
+    "REPO-RECORDED": "KẾT QUẢ DO NHÓM GHI NHẬN",
+    "repo-recorded": "do nhóm ghi nhận",
+    "repository-recorded": "do nhóm ghi nhận",
+    "REPOSITORY-CHECKED HASH IN LEDGER": "MÃ BĂM ĐÃ ĐỐI CHIẾU",
+    "Transfer learning initializes visual features; the pilot protocol records ImageNet initialization and an independent detector for each S.": "Khởi tạo ImageNet cung cấp đặc trưng thị giác; mỗi mức S có một bộ phân loại riêng.",
+    "REPO-RECORDED": "DO NHÓM GHI NHẬN",
+    "PAPER-REPORTED": "DO BÀI BÁO CÔNG BỐ",
+    "residual block": "residual block",
+    "Residual block học biến đổi cục bộ; self-attention trao đổi thông tin toàn cục": "Residual block học biến đổi cục bộ; self-attention trao đổi thông tin toàn cục",
+    "RESIDUAL BLOCK": "RESIDUAL BLOCK",
+    "SELF-ATTENTION": "SELF-ATTENTION",
+    "BOTTLENECK": "BOTTLENECK",
+    "Repo metrics": "Số đo của nhóm nghiên cứu",
+    "Repo artifact": "Tư liệu của nhóm nghiên cứu",
+    "Paper results and repo results must stay in separate lanes.": "Kết quả trong bài báo và kết quả của nhóm nghiên cứu cần được trình bày tách biệt.",
+    "Paper results and repo results must stay in separate lanes": "Kết quả trong bài báo và kết quả của nhóm nghiên cứu cần được trình bày tách biệt",
+    "Paper refs + repo ledgers + gallery + image preview": "Nguồn bài báo + số liệu của nhóm + thư viện ảnh + ảnh xem trước",
+    "Summary of paper, repository artifacts, known caveats and pilot constraints": "Tổng hợp bài báo, kết quả của nhóm, giới hạn đã biết và phạm vi thử nghiệm",
+    "the repository now contains a pilot ledger and gallery, but evidence boundaries still matter.": "nhóm nghiên cứu đã có số liệu thử nghiệm và thư viện ảnh; cần phân biệt rõ nguồn bằng chứng.",
+    "Wang, Z. et al. DIRE for Diffusion-Generated Image Detection. ICCV 2023. arXiv:2303.09295.": "Wang, Z. et al. DIRE for Diffusion-Generated Image Detection. ICCV 2023. arXiv:2303.09295.",
+    "Ho, J., Jain, A., Abbeel, P. Denoising Diffusion Probabilistic Models. NeurIPS 2020. arXiv:2006.11239.": "Ho, J., Jain, A., Abbeel, P. Denoising Diffusion Probabilistic Models. NeurIPS 2020. arXiv:2006.11239.",
+    "Song, J., Meng, C., Ermon, S. Denoising Diffusion Implicit Models. ICLR 2021. arXiv:2010.02502.": "Song, J., Meng, C., Ermon, S. Denoising Diffusion Implicit Models. ICLR 2021. arXiv:2010.02502.",
+    "Dhariwal, P., Nichol, A. Diffusion Models Beat GANs on Image Synthesis. NeurIPS 2021. arXiv:2105.05233.": "Dhariwal, P., Nichol, A. Diffusion Models Beat GANs on Image Synthesis. NeurIPS 2021. arXiv:2105.05233.",
+    "Kingma, D. P., Welling, M. Auto-Encoding Variational Bayes. ICLR 2014. arXiv:1312.6114.": "Kingma, D. P., Welling, M. Auto-Encoding Variational Bayes. ICLR 2014. arXiv:1312.6114.",
+    "Goodfellow, I. et al. Generative Adversarial Nets. NeurIPS 2014.": "Goodfellow, I. et al. Generative Adversarial Nets. NeurIPS 2014.",
+    "Dinh, L. et al. Density Estimation using Real NVP. ICLR 2017. arXiv:1605.08803.": "Dinh, L. et al. Density Estimation using Real NVP. ICLR 2017. arXiv:1605.08803.",
+    "Rombach, R. et al. High-Resolution Image Synthesis with Latent Diffusion Models. CVPR 2022. arXiv:2112.10752.": "Rombach, R. et al. High-Resolution Image Synthesis with Latent Diffusion Models. CVPR 2022. arXiv:2112.10752.",
+    "Gu, S. et al. Vector Quantized Diffusion Model for Text-to-Image Synthesis. CVPR 2022.": "Gu, S. et al. Vector Quantized Diffusion Model for Text-to-Image Synthesis. CVPR 2022.",
+    "Ricker, J. et al. AEROBLADE: Training-Free Detection of Latent Diffusion Images Using Autoencoder Reconstruction Error. CVPR 2024. arXiv:2401.17879.": "Ricker, J. et al. AEROBLADE: Training-Free Detection of Latent Diffusion Images Using Autoencoder Reconstruction Error. CVPR 2024. arXiv:2401.17879.",
+    "repo": "nhóm nghiên cứu",
+    "repository": "nhóm nghiên cứu",
+    "checkout": "bản làm việc",
+})
+
 def _vi_copy(text: str) -> str:
     """Translate prose without cascading replacements into Vietnamese or identifiers."""
     import re
+    # Bibliographic titles are proper citation text; preserve them verbatim.
+    if re.match(r"^\d{2}\s+(?:Wang,|Ho,|Song,|Dhariwal,|Kingma,|Goodfellow,|Dinh,|Rombach,|Gu,|Ricker,)", text):
+        return text
+
+    def evidence_wording(value: str) -> str:
+        value = re.sub(r"(?i)(?<![\w/-])repository-recorded(?![\w-])", "do nhóm ghi nhận", value)
+        value = re.sub(r"(?i)(?<![\w/-])repo-recorded(?![\w-])", "do nhóm ghi nhận", value)
+        value = re.sub(r"(?i)(?<![\w/-])repository(?![\w-])", "nhóm nghiên cứu", value)
+        value = re.sub(r"(?i)(?<![\w/-])repo(?![\w-])", "nhóm nghiên cứu", value)
+        value = value.replace("kho mã", "nhóm nghiên cứu").replace("Kho mã", "Nhóm nghiên cứu")
+        return value
+
     # Exact full-copy entries take precedence, including prose that contains a
     # filename or slash-form label which must remain untouched as an identifier.
     exact = VI_COPY.get(text)
     if exact is None:
         exact = next((v for k, v in VI_COPY.items() if k.lower() == text.lower() and " " in k), None)
     if exact is not None:
-        return exact
+        return evidence_wording(exact)
     # Keep repository paths, filenames, URLs, and author citation fragments intact,
     # while still translating any surrounding explanatory prose.
     protected = []
@@ -1041,7 +1100,7 @@ def _vi_copy(text: str) -> str:
         text = text.replace(f"\u0001{i}\u0001", value)
     for i, value in enumerate(protected):
         text = text.replace(f"\u0000{i}\u0000", value)
-    return text
+    return evidence_wording(text)
 
 def hx(code: str) -> str:
     return C.get(code, code).lstrip("#")
@@ -1078,14 +1137,28 @@ PAPER_MAP = {(r["ckpt"], r["generator"]): (float(r["acc"]), float(r["ap"]))
 LEDGER = table4()
 T4_ROWS = table4_rows(LEDGER)
 REPORT = read_json(REPORT_PATH) or {}
-EVAL = read_json(EVAL_PATH) or {}
-ADM_SCORES = (read_json(ADM_SCORES_PATH) or {}).get("samples", {})
-if REPORT.get("run_id") != REBUILD_RUN_ID:
-    raise RuntimeError(f"Deck requires report for {REBUILD_RUN_ID}: {REPORT_PATH}")
-if EVAL.get("run_id") != REBUILD_RUN_ID:
-    raise RuntimeError(f"Deck requires eval for {REBUILD_RUN_ID}: {EVAL_PATH}")
-if not isinstance(ADM_SCORES, dict):
-    raise RuntimeError(f"Expected per-sample scores in {ADM_SCORES_PATH}")
+TRAIN = read_json(TRAIN_PATH) or {}
+EVAL_SUMMARY = read_json(EVAL_PATH) or {}
+EVAL_DETAIL = read_json(DETAIL_EVAL_PATH) or {}
+REBUILD_REPORT = read_json(REBUILD_REPORT_PATH) or {}
+if not REPORT or not TRAIN or not EVAL_SUMMARY:
+    raise RuntimeError(f"Missing reporting ledger(s): {REPORT_PATH}, {TRAIN_PATH}, {EVAL_PATH}")
+
+# The ADM detector's per-sample predictions are deliberately excluded. Other
+# eval/gen-* scores are joined only by exact sample ID; never estimate missing scores.
+GENERATOR_SCORES: dict[str, dict[str, Any]] = {}
+for score_path in sorted(SCORES_ROOT.glob("gen-*/scores.json")):
+    tag = score_path.parent.name
+    if tag == "gen-adm":
+        continue
+    score_map = (read_json(score_path) or {}).get("samples", {})
+    if not isinstance(score_map, dict):
+        raise RuntimeError(f"Expected samples mapping in {score_path}")
+    GENERATOR_SCORES[tag] = score_map
+SCORE_PROVENANCE_WARNINGS = [
+    warning for warning in REBUILD_REPORT.get("warnings", [])
+    if any(tag in warning for tag in GENERATOR_SCORES)
+]
 GALLERY_SAMPLE = json.loads((GALLERY / "adm_004006349103115c.json").read_text(encoding="utf-8"))
 T4_RUNS = {s: block for s, block in (LEDGER or {}).get("by_steps", {}).items()}
 
@@ -1132,21 +1205,54 @@ def gallery_entries_for(generator: str) -> list[tuple[dict[str, Any], Path, Path
     return entries
 
 
-def eval_prediction_for(meta: dict[str, Any]) -> tuple[str, bool]:
-    """Return the actual gen-adm score/verdict, or a scoped no-record note."""
-    score = ADM_SCORES.get(meta.get("name"))
-    if not isinstance(score, dict) or "p_fake" not in score:
-        return ("Không có mẫu khớp trong runs/eval/gen-adm/scores.json; không suy diễn.", False)
-    p_fake = float(score["p_fake"])
-    threshold = float(score.get("threshold", EVAL.get("threshold_prob", 0.5)))
-    predicted_fake = p_fake > threshold
+def eval_predictions_for(meta: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return exact-ID predictions from non-ADM eval/gen-* score files only."""
+    predictions = []
     true_fake = meta.get("generator") != "real"
-    predicted = "ảnh sinh" if predicted_fake else "ảnh thật"
-    correctness = "đúng" if predicted_fake == true_fake else "sai so với nhãn mẫu"
-    return (
-        f"gen-adm · P(giả)={p_fake:.3f} · τ={threshold:.3f} → {predicted} ({correctness}) · gate={score.get('gate', '—')}",
-        True,
-    )
+    sample_id = meta.get("name")
+    for tag, samples in sorted(GENERATOR_SCORES.items()):
+        score = samples.get(sample_id)
+        if not isinstance(score, dict) or "p_fake" not in score:
+            continue
+        if score.get("gate") not in (None, "passed"):
+            continue
+        p_fake = float(score["p_fake"])
+        threshold = float(score.get("threshold", 0.5))
+        predicted_fake = p_fake > threshold
+        predictions.append({
+            "tag": tag,
+            "p_fake": p_fake,
+            "threshold": threshold,
+            "predicted_fake": predicted_fake,
+            "correct": predicted_fake == true_fake,
+            "gate": score.get("gate", "—"),
+        })
+    return predictions
+
+
+def prediction_card_text(meta: dict[str, Any]) -> tuple[str, bool]:
+    predictions = eval_predictions_for(meta)
+    if not predictions:
+        return ("Không có điểm số khớp mã mẫu; không suy đoán.", False)
+    labels = {"iddpm":"iDDPM", "pndm":"PNDM", "stylegan":"StyleGAN"}
+    lines = []
+    for prediction in predictions:
+        label = "ảnh tạo" if prediction["predicted_fake"] else "ảnh thật"
+        status = "đúng" if prediction["correct"] else "sai"
+        model_key = prediction["tag"].removeprefix("gen-")
+        model = labels.get(model_key, model_key)
+        lines.append(
+            f"{model}: điểm ảnh tạo={prediction['p_fake']:.3f} · ngưỡng={prediction['threshold']:.3f} → {label} ({status})"
+        )
+    return ("\n".join(lines), True)
+
+
+def representative_rank(meta: dict[str, Any]) -> tuple[int, int, int, str]:
+    """Prefer a correct non-ADM eval result, then more correct/fewer wrong scores."""
+    predictions = eval_predictions_for(meta)
+    correct = sum(bool(p["correct"]) for p in predictions)
+    wrong = len(predictions) - correct
+    return (-int(correct > 0), -correct, wrong, str(meta.get("name", "")))
 
 
 class Page:
@@ -1170,20 +1276,20 @@ class Page:
     def _header(self):
         if self.cover:
             return
-        ink = "white" if self.dark else "ink"
+        ink = "white" if self.dark else "red"
         muted = "deepmuted" if self.dark else "muted"
-        self.text(42, 22, 850, 17, self.section.upper(), 9.0, "mint", bold=True, char_space=True)
+        self.text(42, 22, 850, 17, self.section.upper(), 9.0, "mint" if self.dark else "red", bold=True, char_space=True)
         title_len = len(self.title)
-        title_size = 20.0 if title_len <= 66 else 18.0 if title_len <= 88 else 16.0
+        title_size = 21.0 if title_len <= 66 else 19.0 if title_len <= 88 else 17.0
         self.text(42, 43, 875, 55, self.title, title_size, ink, bold=True, valign="mid",
                   font_name=FONT_PPT_DISPLAY)
-        self.line(42, 108, 918, 108, "navy2" if self.dark else "line", 0.8)
+        self.line(42, 108, 918, 108, "navy2" if self.dark else "red", 1.0)
         self.line(42, 505, 918, 505, "navy2" if self.dark else "line", 0.8)
         self.text(43, 512, 812, 16, self.source, 7.4, muted)
         self.text(858, 512, 58, 15, f"{self.pageno:02d}", 8, muted, align="right")
 
     def rect(self, x: float, y: float, w: float, h: float, fill: str = "paper",
-             stroke: str | None = None, radius: float = 10, linew: float = 0.8):
+             stroke: str | None = None, radius: float = 3, linew: float = 0.8):
         shape = self.slide.shapes.add_shape(MSO_SHAPE.ROUNDED_RECTANGLE,
             inches(x), inches(y), inches(w), inches(h))
         shape.fill.solid(); shape.fill.fore_color.rgb = ppt_rgb(fill)
@@ -1303,7 +1409,7 @@ class Page:
     def card(self, x: float, y: float, w: float, h: float, heading: str, body: str,
              accent: str = "teal", fill: str = "paper", head_size: float = 16,
              body_size: float = 12.2):
-        self.rect(x, y, w, h, fill, stroke="line", radius=10)
+        self.rect(x, y, w, h, fill, stroke="line", radius=3)
         self.rect(x, y, 5, h, accent, radius=2)
         self.text(x+17, y+13, w-31, 27, heading, head_size, "ink", bold=True)
         self.text(x+17, y+44, w-32, h-52, body, body_size, "muted")
@@ -1350,7 +1456,7 @@ class Page:
     def table(self, x: float, y: float, w: float, headers: list[str],
               rows: list[list[Any]], widths: list[float] | None = None,
               row_h: float = 30, font_size: float = 10.5,
-              header_fill: str = "navy", header_size: float | None = None,
+              header_fill: str = "red", header_size: float | None = None,
               aligns: list[str] | None = None, row_fills: list[str] | None = None,
               cell_colors: list[list[str | None]] | None = None,
               total_h: float | None = None):
@@ -1429,14 +1535,14 @@ def heading_sub(p: Page, text: str, y: float = 116, color: str = "muted", size: 
 
 def label_value(p: Page, x: float, y: float, w: float, label: str, value: str,
                 accent: str = "teal", value_size: float = 25, fill: str = "paper"):
-    p.rect(x, y, w, 85, fill, stroke="line", radius=10)
+    p.rect(x, y, w, 85, fill, stroke="line", radius=3)
     p.text(x+15, y+11, w-30, 17, label.upper(), 9, accent, bold=True)
     p.text(x+15, y+32, w-28, 43, value, value_size, "ink", bold=True, valign="mid")
 
 
 def arrow_box(p: Page, x: float, y: float, w: float, h: float, title: str,
               body: str, fill: str = "bluep", accent: str = "teal"):
-    p.rect(x, y, w, h, fill, stroke="line", radius=10)
+    p.rect(x, y, w, h, fill, stroke="line", radius=3)
     p.text(x+7, y+8, w-14, 24, title, 14, accent, bold=True, align="center", valign="mid")
     body_color = "white" if fill == "purple" else "muted"
     p.text(x+10, y+37, w-20, h-44, body, 10.3, body_color, align="center", valign="mid")
@@ -1444,7 +1550,7 @@ def arrow_box(p: Page, x: float, y: float, w: float, h: float, title: str,
 
 def show_equation(p: Page, tex: str, x: float, y: float, w: float, h: float,
                   verbal: str, font_size: float = 24):
-    p.rect(x, y, w, h+34, "paper", stroke="line", radius=11)
+    p.rect(x, y, w, h+34, "paper", stroke="line", radius=3)
     p.formula(tex, x+12, y+9, w-24, h, size=font_size)
     p.text(x+14, y+h+5, w-28, 23, verbal, 10.4, "muted", align="center", valign="mid")
 
@@ -1452,73 +1558,23 @@ def show_equation(p: Page, tex: str, x: float, y: float, w: float, h: float,
 # ---------- slide creation ----------
 def build_deck() -> Deck:
     d = Deck()
-    # 01 — cover
-    p = d.page("DIRE · research dossier", "", "", "", dark=True, cover=True)
-    p.rect(0, 0, PW, PH, "navy", radius=0)
-    # Fine motif: deterministic diffusion trajectory / error field, purely decorative.
-    for i in range(8):
-        y = 92+i*44
-        p.line(610, y, 920, y, "navy2", 0.5)
-    for i, color in enumerate(("teal", "mint", "gold")):
-        p.circle(650+i*95, 202+(i%2)*22, 12+(i%2)*3, color)
-    p.arrow(662, 202, 735, 224, "deepmuted", 1.2)
-    p.arrow(758, 224, 835, 202, "deepmuted", 1.2)
-    p.text(55, 54, 440, 20, "TECHNICAL DEEP DIVE  ·  RESEARCH UPDATE", 10, "mint", bold=True)
-    p.text(55, 112, 520, 112, "DIRE: từ phép tái tạo\ntới bằng chứng", 35, "white", bold=True,
-           font_name=FONT_PPT_DISPLAY)
-    p.text(58, 238, 500, 60,
-           "DIRE · toán học, kiến trúc mô hình,\nđối chiếu bài báo và kết quả pilot trong kho mã", 15, "deepmuted")
-    p.badge(58, 325, 174, "PAPER-REPORTED", "navy2", "mint")
-    p.badge(243, 325, 186, "REPO-RECORDED", "navy2", "gold")
-    p.badge(440, 325, 176, "MISSING ≠ ZERO", "navy2", "white")
-    p.text(58, 438, 600, 46,
-           "Bản trình bày học thuật · tiếng Việt\nTài liệu nền: DIRE từ số 0 · bản đọc các họ mô hình sinh", 11, "deepmuted")
-    p.text(58, 500, 600, 18, "Editable PPTX + PDF  ·  equations typeset from LaTeX source", 9.5, "mint")
-    p.note()
-
-    # 02 executive overview
-    p = d.page("01 · Tóm tắt", "Báo cáo tách biệt kết quả bài báo, bản rebuild và phần chưa có dữ liệu",
-        f"{REPORT_PATH.relative_to(ROOT)} · Table 4 ledger · metadata gallery",
-        notes_for(f"{REPORT_PATH.relative_to(ROOT)}; Table 4 ledger; gallery/*.json",
-                  "Các số liệu được giữ theo đúng nguồn và phạm vi; rebuild là run_id hiển thị, chưa xác minh bản nhị phân checkpoint ngoài repo."))
-    heading_sub(p, f"Trong checkout có rebuild {REBUILD_RUN_ID}, pilot Table 4 và 64 mẫu gallery; Table 5/Figure 4 chưa có sổ kết quả.")
-    label_value(p, 48, 157, 205, "Các mức S đã đo", "5 / 10 / 20", "teal", 22)
-    label_value(p, 266, 157, 205, "Mỗi ô kiểm thử", "n = 400", "teal", 23)
-    label_value(p, 484, 157, 205, "Mẫu gallery", "64", "teal", 25)
-    label_value(p, 702, 157, 205, "Nguồn", "Bài báo / repo", "gold", 18, "goldp")
-    p.card(48, 260, 270, 147, "Đã ghi nhận",
-           "Báo cáo R1+R2; đánh giá ADM trên tập giữ lại; pilot Table 4; 64 mẫu gallery có metadata.", "teal")
-    p.card(345, 260, 270, 147, "Chưa có kết quả",
-           "Table 5 mới có giao thức/đầu vào; Figure 4 chưa có kết quả. Không suy diễn S=50 cho pilot.", "gold", "goldp")
-    p.card(642, 260, 270, 147, "Giới hạn nguồn",
-           "Checkpoint chưa có trong checkout; ảnh gallery là PNG hiển thị, không thay thế map nguồn.", "red", "redp")
-    p.text(52, 431, 855, 46,
-           "Kết luận: báo cáo nêu rõ đâu là kết quả công bố, đâu là số đo pilot và đâu là câu hỏi chưa được kiểm chứng.",
-           14, "ink", bold=True)
-    p.note()
-
-    # 03 timeline/evidence discipline
-    p = d.page("01 · Cách đọc bằng chứng", "Run rebuild được ghi nhận nhưng timestamp dữ liệu cần đối soát",
-        f"Git metadata · {REPORT_PATH.relative_to(ROOT)} · ngày phiên làm việc",
-        notes_for(f"{REPORT_PATH.relative_to(ROOT)} data.created=2026-11-17T03:17:09Z; system date=2026-10-14",
-                  "Run ID là namespace rebuild; mốc data.created vẫn ở tương lai so với ngày phiên được khai báo. Deck ghi nhận đúng provenance, không tự kết luận ngày chạy; cần đối soát timeline trước khi công bố."))
-    p.rect(52, 145, 856, 77, "goldp", stroke="gold", radius=12)
-    p.text(72, 159, 815, 48,
-           "CẢNH BÁO PROVENANCE  ·  Repo commit: 25-11-2026   |   report.created: 17-11-2026   |   ngày phiên: 14-10-2026",
-           15, "red", bold=True, align="center", valign="mid")
-    steps = [(70, "Paper", "Nguồn công bố\nWang et al., ICCV 2023", "bluep", "teal"),
-             (288, "Repo artifact", "Có file + ledger\nnhưng timeline chưa khớp", "goldp", "gold"),
-             (506, "Live Volume", "Chưa đối chiếu\ntrong phiên này", "redp", "red"),
-             (724, "Claim", "Tạm gọi\nrepo-recorded", "grayp", "muted")]
-    for x, title, body, fill, accent in steps: arrow_box(p, x, 275, 165, 116, title, body, fill, accent)
-    for x in (241, 459, 677): p.arrow(x, 332, x+37, 332, "muted", 1.4)
-    p.text(65, 425, 820, 45,
-           "Số đo từ bảng hiện tại được giữ lại và gắn nhãn nguồn. Cho tới khi timeline / Modal Volume được xác nhận, không gọi chúng là kết quả đã kiểm chứng độc lập.",
-           13, "ink", bold=True, align="center")
+    # 01 — cover, restyled to the attached white/red academic-slide reference.
+    p = d.page("DIRE · hồ sơ nghiên cứu", "", "", "", dark=False, cover=True)
+    p.rect(0, 0, PW, PH, "paper", radius=0)
+    p.text(80, 73, 800, 25, "NGHIÊN CỨU VÀ TÁI HIỆN BÀI BÁO ICCV 2023", 13, "ink", bold=True, align="center")
+    p.line(58, 116, 902, 116, "red", 1.2)
+    p.text(70, 162, 820, 106, "DIRE: từ phép tái tạo\ntới bằng chứng", 34, "red", bold=True,
+           align="center", valign="mid", font_name=FONT_PPT_DISPLAY)
+    p.text(116, 292, 728, 52,
+           "Toán học · kiến trúc mô hình · kết quả bài báo\nvà số đo do nhóm ghi nhận",
+           17, "ink", align="center", valign="mid")
+    p.line(204, 377, 756, 377, "line", 0.8)
+    p.text(110, 400, 740, 28, "Bản trình bày học thuật · tiếng Việt", 13, "muted", align="center")
+    p.text(110, 458, 740, 23, "PPTX có thể chỉnh sửa · PDF", 10.5, "muted", align="center")
     p.note()
 
     # 04 project scope and question
-    p = d.page("02 · Bài toán", "Câu hỏi trung tâm là khả năng tổng quát hóa qua generator chưa thấy",
+    p = d.page("02 · Bài toán", "Câu hỏi trung tâm: mô hình có tổng quát hóa sang bộ sinh chưa gặp?",
         "Wang et al., ICCV 2023 §3 · docs/dire-tu-so-0.pdf §2.3",
         notes_for("Wang et al. (2023); docs/dire-tu-so-0.pdf, pp. 20–22, 41"))
     heading_sub(p, "Train và test có thể khác p_g: nhận diện dấu vết của một generator không đồng nghĩa phát hiện ảnh sinh nói chung.")
@@ -1533,21 +1589,21 @@ def build_deck() -> Deck:
     p.note()
 
     # 05 taxonomy
-    p = d.page("03 · Các họ mô hình sinh", "Các họ khác nhau ở likelihood, số bước và chất lượng phép nghịch đảo",
+    p = d.page("03 · Các họ mô hình sinh", "Các họ khác nhau về khả năng hợp lý, số bước và phép nghịch đảo",
         "docs/paper-cac-mo-hinh-sinh.html §§01–07 · docs/dire-tu-so-0.pdf §4",
         notes_for("docs/paper-cac-mo-hinh-sinh.html, §§01–07; citations ở phụ lục"))
     heading_sub(p, "DIRE không hỏi mô hình nào 'mạnh hơn'; nó cần một đường đi–về tái lập được nhưng không phải nghịch đảo hoàn hảo.")
     rows = [
-        ["VAE", "encoder → latent → decoder", "xấp xỉ · một lượt", "Có encoder; không phải inverse chính xác", "Không dùng làm I/R của DIRE"],
-        ["GAN / StyleGAN", "z → G(z)", "không có inverse tích hợp", "GAN inversion là tối ưu bổ sung", "Không có I/R gốc"],
-        ["Normalizing flow", "bijective f", "inverse chính xác (lý tưởng)", "R∘I ≈ identity", "DIRE lý tưởng suy biến về 0"],
-        ["VQ / VQ-Diffusion", "token/codebook + decoder", "rời rạc; nhiều bước với VQ-Diffusion", "Có lượng tử hoá / token dynamics", "Cần phân biệt pixel map với token"],
-        ["LDM / SD", "diffusion trong latent VAE", "nhiều bước latent", "DDIM có thể inversion xấp xỉ", "Có trong benchmark paper"],
-        ["Pixel diffusion / ADM", "denoise U-Net trên pixel", "T bước → S bước", "DDIM inversion + sampling", "Backbone I/R dùng trong DIRE"],
+        ["VAE", "bộ mã hóa → không gian ẩn → bộ giải mã", "xấp xỉ · một lượt", "Có bộ mã hóa; không nghịch đảo chính xác", "Không dùng làm phép đảo/tái tạo DIRE"],
+        ["GAN / StyleGAN", "z → G(z)", "không có phép nghịch đảo tích hợp", "Tìm ảnh ngược cần tối ưu bổ sung", "Không có phép đảo/tái tạo gốc"],
+        ["Dòng chuẩn hóa", "ánh xạ song ánh f", "nghịch đảo chính xác (lý tưởng)", "R∘I ≈ đồng nhất", "DIRE lý tưởng bằng 0"],
+        ["VQ / VQ-Diffusion", "mã rời rạc / bảng mã + bộ giải mã", "rời rạc; VQ-Diffusion có nhiều bước", "Có lượng tử hóa và động lực token", "Phân biệt bản đồ điểm ảnh với token"],
+        ["LDM / SD", "khuếch tán trong không gian ẩn VAE", "nhiều bước trong không gian ẩn", "DDIM có thể đảo xấp xỉ", "Có trong bộ kiểm chuẩn bài báo"],
+        ["Khuếch tán điểm ảnh / ADM", "U-Net khử nhiễu trên điểm ảnh", "T bước → S bước", "Đảo DDIM và lấy mẫu", "Mạng nền dùng cho DIRE"],
     ]
     p.table(48, 153, 864, ["Họ", "Đường sinh", "Inverse / trajectory", "Hệ quả lý thuyết", "Vị trí với DIRE"],
             rows, [104, 179, 169, 210, 202], 50, 9.4)
-    p.text(52, 483, 850, 15, "Autoregressive, EBM và flow-matching được ghi là phạm vi còn thiếu trong tài liệu tổng quan HTML; không suy rộng từ bảng này.", 9, "muted", italic=True)
+    p.text(52, 483, 850, 15, "Mô hình tự hồi quy, EBM và flow-matching nằm ngoài phạm vi tài liệu tổng quan; không suy rộng từ bảng này.", 9, "muted", italic=True)
     p.note()
 
     # 03a · Generative-model foundations (theory source: supplementary HTML)
@@ -1558,11 +1614,11 @@ def build_deck() -> Deck:
                   87, 145, 786, 72, "Tái tạo tốt hơn ↔ latent posterior gần prior; encoder chỉ xấp xỉ posterior.", 19)
     p.arrow(200, 316, 356, 316, "teal", 1.7)
     p.arrow(592, 316, 749, 316, "teal", 1.7)
-    arrow_box(p, 72, 278, 123, 76, "x", "image", "bluep", "teal")
-    arrow_box(p, 362, 278, 224, 76, "qφ(z | x)", "encoder → latent distribution", "purple", "white")
-    arrow_box(p, 756, 278, 123, 76, "pθ(x | z)", "decoder", "greenp", "teal")
-    p.card(107, 390, 350, 84, "Vì sao không dùng làm phép biến đổi DIRE?", "Một lượt encoder/decoder; không có quỹ đạo DDIM được học.", "gold", "goldp", 12.5, 10.5)
-    p.card(494, 390, 350, 84, "Vai trò trong so sánh", "VAE là codec không gian ẩn bên trong mô hình khuếch tán tiềm ẩn.", "teal", "bluep", 12.5, 10.0)
+    arrow_box(p, 72, 278, 123, 76, "x", "ảnh", "bluep", "teal")
+    arrow_box(p, 362, 278, 224, 76, "qφ(z | x)", "bộ mã hóa → phân phối ẩn", "purple", "white")
+    arrow_box(p, 756, 278, 123, 76, "pθ(x | z)", "bộ giải mã", "greenp", "teal")
+    p.card(107, 390, 350, 84, "Vì sao không dùng cho DIRE?", "Một lượt mã hóa/giải mã; không có quỹ đạo DDIM được học.", "gold", "goldp", 12.5, 10.5)
+    p.card(494, 390, 350, 84, "Vai trò trong so sánh", "VAE là bộ mã hóa/giải mã không gian ẩn bên trong khuếch tán tiềm ẩn.", "teal", "bluep", 12.5, 10.0)
     p.note()
 
     p = d.page("03 · Nền tảng các họ mô hình", "GAN học bộ sinh đối kháng, không có phép nghịch đảo ảnh–tiềm ẩn tường minh",
@@ -1576,14 +1632,14 @@ def build_deck() -> Deck:
     p.arrow(562,318,664,318,"teal",1.8)
     arrow_box(p, 674, 278, 185, 80, "x_fake", "ảnh được sinh", "greenp", "teal")
     p.rect(149, 396, 663, 58, "goldp", stroke="gold", radius=11)
-    p.text(167, 406, 627, 39, "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để tìm latent.", 12.2, "ink", bold=True, align="center", valign="mid")
+    p.text(167, 406, 627, 39, "GAN cơ bản không có mật độ xác suất hay phép nghịch đảo tích hợp; cần tối ưu riêng để tìm không gian ẩn.", 12.2, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    p = d.page("03 · Nền tảng các họ mô hình", "Normalizing flow lý tưởng nghịch đảo chính xác — làm mất tín hiệu residual DIRE",
+    p = d.page("03 · Nền tảng các họ mô hình", "Dòng chuẩn hóa lý tưởng có phép nghịch đảo chính xác — DIRE bằng không",
         "docs/paper-cac-mo-hinh-sinh.html §04 · Dinh et al. (2017)",
         notes_for("docs/paper-cac-mo-hinh-sinh.html §04; change-of-variables density equation; idealized reasoning is not a paper experiment"))
     show_equation(p, r"\log p_X(x)=\log p_Z(f(x))+\log\left|\det J_f(x)\right|",
-                  152, 154, 656, 63, "Đổi biến: ánh xạ song ánh giúp tính likelihood chính xác.", 22)
+                  152, 154, 656, 63, "Đổi biến: ánh xạ song ánh giúp tính mật độ xác suất chính xác.", 22)
     p.rect(123, 278, 714, 121, "redp", stroke="red", radius=12)
     p.text(147, 291, 666, 96,
            "HỆ QUẢ LÝ TƯỞNG\nChọn I=f và R=f⁻¹ (hoặc ngược lại): R(I(x))=x với mọi x, nên DIRE(x)=0. Đây là suy luận toán học về khả năng nghịch đảo chính xác — không phải kết quả thực nghiệm trong bài DIRE.",
@@ -1591,16 +1647,16 @@ def build_deck() -> Deck:
     p.text(155, 431, 650, 28, "Vì vậy, DIRE cần phép nghịch đảo xấp xỉ — không phải một phép hoàn hảo tùy ý.", 13, "ink", bold=True, align="center")
     p.note()
 
-    p = d.page("03 · Nền tảng các họ mô hình", "VQ-Diffusion và latent diffusion đưa quỹ đạo khuếch tán sang không gian khác",
+    p = d.page("03 · Nền tảng các họ mô hình", "VQ-Diffusion và khuếch tán tiềm ẩn dùng các không gian biểu diễn khác nhau",
         "docs/paper-cac-mo-hinh-sinh.html §§05–06 · van den Oord et al. (2017) · Rombach et al. (2022)",
         notes_for("docs/paper-cac-mo-hinh-sinh.html §§05–06; VQ-VAE and latent diffusion papers"))
     show_equation(p, r"z_q=e_{k^*},\qquad k^*=\arg\min_k\|z_e-e_k\|_2",
-                  93, 145, 360, 58, "VQ ánh xạ đặc trưng encoder tới mục codebook.", 19)
+                  93, 145, 360, 58, "VQ ánh xạ đặc trưng bộ mã hóa tới mục trong bảng mã.", 19)
     show_equation(p, r"z_t=\sqrt{\bar{\alpha}_t}z_0+\sqrt{1-\bar{\alpha}_t}\,\epsilon",
                   507, 145, 360, 58, "LDM khuếch tán liên tục trong không gian ẩn VAE.", 19)
-    p.card(73, 273, 385, 135, "VQ-Diffusion", "Khuếch tán rời rạc trên token codebook; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này có trong benchmark generator của bài báo.", "purple", "bluep", 14.5, 11.2)
-    p.card(502, 273, 385, 135, "Latent diffusion / SD", "Encoder VAE → quỹ đạo DDIM trong latent → decoder VAE. Bài DIRE vẫn dùng ADM trên pixel làm phép tái tạo tham chiếu.", "teal", "greenp", 14.5, 11.2)
-    p.text(126, 439, 707, 26, "Khác biệt không gian mô hình rất quan trọng: generator bị phát hiện không phải backbone tái tạo.", 11.4, "red", bold=True, align="center")
+    p.card(73, 273, 385, 135, "VQ-Diffusion", "Khuếch tán rời rạc trên token của bảng mã; sai số lượng tử hóa thuộc về biểu diễn. Mô hình này nằm trong bộ kiểm chuẩn của bài báo.", "purple", "bluep", 14.5, 11.2)
+    p.card(502, 273, 385, 135, "Khuếch tán tiềm ẩn / SD", "Bộ mã hóa VAE → quỹ đạo DDIM trong không gian ẩn → bộ giải mã VAE. Bài DIRE vẫn dùng ADM trên điểm ảnh làm tham chiếu tái tạo.", "teal", "greenp", 14.5, 11.2)
+    p.text(126, 439, 707, 26, "Bộ sinh được phát hiện không nhất thiết là mạng dùng để tái tạo.", 11.4, "red", bold=True, align="center")
     p.note()
 
     # 06 conceptual criteria
@@ -1608,15 +1664,15 @@ def build_deck() -> Deck:
         "docs/paper-cac-mo-hinh-sinh.html §08 (analysis) · Wang et al. (2023), Eq. 9",
         notes_for("Bài báo định nghĩa DIRE; ba điều kiện C1–C3 là phân tích trong docs/paper-cac-mo-hinh-sinh.html §08, không phải claim của paper"))
     show_equation(p, r"\mathrm{DIRE}(x)=\left\|x-\mathcal{R}(\mathcal{I}(x))\right\|_1",
-                  172, 138, 616, 64, "Trị tuyệt đối theo pixel và kênh; bản đồ giữ cấu trúc không gian.", 26)
+                  172, 138, 616, 64, "Trị tuyệt đối theo điểm ảnh và kênh; bản đồ giữ cấu trúc không gian.", 26)
     for i, (head, body, col) in enumerate([
-        ("C1 · Có đường đi–về", "Cùng backbone, schedule và các timestep; inversion xấp xỉ, không stochastic.", "teal"),
-        ("C2 · Có hình học hữu ích", "Phép vòng đưa ảnh về vùng mà model đã học — diễn giải, không phải chứng minh.", "purple"),
-        ("C3 · Có phân biệt thực nghiệm", "Phân phối residual của ảnh real và generated phải khác nhau; phải đo.", "gold"),
+        ("C1 · Có đường đi–về", "Cùng mạng nền, lịch và các bước thời gian; phép đảo xấp xỉ, không ngẫu nhiên.", "teal"),
+        ("C2 · Có hình học hữu ích", "Phép vòng đưa ảnh về vùng mô hình đã học — đây là diễn giải, không phải chứng minh.", "purple"),
+        ("C3 · Có phân biệt thực nghiệm", "Phân phối sai số của ảnh thật và ảnh tạo phải khác nhau; cần đo kiểm.", "gold"),
     ]):
         x=70+i*286; p.card(x, 266, 258, 126, head, body, col, "paper", 12.4, 11.1)
     p.rect(115, 419, 730, 48, "redp", stroke="red", radius=10)
-    p.text(131, 429, 700, 29, "Giả thuyết cần kiểm chứng: ảnh sinh có thể có residual nhỏ hơn.", 12.7, "red", bold=True, align="center", valign="mid")
+    p.text(131, 429, 700, 29, "Giả thuyết cần kiểm chứng: ảnh tạo có thể có sai số tái tạo nhỏ hơn.", 12.7, "red", bold=True, align="center", valign="mid")
     p.note()
 
     # 07 gaussian forward
@@ -1626,9 +1682,9 @@ def build_deck() -> Deck:
     show_equation(p, r"q(x_t\mid x_{t-1})=\mathcal{N}\!\left(\sqrt{\alpha_t}x_{t-1},\,\beta_t I\right)",
                   122, 145, 716, 62, "Mỗi bước co tín hiệu một ít rồi thêm nhiễu Gauss; α_t = 1−β_t.", 23)
     show_equation(p, r"\bar{\alpha}_t=\prod_{s=1}^{t}\alpha_s,\qquad x_t=\sqrt{\bar{\alpha}_t}x_0+\sqrt{1-\bar{\alpha}_t}\,\epsilon,\quad \epsilon\sim\mathcal{N}(0,I)",
-                  87, 257, 786, 73, "Dạng đóng: nhảy trực tiếp từ x₀ tới timestep t chỉ với một mẫu nhiễu ε.", 19)
-    p.card(86, 383, 355, 88, "T = 1,000", "ADM dùng schedule tuyến tính β_t; tích lũy ᾱ_t làm tín hiệu suy giảm theo thời gian.", "teal", "bluep", 14, 11)
-    p.card(468, 383, 405, 88, "Không mất ngẫu nhiên trong định nghĩa", "ε ở forward process giải thích noise target khi train diffusion; DDIM inference chọn đường determinist.", "purple", "paper", 14, 11)
+                  87, 257, 786, 73, "Dạng đóng: nhảy trực tiếp từ x₀ tới bước thời gian t chỉ với một mẫu nhiễu ε.", 19)
+    p.card(86, 383, 355, 88, "T = 1.000", "ADM dùng lịch β_t tuyến tính; tích lũy ᾱ_t làm tín hiệu suy giảm theo thời gian.", "teal", "bluep", 14, 11)
+    p.card(468, 383, 405, 88, "Ngẫu nhiên trong quá trình thuận", "Quá trình thuận xác định nhiễu mục tiêu ε khi huấn luyện; DDIM chọn quỹ đạo tất định khi suy luận.", "purple", "paper", 14, 11)
     p.note()
 
     # 08 epsilon objective
@@ -1636,66 +1692,62 @@ def build_deck() -> Deck:
         "docs/dire-tu-so-0.pdf §5.2 · Ho et al. (2020) · Dhariwal & Nichol (2021)",
         notes_for("docs/dire-tu-so-0.pdf, pp. 27–28; Ho et al. (2020); Dhariwal & Nichol (2021)"))
     show_equation(p, r"\mathcal{L}_{\epsilon}=\mathbb{E}_{x_0,\epsilon,t}\left[\left\|\epsilon-\epsilon_{\theta}(x_t,t)\right\|_2^2\right]",
-                  122, 146, 716, 70, "Supervision tự sinh: biết ε vì chính quy trình forward vừa thêm nó.", 24)
+                  122, 146, 716, 70, "Tín hiệu giám sát tự sinh: ε đã biết vì chính quá trình thuận thêm nhiễu này.", 24)
     p.arrow(201, 307, 356, 307, "teal", 2)
-    arrow_box(p, 69, 270, 126, 77, "x₀ + ε", "noisy input", "bluep", "teal")
-    arrow_box(p, 366, 270, 187, 77, "εθ(xₜ,t)", "U-Net output", "greenp", "teal")
+    arrow_box(p, 69, 270, 126, 77, "x₀ + ε", "đầu vào có nhiễu", "bluep", "teal")
+    arrow_box(p, 366, 270, 187, 77, "εθ(xₜ,t)", "đầu ra U-Net", "greenp", "teal")
     p.arrow(563, 307, 689, 307, "teal", 2)
-    arrow_box(p, 697, 270, 191, 77, "MSE", "prediction vs ε", "goldp", "gold")
+    arrow_box(p, 697, 270, 191, 77, "MSE", "dự đoán so với ε", "goldp", "gold")
     p.text(86, 385, 784, 50,
-           "ADM dùng epsilon-prediction. Timestep embedding cung cấp t cho mọi khối; loss rút gọn là dạng huấn luyện thực dụng liên quan ELBO.",
+           "ADM dự đoán ε. Nhúng bước thời gian cung cấp t cho mỗi khối; hàm mất mát rút gọn là dạng huấn luyện thực dụng liên hệ với ELBO.",
            13, "ink", bold=True, align="center")
     p.note()
 
-    # 09 U-Net architecture
-    p = d.page("05 · Kiến trúc diffusion / U-Net", "ADM dùng encoder–bottleneck–decoder với skip connections đa tỉ lệ",
-        "docs/dire-tu-so-0.pdf §5.3 · guided-diffusion model config",
-        notes_for("docs/dire-tu-so-0.pdf, pp. 28–29; configuration recorded in paper/code walkthrough"))
-    heading_sub(p, "Timestep embedding đi vào từng stage; attention được đặt tại các bản đồ đặc trưng 32×32, 16×16, 8×8.")
-    # Native editable U-shaped stage diagram
-    enc = [(74, 210, 114, "256²", "input"), (207, 241, 104, "128²", "down"),
-           (329, 272, 96, "64²", "down"), (441, 303, 88, "32²", "down")]
-    dec = [(540, 303, 88, "32²", "up"), (644, 272, 96, "64²", "up"),
-           (756, 241, 104, "128²", "up"), (872, 210, 54, "256²", "out")]
-    for x,y,w,top,bottom in enc+dec:
-        fill = "navy" if top=="32²" else "bluep" if bottom in ("input","down") else "greenp"
-        p.rect(x,y,w,58,fill,stroke="line",radius=9)
-        p.text(x+3,y+7,w-6,20,top,13,"white" if fill=="navy" else "ink",bold=True,align="center")
-        p.text(x+3,y+31,w-6,16,bottom,9,"deepmuted" if fill=="navy" else "muted",align="center")
-    for a,b in [((188,239),(207,253)),((311,270),(329,284)),((425,301),(441,315)),
-                ((529,332),(540,332)),((628,315),(644,284)),((740,284),(756,253)),((860,253),(872,239))]:
-        p.arrow(a[0],a[1],b[0],b[1],"teal",1.2)
-    # skips
-    for y1,y2,x1,x2 in [(211,365,131,582),(242,352,259,690),(273,338,377,795)]:
-        p.line(x1,y1,x2,y2,"gold",1.1); p.line(x1,y1,x1+7,y1,"gold",1.1); p.line(x2,y2,x2-7,y2,"gold",1.1)
-    p.text(275, 362, 420, 20, "SKIP CONNECTIONS · giữ chi tiết nông qua bottleneck", 9.5, "gold", bold=True, align="center")
-    p.rect(69, 397, 818, 70, "paper", stroke="line", radius=11)
-    p.text(91, 408, 770, 44,
-           "Đi xuống: giảm resolution, tăng khả năng biểu diễn.  Bottleneck: context toàn cục.  Đi lên: khôi phục chi tiết qua skip.  Đây là sơ đồ kiến trúc, không phải tensor visualization.",
-           12, "ink", align="center", valign="mid")
+    # 09 U-Net architecture — simplified into an input-to-output flow.
+    p = d.page("05 · Kiến trúc khuếch tán / U-Net", "U-Net ADM giảm nhiễu qua ba phần rõ ràng",
+        "Sơ đồ khái quát theo Wang et al. (2023), §5.3",
+        notes_for("docs/dire-tu-so-0.pdf §5.3; architecture concept only, not an activation map"))
+    heading_sub(p, "Mạng nhận ảnh nhiễu xₜ và bước thời gian t; đầu ra là nhiễu dự đoán εθ(xₜ,t).")
+    nodes = [
+        (55, 224, 155, "ĐẦU VÀO", "Ảnh nhiễu xₜ\n+ bước thời gian t", "redp", "red"),
+        (240, 224, 150, "ENCODER", "256 → 128 → 64\ngiảm độ phân giải", "paper", "line"),
+        (425, 224, 125, "BOTTLENECK", "32 × 32\nself-attention", "redp", "red"),
+        (585, 224, 165, "DECODER", "64 → 128 → 256\nkhôi phục chi tiết", "paper", "line"),
+        (790, 224, 120, "ĐẦU RA", "εθ(xₜ,t)\nnhiễu dự đoán", "redp", "red"),
+    ]
+    for x, y, w, heading, body, fill, accent in nodes:
+        p.rect(x, y, w, 126, fill, stroke=accent, radius=3, linew=1.0)
+        p.text(x+8, y+14, w-16, 26, heading, 12.5, "red" if accent == "red" else "ink", bold=True, align="center", valign="mid")
+        p.text(x+10, y+51, w-20, 58, body, 11.5, "ink", align="center", valign="mid")
+    for x1, x2 in [(212, 236), (392, 421), (552, 581), (752, 786)]:
+        p.arrow(x1, 287, x2, 287, "muted", 1.5)
+    p.rect(78, 384, 804, 70, "grayp", stroke="line", radius=3)
+    p.text(96, 397, 768, 44,
+           "Encoder giảm độ phân giải → bottleneck tổng hợp ngữ cảnh → decoder khôi phục kích thước. Skip connections đưa chi tiết từ encoder sang các tầng tương ứng của decoder.",
+           12.1, "ink", align="center", valign="mid")
     p.note()
 
     # 10 U-Net blocks
-    p = d.page("05 · Kiến trúc diffusion / U-Net", "Residual blocks học biến đổi cục bộ; attention trao đổi thông tin toàn cục",
-        "docs/dire-tu-so-0.pdf §5.3 · attention / residual equations",
+    p = d.page("05 · Kiến trúc khuếch tán / U-Net", "Residual block học biến đổi cục bộ; self-attention trao đổi thông tin toàn cục",
+        "docs/dire-tu-so-0.pdf §5.3 · phương trình attention và residual block",
         notes_for("docs/dire-tu-so-0.pdf, §5.3; Dhariwal & Nichol (2021)"))
-    p.rect(63, 151, 405, 289, "paper", stroke="line", radius=12)
-    p.text(84, 168, 360, 25, "RESIDUAL BLOCK", 13, "teal", bold=True)
-    blocks=[("h", "input feature"),("Norm + SiLU", "stabilize / nonlinearity"),("Conv 3×3", "local spatial mixing"),("+ time embedding", "condition on t"),("Conv 3×3", "refine features")]
+    p.rect(63, 151, 405, 289, "paper", stroke="line", radius=3)
+    p.text(84, 168, 360, 25, "RESIDUAL BLOCK", 13, "red", bold=True)
+    blocks=[("h", "đặc trưng đầu vào"),("Norm + SiLU", "chuẩn hóa / phi tuyến"),("Conv 3×3", "trộn đặc trưng cục bộ"),("+ nhúng thời gian", "điều kiện theo t"),("Conv 3×3", "tinh chỉnh đặc trưng")]
     for i,(a,b) in enumerate(blocks):
         y=210+i*38
-        p.rect(130,y,270,29,"bluep" if i%2==0 else "grayp",stroke="line",radius=6)
+        p.rect(130,y,270,29,"grayp",stroke="line",radius=3)
         p.text(139,y+3,251,21,a+"  ·  "+b,10.2,"ink",bold=(i==0),align="center",valign="mid")
         if i<4:p.arrow(265,y+29,265,y+36,"muted",0.8)
-    p.arrow(112, 218, 112, 389, "gold", 1.7); p.arrow(112, 389, 128, 389, "gold", 1.7)
-    p.text(80, 398, 390, 20, "Residual: y = x + F(x) · đường gradient ngắn", 9.5, "gold", bold=True, align="center")
-    p.rect(495, 151, 402, 289, "paper", stroke="line", radius=12)
-    p.text(517, 168, 360, 25, "SELF-ATTENTION", 13, "purple", bold=True)
+    p.arrow(112, 218, 112, 389, "red", 1.5); p.arrow(112, 389, 128, 389, "red", 1.5)
+    p.text(80, 398, 390, 20, "Kết nối tắt: y = x + F(x) · đường truyền gradient ngắn", 9.5, "red", bold=True, align="center")
+    p.rect(495, 151, 402, 289, "paper", stroke="line", radius=3)
+    p.text(517, 168, 360, 25, "SELF-ATTENTION", 13, "red", bold=True)
     for i,(lab,x) in enumerate([("Q",545),("K",645),("V",745)]):
         p.rect(x,214,62,42,"grayp",stroke="line",radius=8); p.text(x+4,223,54,22,lab,17,"ink",bold=True,align="center")
-    p.text(541, 280, 322, 51, "Q, K, V projections\nacross spatial positions", 12,"muted",align="center")
+    p.text(541, 280, 322, 51, "Phép chiếu Q, K, V\ntrên các vị trí không gian", 12,"muted",align="center")
     p.formula(r"\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\!\left(\frac{QK^{T}}{\sqrt{d}}\right)V", 521, 340, 354, 40, size=17)
-    p.text(517, 401, 359, 21, "Global context, used at selected resolutions.", 10, "muted", align="center")
+    p.text(517, 401, 359, 21, "Tổng hợp ngữ cảnh toàn cục tại một số độ phân giải.", 10, "muted", align="center")
     p.note()
 
     # 10a · Hình minh họa trực quan cho convolution, attention và residual path.
@@ -1720,35 +1772,43 @@ def build_deck() -> Deck:
     p.note()
 
     # 11 ADM config
-    p = d.page("05 · Cấu hình ADM", "Cấu hình ADM 256² xác định mô hình tham chiếu cho phép tái tạo",
-        "docs/dire-tu-so-0.pdf §5.3 · Table 4 protocol / model SHA recorded in repo",
-        notes_for("docs/dire-tu-so-0.pdf, §5.3; Table 4 ledger protocol keys"))
-    config=[
-        ["Model family", "ADM / guided-diffusion U-Net", "Pixel-space, unconditional"],
-        ["Input size", "256 × 256 RGB", "3-channel image tensor"],
-        ["Diffusion schedule", "T = 1,000 · linear β", "DIRE paper uses respaced DDIM S=20"],
-        ["Width / depth", "num_channels=256 · 2 residual blocks", "ADM config recorded in source"],
-        ["Attention", "resolutions 32 / 16 / 8", "64 channels per head"],
-        ["Output mode", "learn_sigma=True · class_cond=False", "unconditional bedroom model"],
-        ["Weight provenance", "OpenAI ADM checkpoint", "not trained by this project"],
+    p = d.page("05 · Cấu hình ADM", "ADM là mạng dùng để tái tạo DIRE, không phải bộ phân loại",
+        "Wang et al. (2023), §5.3 · thiết lập mô hình tái tạo",
+        notes_for("Wang et al. (2023), §5.3; the group uses ADM for DIRE inversion and reconstruction"))
+    flow=[
+        (45, "ẢNH GỐC x₀", "256 × 256", "paper", "line"),
+        (222, "DDIM ĐẢO NGƯỢC", "S = 20 bước", "redp", "red"),
+        (399, "NHIỄU x_T", "điểm xuất phát", "paper", "line"),
+        (576, "DDIM TÁI TẠO", "S = 20 bước", "redp", "red"),
+        (753, "BẢN ĐỒ DIRE", "|x₀ − x′₀|", "paper", "line"),
     ]
-    p.table(70, 150, 820, ["Setting", "Value", "Interpretation"], config,
-            [178, 296, 346], 39, 10.5)
-    p.badge(354, 475, 252, "REPOSITORY-CHECKED HASH IN LEDGER", "goldp", "gold")
+    for x,head,body,fill,stroke in flow:
+        p.rect(x, 132, 162, 55, fill, stroke=stroke, radius=3, linew=1.0)
+        p.text(x+7, 139, 148, 22, head, 10.4, "red" if stroke=="red" else "ink", bold=True, align="center", valign="mid")
+        p.text(x+7, 162, 148, 17, body, 9.8, "muted", align="center", valign="mid")
+    for x1,x2 in [(208,218),(385,395),(562,572),(739,749)]:
+        p.arrow(x1, 159, x2, 159, "muted", 1.2)
+    config=[
+        ["Mạng tái tạo", "ADM / guided-diffusion U-Net", "Tạo ảnh tái tạo dùng trong DIRE"],
+        ["Miền đầu vào", "256 × 256 RGB", "Ảnh màu ba kênh"],
+        ["Nguồn trọng số", "ADM do OpenAI công bố", "Nhóm không huấn luyện lại mạng này"],
+    ]
+    p.table(70, 209, 820, ["Thiết lập", "Giá trị", "Ý nghĩa"], config,
+            [178, 296, 346], 63, 11.2)
     p.note()
 
     # 12 DDPM vs DDIM
     p = d.page("06 · DDIM", "DDIM tạo một quỹ đạo xác định để có thể đi ngược từ ảnh",
         "Ho et al. (2020) · Song, Meng & Ermon (2021) · docs/dire-tu-so-0.pdf §5.4",
         notes_for("Ho et al. (2020); Song et al. (2021); docs/dire-tu-so-0.pdf, pp. 29–30"))
-    p.card(65, 157, 395, 148, "DDPM · stochastic reverse", "xₜ₋₁ được lấy mẫu từ phân phối Gaussian mỗi bước.\nƯu điểm: sampling gốc.\nHệ quả cho DIRE: stochastic noise làm residual thay đổi nếu không cố định path.", "purple", "bluep", 17, 12)
-    p.card(500, 157, 395, 148, "DDIM · deterministic path", "η = 0 loại thành phần noise bổ sung.\nCùng xₜ và protocol → cùng x₀.\nPhép reverse ODE có thể đi theo chiều tăng timestep.", "teal", "greenp", 17, 12)
+    p.card(65, 157, 395, 148, "DDPM · chiều ngược ngẫu nhiên", "Ở mỗi bước, xₜ₋₁ được lấy mẫu từ phân phối Gauss.\nƯu điểm: giữ cách lấy mẫu nguyên bản.\nVới DIRE, nhiễu ngẫu nhiên làm sai số thay đổi nếu không cố định quỹ đạo.", "purple", "bluep", 17, 12)
+    p.card(500, 157, 395, 148, "DDIM · quỹ đạo tất định", "η = 0 loại thành phần nhiễu bổ sung.\nCùng xₜ và giao thức → cùng x₀.\nPhép đảo ODE có thể đi theo chiều tăng bước thời gian.", "teal", "greenp", 17, 12)
     show_equation(p, r"x_{t-1}=\sqrt{\bar{\alpha}_{t-1}}\,\hat{x}_0+\sqrt{1-\bar{\alpha}_{t-1}}\,\epsilon_{\theta}(x_t,t)",
                   99, 343, 762, 64, "Dạng rút gọn DDIM khi η=0; không có thành phần nhiễu ngẫu nhiên.", 19)
     p.note()
 
     # 13 DDIM reconstruct x0 and inverse
-    p = d.page("06 · DDIM equations", "Một ước lượng x̂₀ nối noise prediction với sampling và inversion",
+    p = d.page("06 · Phương trình DDIM", "Ước lượng ảnh sạch x̂₀ kết nối phép khử nhiễu và phép đảo",
         "docs/dire-tu-so-0.pdf §§5.4–5.5 · DDIM Eqs. 5, 8",
         notes_for("Song, Meng & Ermon (2021); docs/dire-tu-so-0.pdf, §§5.4–5.5"))
     show_equation(p, r"\hat{x}_0=\frac{x_t-\sqrt{1-\bar{\alpha}_t}\,\epsilon_{\theta}(x_t,t)}{\sqrt{\bar{\alpha}_t}}",
@@ -1756,9 +1816,9 @@ def build_deck() -> Deck:
     p.arrow(276, 309, 683, 309, "teal", 2.2)
     p.circle(286,309,24,"bluep","teal",1.3); p.text(265,300,42,20,"xₜ",14,"ink",bold=True,align="center")
     p.circle(670,309,24,"greenp","teal",1.3); p.text(650,300,42,20,"xₜ₋₁",12,"ink",bold=True,align="center")
-    p.text(377, 278, 206, 22, "sampling · t giảm", 11, "teal", bold=True, align="center")
+    p.text(377, 278, 206, 22, "Tái tạo · t giảm", 11, "teal", bold=True, align="center")
     p.arrow(683, 381, 300, 381, "gold", 2.2)
-    p.text(380, 389, 210, 22, "inversion · t tăng", 11, "gold", bold=True, align="center")
+    p.text(380, 389, 210, 22, "Phép đảo · t tăng", 11, "gold", bold=True, align="center")
     p.rect(183, 423, 600, 45, "goldp", stroke="gold", radius=10)
     p.text(198, 432, 570, 26, "Giữ nguyên model, schedule và timestep; thay đổi chúng sẽ đổi residual.", 11.5, "ink", bold=True, align="center", valign="mid")
     p.note()
@@ -1777,32 +1837,6 @@ def build_deck() -> Deck:
            12, "muted", align="center")
     p.note()
 
-    # 15 · Quỹ đạo DDIM và map DIRE minh họa bằng ảnh tổng hợp.
-    p = d.page("06 · Minh họa DDIM", "Từ ảnh sạch qua nhiễu DDIM đến ảnh tái tạo",
-        "Minh họa tổng hợp tạo bởi tools/build_report_illustrations.py · seed=3407 · S=20",
-        notes_for("Synthetic teaching illustration: deterministic toy DDIM trajectory; the final reconstructed thumbnail is intentionally blurred to make the schematic residual legible. Not ADM/U-Net inference or an experimental measurement."))
-    sequence=[
-        ("ddim_x0.png", "Ảnh đầu vào x₀", "ảnh tổng hợp"),
-        ("ddim_xt500.png", "Đảo · xₜ", "t xấp xỉ 500"),
-        ("ddim_xt950.png", "Đầu quỹ đạo", "t xấp xỉ 950"),
-        ("ddim_reverse500.png", "Tái tạo · xₜ", "t giảm"),
-        ("ddim_xhat0.png", "Ước lượng x̂₀", "DDIM η=0"),
-        ("toy_dire_residual.png", "|x₀ − x̂₀|", "map toy minh họa"),
-    ]
-    left, gap, iw = 43, 14, 132
-    for i,(filename,caption,sub) in enumerate(sequence):
-        x=left+i*(iw+gap)
-        p.rect(x,162,iw,174,"paper",stroke="line",radius=9)
-        p.image(ILLUSTRATIONS/filename,x+8,171,iw-16,iw-16,caption)
-        p.text(x+6,306,iw-12,21,caption,9.2,"ink",bold=True,align="center",valign="mid")
-        p.text(x+6,326,iw-12,14,sub,7.7,"muted",align="center")
-        if i<5:
-            p.arrow(x+iw+1,238,x+iw+gap-2,238,"teal" if i>=3 else "gold",1.1)
-    p.text(71, 365, 818, 29, "Đảo: timestep tăng  →  tái tạo: timestep giảm  →  DIRE = |x₀ − R(I(x₀))|", 14, "ink", bold=True, align="center")
-    p.rect(93, 410, 774, 53, "goldp", stroke="gold", radius=10)
-    p.text(109, 420, 742, 33, "Minh họa tổng hợp: ảnh tái tạo được làm mờ có chủ ý để residual dễ thấy; không phải ADM hay kết quả đo ảnh thật.", 10.8, "ink", bold=True, align="center", valign="mid")
-    p.note()
-
     # Hình gốc của tác giả: dùng trực tiếp asset từ kho chính thức, không vẽ lại chart.
     p = d.page("06 · Hình gốc từ bài báo", "Sơ đồ gốc của tác giả: đảo DDIM, tái tạo và bản đồ DIRE",
         "Wang et al., ICCV 2023 · kho tác giả ZhendongWang6/DIRE · figs/dire.png",
@@ -1817,29 +1851,29 @@ def build_deck() -> Deck:
         "Wang et al. (2023), Eq. 9 · docs/paper-code-walkthrough.md §6",
         notes_for("Wang et al., ICCV 2023, Eq. 9; docs/paper-code-walkthrough.md §6"))
     show_equation(p, r"\mathrm{DIRE}(x_0)=\left|x_0-\mathcal{R}\!\left(\mathcal{I}(x_0)\right)\right|",
-                  115, 143, 730, 76, "Absolute error, pixel-wise and channel-wise; output is a 3-channel image.", 29)
-    items=[("Input", "x₀", "RGB image", "bluep", "teal"),
-           ("Invert", "I(x₀)", "DDIM S steps", "purple", "white"),
-           ("Reconstruct", "R(I(x₀))", "DDIM S steps", "teal", "white"),
-           ("Residual", "|x₀ − x̂₀|", "DIRE map", "goldp", "gold")]
+                  115, 143, 730, 76, "Sai số tuyệt đối theo từng điểm ảnh và kênh; đầu ra là bản đồ ba kênh.", 29)
+    items=[("Đầu vào", "x₀", "ảnh RGB", "bluep", "teal"),
+           ("Đảo", "I(x₀)", "DDIM · S bước", "purple", "white"),
+           ("Tái tạo", "R(I(x₀))", "DDIM · S bước", "teal", "white"),
+           ("Sai số", "|x₀ − x̂₀|", "bản đồ DIRE", "goldp", "gold")]
     for i,(title,eq,sub,fill,accent) in enumerate(items):
         x=64+i*225; arrow_box(p,x,286,178,104,title,eq+"\n"+sub,fill,accent)
         if i<3:p.arrow(x+182,337,x+216,337,"muted",1.3)
-    p.text(119, 424, 724, 35, "Lớn hơn không tự động có nghĩa 'fake'; classifier học phân phối map từ dữ liệu có nhãn.", 13, "red", bold=True, align="center")
+    p.text(119, 424, 724, 35, "Bản đồ sai số lớn hơn không đồng nghĩa ảnh giả; bộ phân loại học quy luật từ dữ liệu có nhãn.", 13, "red", bold=True, align="center")
     p.note()
 
     # 17 mechanisms / abs ablation
-    p = d.page("07 · Ablation paper", "Lấy trị tuyệt đối cải thiện độ ổn định của residual trong Table 6",
+    p = d.page("07 · Phân tích loại bỏ", "Lấy trị tuyệt đối làm sai số ổn định hơn trong Bảng 6 bài báo",
         "Wang et al. (2023), Table 6 · docs/dire-tu-so-0.pdf §7.2",
         notes_for("Wang et al., ICCV 2023, Table 6 (paper-reported); docs/dire-tu-so-0.pdf p. 35"))
-    heading_sub(p, "Ví dụ minh họa trên detector ADM: Table 6 so sánh raw signed residual với |residual|; đây là paper result, không phải pilot.")
-    p.table(104, 159, 752, ["Input", "ADM", "DDPM", "iDDPM", "PNDM", "SD-v1"],
-            [["Signed residual", "100 / 100", "99.4 / 100", "100 / 100", "98.2 / 100", "87.0 / 93.0"],
-             ["Absolute residual", "100 / 100", "100 / 100", "100 / 100", "99.7 / 100", "99.7 / 100"]],
+    heading_sub(p, "Bảng 6 so sánh sai số có dấu với trị tuyệt đối của sai số; đây là số liệu bài báo.")
+    p.table(104, 159, 752, ["Dạng sai số", "ADM", "DDPM", "iDDPM", "PNDM", "SD-v1"],
+            [["Có dấu", "100 / 100", "99.4 / 100", "100 / 100", "98.2 / 100", "87.0 / 93.0"],
+             ["Trị tuyệt đối", "100 / 100", "100 / 100", "100 / 100", "99.7 / 100", "99.7 / 100"]],
             [170,116,116,116,116,118], 63, 12)
     p.rect(186, 350, 590, 62, "greenp", stroke="teal", radius=12)
-    p.text(204, 362, 554, 37, "Largest listed change: SD-v1 ACC 87.0 → 99.7 (percentage points).", 13, "teal", bold=True, align="center", valign="mid")
-    p.text(124, 434, 708, 35, "The result supports the chosen representation; it does not establish a universal mechanism.", 11, "muted", align="center")
+    p.text(204, 362, 554, 37, "Mức tăng lớn nhất: ACC của SD-v1 từ 87,0 lên 99,7 (điểm phần trăm).", 13, "teal", bold=True, align="center", valign="mid")
+    p.text(124, 434, 708, 35, "Kết quả ủng hộ biểu diễn được chọn nhưng không chứng minh cơ chế phổ quát.", 11, "muted", align="center")
     p.note()
 
     # 18 preprocessing
@@ -1899,41 +1933,41 @@ def build_deck() -> Deck:
     p.note()
 
     # 21 one logit BCE
-    p = d.page("09 · Detector objective", "DIRE ResNet emits one logit; sigmoid converts it to P(fake)",
-        "docs/dire-tu-so-0.pdf §2.2 · Table 4 train.json",
+    p = d.page("09 · Mục tiêu bộ phân loại", "ResNet DIRE tạo một logit; sigmoid cho xác suất ảnh được tạo",
+        "docs/dire-tu-so-0.pdf §2.2 · train.json của Bảng 4",
         notes_for("docs/dire-tu-so-0.pdf pp. 20–21; Table 4 train ledger fields"))
     show_equation(p, r"z=f_{\theta}(\mathrm{DIRE}(x)),\qquad P(y=1\mid x)=\sigma(z)=\frac{1}{1+e^{-z}}",
-                  88, 145, 784, 61, "Label convention: y=1 denotes generated/fake in the binary detector.", 21)
+                  88, 145, 784, 61, "Quy ước nhãn: y=1 ứng với ảnh tạo trong bộ phân loại nhị phân.", 21)
     show_equation(p, r"\mathcal{L}_{\mathrm{BCE}}=-\left[y\log\sigma(z)+(1-y)\log\left(1-\sigma(z)\right)\right]",
-                  102, 242, 756, 64, "Training uses BCEWithLogitsLoss for numerical stability.", 20)
-    p.card(82, 356, 360, 82, "Why one logit matters", "The published head shape is [1, 2048]; a 2-logit softmax head is not interchangeable.", "gold", "goldp", 14, 11.2)
-    p.card(482, 356, 394, 82, "Why ImageNet initialization", "Transfer learning initializes visual features; pilot protocol records ImageNet init and an independent detector per S.", "teal", "bluep", 14, 11.2)
+                  102, 242, 756, 64, "Hàm mất mát BCEWithLogits giúp ổn định phép tính.", 20)
+    p.card(82, 356, 360, 82, "Vì sao dùng một logit", "Đầu ra công bố có kích thước [1, 2048]; không thể thay bằng đầu softmax hai logit.", "gold", "goldp", 14, 11.2)
+    p.card(482, 356, 394, 82, "Khởi tạo ImageNet", "Khởi tạo cung cấp đặc trưng thị giác; mỗi mức S có một bộ phân loại riêng.", "teal", "bluep", 14, 11.2)
     p.note()
 
     # 22 evaluation metrics
     p = d.page("10 · Đánh giá", "ACC chọn một ngưỡng; AP đánh giá thứ hạng trên toàn dải ngưỡng",
-        "docs/dire-tu-so-0.pdf §2.5 · score/eval source",
+        "docs/dire-tu-so-0.pdf §2.5 · nguồn định nghĩa chỉ số",
         notes_for("docs/dire-tu-so-0.pdf p. 22; official paper reports ACC and AP"))
-    metrics=[("ACC", r"\frac{1}{N}\sum_i\mathbf{1}\!\left[(s_i>\tau)=y_i\right]", "Depends on a fixed threshold τ."),
-             ("AP", r"\sum_k (R_k-R_{k-1})P_k", "Area / discrete sum along precision–recall; threshold-free ranking summary."),
-             ("AUC", r"\int_0^1 \mathrm{TPR}(u)\,du", "Area under ROC; compare with caution under domain shift.")]
+    metrics=[("ACC", r"\frac{1}{N}\sum_i\mathbf{1}\!\left[(s_i>\tau)=y_i\right]", "Tỷ lệ đúng tại một ngưỡng cố định."),
+             ("AP", r"\sum_k (R_k-R_{k-1})P_k", "Diện tích dưới đường precision–recall; không phụ thuộc một ngưỡng."),
+             ("AUC", r"\int_0^1 \mathrm{TPR}(u)\,du", "Diện tích dưới ROC; thận trọng khi khác miền dữ liệu.")]
     for i,(name,tex,desc) in enumerate(metrics):
         x=55+i*290; p.rect(x,168,265,200,"paper",stroke="line",radius=12)
         p.text(x+16,182,232,24,name,17,"teal",bold=True,align="center")
         p.formula(tex,x+15,224,235,48,size=18)
         p.text(x+18,282,228,63,desc,11,"muted",align="center",valign="mid")
     p.rect(103, 402, 754, 54, "goldp", stroke="gold", radius=10)
-    p.text(120, 412, 720, 34, "Protocol guard: choose epoch and threshold on validation; test is for final evaluation only.", 13, "ink", bold=True, align="center", valign="mid")
+    p.text(120, 412, 720, 34, "Chọn epoch và ngưỡng trên tập xác thực; chỉ dùng tập kiểm thử để đánh giá cuối.", 13, "ink", bold=True, align="center", valign="mid")
     p.note()
 
     # 23 provenance levels
-    p = d.page("11 · Provenance", "R1+R2 means self-computed maps and self-trained detector — not self-generated images",
-        "docs/adr-0006-reproduction-levels.md · report.json provenance fields",
+    p = d.page("11 · Nguồn gốc kết quả", "R1+R2 là tự tính bản đồ và huấn luyện bộ phân loại, không phải tự tạo ảnh",
+        "docs/adr-0006-reproduction-levels.md · trường nguồn gốc trong report.json",
         notes_for("docs/adr-0006-reproduction-levels.md; modal-runs/runs/report.json data.note"))
-    labels=[("R0", "Re-score", "author map + author detector", "grayp", "muted"),
-            ("R1", "Recompute map", "self-computed DIRE", "bluep", "teal"),
-            ("R2", "Retrain detector", "self-trained classifier", "greenp", "teal"),
-            ("R3", "Regenerate source images", "own generator / data", "goldp", "gold")]
+    labels=[("R0", "Chấm lại", "bản đồ và bộ phân loại của tác giả", "grayp", "muted"),
+            ("R1", "Tính lại bản đồ", "DIRE do nhóm tự tính", "bluep", "teal"),
+            ("R2", "Huấn luyện lại", "bộ phân loại của nhóm", "greenp", "teal"),
+            ("R3", "Tự tạo ảnh nguồn", "bộ sinh / dữ liệu của nhóm", "goldp", "gold")]
     for i,(tag,head,body,fill,col) in enumerate(labels):
         x=56+i*222; p.rect(x,185,197,145,fill,stroke="line",radius=12)
         p.badge(x+15,199,61,tag,fill,col,10)
@@ -1941,7 +1975,7 @@ def build_deck() -> Deck:
         p.text(x+16,267,167,50,body,11,"muted")
     p.rect(124, 369, 714, 68, "bluep", stroke="teal", radius=11)
     p.text(145, 381, 672, 44,
-           "Repo report label: R1+R2. The diffusion checkpoint and source dataset are not project-trained; fake images are marked author-sourced, so do not claim R3.",
+           "Báo cáo của nhóm ghi mức R1+R2. Mô hình khuếch tán và tập dữ liệu không do nhóm huấn luyện; ảnh tạo do tác giả cung cấp, vì vậy không tuyên bố R3.",
            12.5, "ink", bold=True, align="center", valign="mid")
     p.note()
 
@@ -2009,7 +2043,7 @@ def build_deck() -> Deck:
     p.table(55, 155, 850, ["Steps", "ADM", "DDPM", "iDDPM", "PNDM", "SD-v1"], paper_t4,
             [106,148,148,148,148,152], 45, 10.8)
     p.rect(91, 391, 778, 67, "goldp", stroke="gold", radius=10)
-    p.text(110, 402, 740, 45, "Paper protocol and full test data; S=20→50 multiplies NFE by 2.5. These rows are paper-reported, not the project's Table 4 ledger.", 12, "ink", bold=True, align="center", valign="mid")
+    p.text(110, 402, 740, 45, "Kết quả bài báo dùng dữ liệu kiểm thử đầy đủ; không đồng nhất với số đo thí điểm của nhóm.", 12, "ink", bold=True, align="center", valign="mid")
     p.note()
 
     # 28 Paper Table5
@@ -2028,120 +2062,111 @@ def build_deck() -> Deck:
     p.text(140, 416, 680, 32, "RGB + DIRE can underperform DIRE alone: extra features may invite shortcut learning.", 12.4, "teal", bold=True, align="center", valign="mid")
     p.note()
 
-    # 29 Figure4 paper robustness
-    p = d.page("12 · Paper evidence", "Paper Figure 4 reports qualitative robustness to blur and JPEG compression",
-        "Wang et al. (2023), Figure 4 · docs/dire-tu-so-0.pdf pp. 39–40",
-        notes_for("Wang et al., ICCV 2023, Figure 4; PDF does not provide the underlying numeric table"))
-    conditions=[("Clean", "reference"),("Blur σ=1", "mild"),("Blur σ=2", "medium"),("Blur σ=3", "strong"),("JPEG q=65", "compressed"),("JPEG q=30", "heavy compression")]
-    for i,(a,b) in enumerate(conditions):
-        x=53+i*148; arrow_box(p,x,190,130,95,a,b,"bluep" if i==0 else "grayp","teal")
-    p.rect(93, 329, 773, 101, "goldp", stroke="gold", radius=12)
-    p.text(113, 343, 732, 71,
-           "Paper's qualitative claim: DIRE changes little; RGB baselines degrade more. The plot's pixel values are not tabulated in the cited paper copy, so this deck does not invent exact AP points.",
-           13, "ink", bold=True, align="center", valign="mid")
+    # User-provided original Figure 4 plot, with its caption separated as editable slide text.
+    p = d.page("12 · Hình gốc từ bài báo", "Độ bền của detector trước blur và JPEG compression",
+        "Wang et al. (2023), Figure 4 · hình gốc do người dùng cung cấp",
+        notes_for("Original Figure 4 from Wang et al. (2023), provided by the user; plots report paper robustness comparisons, not measurements from this project."))
+    p.image(ILLUSTRATIONS / "official_paper_figure4_plot.png", 136, 123, 688, 343,
+            "Các đồ thị Figure 4: AP dưới Gaussian blur (Sigma) và JPEG compression (Quality); so sánh detector theo bộ sinh")
+    p.text(105, 466, 750, 34,
+           "Hình 4. Độ bền trước nhiễu chưa gặp: hàng trên là Gaussian blur, hàng dưới là JPEG compression.\n"
+           "* Kết quả huấn luyện tái hiện trên tập con ADM của DiffusionForensics; AP (%) dùng để so sánh độ bền.",
+           9.2, "muted")
     p.note()
 
-    # 30 AEROBLADE
-    p = d.page("13 · Họ hàng phương pháp", "AEROBLADE shares the reconstruction-error intuition but uses an autoencoder",
-        "Ricker et al. (CVPR 2024) · docs/dire-tu-so-0.pdf §9.8",
-        notes_for("Ricker et al., AEROBLADE, CVPR 2024; docs/dire-tu-so-0.pdf pp. 43–44"))
-    p.table(107, 176, 746, ["Property", "DIRE", "AEROBLADE"], [
-        ["Transform", "ADM diffusion · invert + reconstruct", "LDM autoencoder · encode + decode"],
-        ["Domain / score", "Pixel residual |x−x̂|", "Latent reconstruction · LPIPS"],
-        ["Decision", "ResNet-50 trained on DIRE maps", "Threshold / training-free"],
-        ["Compute", "2S diffusion network evaluations", "One AE reconstruction path"],
-        ["Applicability", "Broad generated-image benchmark", "Latent-diffusion images"],
-    ], [151,300,295], 48, 10.3)
-    p.text(139, 457, 685, 25, "Related work, not a result or feature implemented by this project's prototype.", 11.2, "muted", italic=True, align="center")
-    p.note()
-
-    # 32 Rebuild report inventory
+    # 32 Selected study-scale and protocol values; omit bookkeeping counters/NFE.
     dire = REPORT.get("dire", {})
-    distinct_maps = int(dire.get("n_distinct_maps", dire.get("n", 0)))
-    nfe_total = int(dire.get("nfe_total", 0))
-    run_count = int(dire.get("n_runs", 0))
-    n_new = int(dire.get("n_new_cumulative", 0))
-    n_reused = int(dire.get("n_reused_cumulative", 0))
-    p = d.page("15 · Project measurements", f"Rebuild {REBUILD_RUN_ID} records {distinct_maps:,} distinct DIRE maps",
+    map_count = int(dire.get("n", 0))
+    p = d.page("15 · Số đo của nhóm", "Quy mô và thiết lập tính bản đồ DIRE",
         str(REPORT_PATH.relative_to(ROOT)),
-        notes_for(f"{REPORT_PATH.relative_to(ROOT)}; run_id={REBUILD_RUN_ID}; "
-                  "report's n_note defines unique maps separately from cumulative counters"))
-    report_cards=[("Distinct maps", f"{distinct_maps:,}", "n_distinct_maps"),
-                  ("DDIM setting", f"S={dire.get('steps', '—')}", "steps_mixed=[20]"),
-                  ("NFE recorded", f"{nfe_total:,}", "rebuild report"),
-                  ("DIRE runs", str(run_count), "per run ledger")]
+        notes_for(f"{REPORT_PATH.relative_to(ROOT)}; chỉ giữ quy mô bản đồ, bước DDIM và mức kết quả do nhóm báo cáo"))
+    report_cards=[("Số bản đồ DIRE", f"{map_count:,}".replace(",", "."), "dire.n"),
+                  ("Bước DDIM", f"S={dire.get('steps', '—')}", "Thiết lập tái tạo"),
+                  ("Phạm vi", "R1 + R2", "Nhãn kết quả")]
     for i,(a,b,c) in enumerate(report_cards):
-        label_value(p,52+i*221,158,198,a,b,"gold" if i==3 else "teal",18 if i==3 else 21,"paper")
-        p.text(63+i*221, 246, 176, 26, c, 9.6, "muted", align="center")
-    p.rect(80, 299, 800, 123, "bluep", stroke="teal", radius=12)
-    p.text(99, 311, 761, 92,
-           f"Rebuild ledger: n_new cumulative={n_new:,}; n_reused cumulative={n_reused:,}. These counters span {run_count} runs and are not counts of unique files; the report defines n_distinct_maps={distinct_maps:,} separately. Do not sum cumulative counters as a distinct-map total.",
-           12.2, "ink", bold=True, align="center", valign="mid")
-    p.text(104, 438, 755, 35, "Source: rebuild namespace only; do not mix with modal-runs/runs/report.json.", 12, "teal", bold=True, align="center")
+        label_value(p,80+i*277,170,240,a,b,"teal",19 if i==2 else 21,"paper")
+        p.text(91+i*277, 258, 218, 26, c, 9.6, "muted", align="center")
+    p.rect(106, 326, 748, 82, "bluep", stroke="teal", radius=12)
+    p.text(128, 340, 704, 54,
+           "Các thông tin trên mô tả quy mô dữ liệu và thiết lập tái tạo; không phải chỉ số hiệu năng của bộ phân loại.",
+           13.0, "ink", bold=True, align="center", valign="mid")
+    p.text(104, 438, 755, 35, "Nguồn: report.json do nhóm nghiên cứu cung cấp.", 11, "teal", bold=True, align="center")
     p.note()
 
-    # 33 latest per-generator training metrics in the rebuild namespace
-    p = d.page("15 · Project measurements", f"Kết quả huấn luyện khác nhau giữa các bộ sinh · {REBUILD_RUN_ID}",
-        f"{REPORT_PATH.relative_to(ROOT)}:train_by_generator",
-        notes_for(f"{REPORT_PATH.relative_to(ROOT)} train_by_generator; per-generator split and provenance in {REBUILD_ROOT.relative_to(ROOT)}/train/gen-*/train.json"))
-    names=[k.removeprefix("gen-") for k in REPORT.get("train_by_generator",{})]
+    # 33 Per-generator results from the group's train ledger; omit aggregate "fake" row and epoch metadata.
+    p = d.page("15 · Số đo của nhóm", "Hiệu năng kiểm thử theo từng bộ sinh",
+        str(TRAIN_PATH.relative_to(ROOT)) + ":by_generator",
+        notes_for(f"{TRAIN_PATH.relative_to(ROOT)}:by_generator; run-level details and split provenance remain in the source ledger"))
+    train_rows = TRAIN.get("by_generator", {})
+    names=[k.removeprefix("gen-") for k in train_rows if k != "gen-fake"]
     rows=[]
+    display_names={"adm":"ADM", "dalle2":"DALL·E 2", "ddpm":"DDPM", "diff-projectedgan":"Diff.-ProjectedGAN",
+                   "diff-stylegan":"Diff.-StyleGAN", "iddpm":"iDDPM", "if":"IF"}
     for name in names:
-        m=REPORT["train_by_generator"]["gen-"+name]
-        rows.append([name, f"{m.get('acc',0)*100:.1f}%", f"{m.get('ap',0)*100:.1f}%", f"{m.get('auc',0)*100:.1f}%", str(m.get("n","—")), str(m.get("best_epoch","—"))])
-    p.table(73, 150, 814, ["Run tag", "ACC", "AP", "AUC", "n", "Best epoch"], rows,
-            [202,122,122,122,106,140], 31, 9.8)
+        m=train_rows["gen-"+name]
+        rows.append([display_names.get(name,name), f"{m.get('acc',0)*100:.1f}%".replace(".", ","), f"{m.get('ap',0)*100:.1f}%".replace(".", ","), f"{m.get('auc',0)*100:.1f}%".replace(".", ","), str(m.get("n","—"))])
+    p.table(73, 150, 814, ["Bộ sinh", "ACC", "AP", "AUC", "n kiểm thử"], rows,
+            [260,145,145,145,119], 34, 10.5)
     p.rect(91, 465, 778, 31, "goldp", stroke="gold", radius=8)
-    p.text(104, 470, 750, 21, "R1+R2 · chia tập theo mã băm · khởi tạo từ đầu · 2.000 mẫu kiểm thử mỗi bộ sinh; không phải Table 2 bài báo.", 9.8, "ink", bold=True, align="center", valign="mid")
+    p.text(104, 470, 750, 21,
+           "Số liệu do nhóm ghi nhận; cỡ mẫu thay đổi theo bộ sinh. Khác dữ liệu và quy trình so với Bảng 2 bài báo.",
+           9.6, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    # 34 heldout eval from the matching rebuild namespace
-    m=EVAL.get("metrics",{})
-    p = d.page("15 · Project measurements", f"Rebuild ADM eval reports AP={m.get('ap',0):.3f} on self-computed DIRE maps",
-        str(EVAL_PATH.relative_to(ROOT)),
-        notes_for(f"{EVAL_PATH.relative_to(ROOT)}; run_id={REBUILD_RUN_ID}; score is repository-recorded and not comparable to paper Table 2"))
-    for i,(label,val) in enumerate([("Test n",str(m.get("n","—"))),
-                                    ("ACC · val threshold",f"{m.get('acc',0)*100:.1f}%"),
-                                    ("AP",f"{m.get('ap',0)*100:.1f}%"),
-                                    ("AUC",f"{m.get('auc',0)*100:.1f}%")]):
+    # 34 aggregate ADM evaluation from the selected summary and its detail ledger.
+    m=EVAL_SUMMARY.get("by_tag", {}).get("gen-adm", {})
+    detail_metrics=EVAL_DETAIL.get("metrics", {})
+    threshold_prob=float(EVAL_DETAIL.get("threshold_prob", detail_metrics.get("threshold", 0.5)))
+    ci=m.get("acc_ci95", detail_metrics.get("acc_ci95", []))
+    ci_text = "–" if len(ci) != 2 else f"{100*ci[0]:.1f}–{100*ci[1]:.1f}%".replace(".", ",")
+    def pct_vn(value: float) -> str:
+        return f"{value*100:.1f}%".replace(".", ",")
+    threshold_text = f"{threshold_prob:.6f}".replace(".", ",")
+    p = d.page("15 · Số đo của nhóm", "Đánh giá ADM trên bản đồ DIRE tự tính",
+        str(EVAL_PATH.relative_to(ROOT)) + " · chi tiết: " + str(DETAIL_EVAL_PATH.relative_to(ROOT)),
+        notes_for(f"Tóm tắt từ {EVAL_PATH.relative_to(ROOT)}; ngưỡng và ma trận từ {DETAIL_EVAL_PATH.relative_to(ROOT)}; khoảng tin cậy được giữ nguyên cảnh báo"))
+    for i,(label,val) in enumerate([("Mẫu kiểm thử",f"{int(m.get('n',0)):,}".replace(",", ".")),
+                                    ("ACC",pct_vn(m.get('acc',0))),
+                                    ("AP",pct_vn(m.get('ap',0))),
+                                    ("AUC",pct_vn(m.get('auc',0))) ]):
         label_value(p,58+i*214,158,190,label,val,"teal",22)
     p.rect(75, 277, 810, 111, "goldp", stroke="gold", radius=12)
     p.text(94, 287, 770, 91,
-           f"CHECKPOINT / THRESHOLD CAVEAT: val-selected P(fake) threshold={EVAL.get('threshold_prob', 0.5):.6f}; fixed-threshold ACC@0.5={m.get('acc_at_0.5', 0)*100:.1f}%. The rebuild report also warns that eval SHA {str(EVAL.get('detector_sha256', '—'))[:12]} differs from the current ADM detector checkpoint; re-run evaluate before calling this the latest checkpoint result.",
-           11.0, "ink", bold=True, align="center", valign="mid")
+           f"ACC={pct_vn(m.get('acc',0))}. Khoảng tin cậy 95% được ghi là {ci_text}, không bao gồm ACC; số liệu này cần được kiểm tra trước khi trích dẫn.",
+           12.0, "ink", bold=True, align="center", valign="mid")
     p.text(123, 410, 706, 50,
-           "R1+R2 · hash split · from-scratch detector · repository-recorded evaluation, not an absolute Table 2 comparison.",
-           12, "ink", bold=True, align="center")
+           "Bộ phân loại huấn luyện từ đầu; quy trình khác bài báo nên không so sánh trực tiếp với Bảng 2.",
+           11.5, "ink", bold=True, align="center")
     p.note()
 
-    # 35 · Confusion matrix: counts, not only a single accuracy percentage.
-    cm = EVAL.get("metrics", {}).get("confusion", {})
-    p = d.page("15 · Project measurements", "Rebuild ADM confusion matrix at the validation-selected threshold",
-        str(EVAL_PATH.relative_to(ROOT)) + " · test split · threshold selected on validation",
-        notes_for(f"{EVAL_PATH.relative_to(ROOT)}; confusion counts with positive class = generated/fake"))
-    p.text(111, 155, 710, 25, "Dự đoán của detector", 14, "muted", bold=True, align="center")
+    # 35 · Confusion matrix from the matching detailed evaluation file.
+    cm = detail_metrics.get("confusion", {})
+    p = d.page("15 · Số đo của nhóm", "Ma trận nhầm lẫn ADM trên tập kiểm thử",
+        str(DETAIL_EVAL_PATH.relative_to(ROOT)) + " · ngưỡng chọn trên tập xác thực",
+        notes_for(f"{DETAIL_EVAL_PATH.relative_to(ROOT)}; confusion counts with positive class = generated/fake"))
+    p.text(111, 155, 710, 25, "Dự đoán của bộ phân loại", 14, "muted", bold=True, align="center")
     p.text(363, 182, 210, 22, "Dự đoán: ảnh thật", 11, "teal", bold=True, align="center")
-    p.text(583, 182, 210, 22, "Dự đoán: ảnh sinh", 11, "red", bold=True, align="center")
-    p.text(58, 250, 190, 24, "Thực tế: ảnh thật", 12, "ink", bold=True, align="center", valign="mid")
-    p.text(58, 362, 190, 24, "Thực tế: ảnh sinh", 12, "ink", bold=True, align="center", valign="mid")
+    p.text(583, 182, 210, 22, "Dự đoán: ảnh tạo", 11, "red", bold=True, align="center")
+    p.text(58, 250, 190, 24, "Nhãn thật: ảnh thật", 12, "ink", bold=True, align="center", valign="mid")
+    p.text(58, 362, 190, 24, "Nhãn thật: ảnh tạo", 12, "ink", bold=True, align="center", valign="mid")
     matrix_cells = [
-        (270, 211, cm.get("tn", 0), "TN · thật → thật", "greenp", "teal"),
-        (490, 211, cm.get("fp", 0), "FP · thật → sinh", "redp", "red"),
-        (270, 323, cm.get("fn", 0), "FN · sinh → thật", "redp", "red"),
-        (490, 323, cm.get("tp", 0), "TP · sinh → sinh", "greenp", "teal"),
+        (270, 211, cm.get("tn", 0), "Thật → thật", "greenp", "teal"),
+        (490, 211, cm.get("fp", 0), "Thật → ảnh tạo", "redp", "red"),
+        (270, 323, cm.get("fn", 0), "Ảnh tạo → thật", "redp", "red"),
+        (490, 323, cm.get("tp", 0), "Ảnh tạo → ảnh tạo", "greenp", "teal"),
     ]
     for x, y, count, label, fill, accent in matrix_cells:
         p.rect(x, y, 210, 100, fill, stroke=accent, radius=12)
         p.text(x+8, y+12, 194, 48, f"{count:,}".replace(",", "."), 28, accent, bold=True, align="center", valign="mid")
         p.text(x+8, y+66, 194, 20, label, 10.4, "ink", bold=True, align="center", valign="mid")
-    n = int(EVAL.get("metrics", {}).get("n", sum(int(v) for v in cm.values())))
+    n = int(detail_metrics.get("n", sum(int(v) for v in cm.values())))
     correct = int(cm.get("tn", 0)) + int(cm.get("tp", 0))
     p.rect(129, 450, 702, 43, "bluep", stroke="line", radius=9)
     n_label = format(n, ",").replace(",", ".")
     correct_label = format(correct, ",").replace(",", ".")
     acc_label = f"{100*correct/max(n,1):.1f}".replace(".", ",")
     p.text(143, 457, 674, 29,
-           f"Đúng {correct_label}/{n_label} mẫu · {acc_label}%  |  Ngưỡng {EVAL.get('threshold_prob', 0.5):.5f} chọn trên validation · lớp dương = ảnh sinh",
+           f"Phân loại đúng {correct_label}/{n_label} mẫu ({acc_label}%) · lớp cần nhận diện: ảnh tạo",
            10.6, "ink", bold=True, align="center", valign="mid")
     p.note()
 
@@ -2161,20 +2186,23 @@ def build_deck() -> Deck:
     for generator in gallery_generators:
         entries = gallery_entries_for(generator)
         if entries:
-            # Stable sample choice: alphabetically first valid gallery metadata record.
-            representatives.append((generator, generator_labels.get(generator, generator), entries[0]))
+            # First prefer a sample with a correct exact-ID score from a non-ADM
+            # evaluator; then maximize correct predictions and minimize errors.
+            selected = min(entries, key=lambda entry: representative_rank(entry[0]))
+            representatives.append((generator, generator_labels.get(generator, generator), selected))
     for page_start in range(0, len(representatives), 4):
         batch = representatives[page_start:page_start + 4]
         page_end = page_start + len(batch)
         p = d.page(
             "16 · Ví dụ đa bộ sinh",
-            f"Một ảnh đại diện đã chọn cho mỗi model · {page_start + 1}–{page_end}/{len(representatives)}",
-            "modal-runs/gallery · modal-runs/runs/rebuild/rebuild-2026-10-14/eval/gen-adm/scores.json",
+            f"Một ảnh đại diện cho mỗi mô hình · {page_start + 1}–{page_end}/{len(representatives)}",
+            "Thư viện ảnh · chỉ dùng điểm số khớp mã mẫu; bỏ dự đoán ADM",
             notes_for(
-                "One alphabetically first gallery record per model; original and display-map PNG SHA-256 "
-                "verified against metadata. Sample predictions are joined by exact sample ID from "
-                f"{ADM_SCORES_PATH.relative_to(ROOT)}; unmatched samples are explicitly marked. "
-                f"Detector SHA={EVAL.get('detector_sha256', '—')}; report flags it as different from the current detector checkpoint."
+                "Gallery representative selection prefers an exact-ID correct prediction when available, "
+                "using scores from rebuild eval/gen-* except gen-adm; ties are deterministic. Original and "
+                "display-map PNG SHA-256 are verified against metadata. Unmatched samples are explicitly "
+                "marked and no score is inferred. Applicable report warnings: "
+                + ("; ".join(SCORE_PROVENANCE_WARNINGS) or "none recorded")
             ),
         )
         for row, (generator, label, (meta, original, dire_map)) in enumerate(batch):
@@ -2185,42 +2213,39 @@ def build_deck() -> Deck:
             p.text(x + 12, y + 7, 406, 20, f"{label}  ·  {sample_name}",
                    11.2, "ink", bold=True, font_name=FONT_PPT_DISPLAY)
             p.text(x + 12, y + 28, 98, 13, "ẢNH GỐC", 7.8, "muted", bold=True, align="center")
-            p.text(x + 118, y + 28, 98, 13, "DIRE MAP", 7.8, "muted", bold=True, align="center")
-            p.text(x + 224, y + 28, 194, 13, "DỰ ĐOÁN GEN-ADM", 7.8, "muted", bold=True, align="center")
+            p.text(x + 118, y + 28, 98, 13, "BẢN ĐỒ DIRE", 7.4, "muted", bold=True, align="center")
+            p.text(x + 224, y + 28, 194, 13, "ĐÁNH GIÁ BỔ SUNG", 7.8, "muted", bold=True, align="center")
             p.rect(x + 12, y + 43, 98, 98, "paper", stroke="line", radius=6)
             p.rect(x + 118, y + 43, 98, 98, "paper", stroke="line", radius=6)
             p.image(original, x + 13, y + 44, 96, 96, f"Ảnh gốc · {meta['name']}")
             p.image(dire_map, x + 119, y + 44, 96, 96, f"DIRE map hiển thị · {meta['name']}")
-            prediction, has_score = eval_prediction_for(meta)
+            prediction, has_score = prediction_card_text(meta)
             p.rect(x + 224, y + 43, 194, 98, "bluep" if has_score else "grayp", stroke="line", radius=6)
             p.text(x + 233, y + 49, 176, 86, prediction, 8.2, "ink", bold=has_score,
                    align="left", valign="mid")
         p.rect(65, 453, 830, 40, "goldp", stroke="gold", radius=8)
         p.text(78, 459, 804, 29,
-               "Kết quả lấy từ gen-adm; report cảnh báo SHA detector khác checkpoint hiện tại. "
-               "Chưa có reconstruction ADM/DDIM thật để trình bày.",
-               8.6, "ink", bold=True, align="center", valign="mid")
+               "Không dùng dự đoán ADM; chỉ hiển thị điểm số khớp mã mẫu. "
+               "Chưa có ảnh tái tạo ADM/DDIM thực tế.",
+               8.1, "ink", bold=True, align="center", valign="mid")
         p.note()
 
     # 38 Table4 design
-    p = d.page("17 · Table 4 pilot", "Pilot protocol shares a fixed 200-per-cell subset across S settings",
-        "Table 4 ledger · _subset_protocol.json · sampling protocol",
-        notes_for("modal-runs/experiments/experiments/table4/table4-lsun-pilot; local repository artifact; live Volume not checked"))
-    p.table(85, 154, 790, ["Protocol field", "Repo-recorded value"], [
-        ["Subset / seed", "lsun-pilot · 3407"],
-        ["Sampling rule", "deterministic per-cell ranking"],
-        ["Images / cell", "200 maximum · 10 cells · up to 2,000 rows"],
-        ["Train generator", "ADM"],
-        ["Test generators", "ADM, DDPM, iDDPM, PNDM, SD-v2"],
-        ["Detector initialization", "ImageNet ResNet-50 · seed 3407"],
-        ["Training actually recorded", "batch 32 · lr 1e−4 · crop 224 · early stopping"],
-    ], [240,550], 37, 10.2)
+    p = d.page("17 · Thí điểm Bảng 4", "Giao thức dùng chung một tập con 200 ảnh cho mỗi mức S",
+        "Sổ Bảng 4 · giao thức lấy mẫu",
+        notes_for("Modal run table4 pilot; local artifact, online data volume not checked"))
+    p.table(85, 154, 790, ["Nội dung", "Thiết lập của nhóm"], [
+        ["Tập con", "LSUN · seed 3407 · chọn mẫu xác định"],
+        ["Cỡ mẫu", "200 ảnh mỗi ô; 400 mẫu kiểm thử mỗi ô"],
+        ["Bộ sinh", "Huấn luyện: ADM · kiểm thử: ADM, DDPM, iDDPM, PNDM, SD-v2"],
+        ["Bộ phân loại", "ResNet-50 khởi tạo ImageNet; mô hình riêng theo từng S"],
+    ], [240,550], 55, 11.2)
     p.note()
 
     # 38 pilot score matrix as compact multiples: only measured S settings.
-    p = d.page("17 · Table 4 pilot", "Biểu đồ tách AP và ACC cho ba mức S đã đo",
-        "table4.json: per-generator test metrics · ACC threshold=0.5",
-        notes_for("Values are repository pilot metrics, percentages; AP threshold-independent, ACC at 0.5. Only measured settings S=5/10/20 are plotted."))
+    p = d.page("17 · Thí điểm Bảng 4", "So sánh AP và ACC ở ba mức S đã đo",
+        "Số liệu kiểm thử theo bộ sinh · ACC tại ngưỡng 0,5",
+        notes_for("Group pilot metrics; AP threshold-independent, ACC at 0.5. Only measured settings S=5/10/20 are plotted."))
     gens=["adm","ddpm","iddpm","pndm","sdv2"]
     colors={"ap":"teal","acc":"purple"}
     for j,sval in enumerate([5,10,20]):
@@ -2241,7 +2266,7 @@ def build_deck() -> Deck:
                 bar=max(1,(val-85)/15*112)
                 by=yy+k*12
                 p.rect(x0+83,by,bar,7,col,radius=3)
-            p.text(x0+200,yy-1,65,13,f"{100*m['ap']:.1f} / {100*m['acc']:.1f}",7.6,"ink",align="right")
+            p.text(x0+200,yy-1,65,13,f"{100*m['ap']:.1f} / {100*m['acc']:.1f}".replace(".", ","),7.6,"ink",align="right")
         p.rect(x0+78,420,12,7,"teal",radius=3)
         p.text(x0+94,416,38,14,"AP",8.1,"muted")
         p.rect(x0+142,420,12,7,"purple",radius=3)
@@ -2251,9 +2276,9 @@ def build_deck() -> Deck:
     p.note()
 
     # 39 compare paper and pilot Table4
-    p = d.page("17 · Paper vs pilot", "Paper Table 4 and project Table 4 are not directly comparable experiments",
-        "Paper Table 4 · repo Table 4 ledger · different split size, generator and training protocol",
-        notes_for("Wang et al. (2023), Table 4; repo ledger. Paper uses SD-v1; pilot uses SD-v2, 200/cell, 32 batch and early-stopped ImageNet initialization."))
+    p = d.page("17 · Bài báo và thí điểm", "Bảng 4 của bài báo và của nhóm không phải thí nghiệm so sánh trực tiếp",
+        "Bảng 4 bài báo · sổ số liệu của nhóm · khác quy mô tập, bộ sinh và giao thức huấn luyện",
+        notes_for("Wang et al. (2023), Table 4; group ledger. Paper uses SD-v1; pilot uses SD-v2, 200/cell, 32 batch and early-stopped ImageNet initialization."))
     vals=[]
     for gen in ["adm","pndm"]:
         r=[gen.upper()]
@@ -2263,85 +2288,68 @@ def build_deck() -> Deck:
             pap={(5,"adm"):(100,100),(10,"adm"):(100,100),(20,"adm"):(100,100),
                  (5,"pndm"):(97.5,100),(10,"pndm"):(99.4,100),(20,"pndm"):(99.7,100)}[(sval,gen)]
             cur=s_metrics(sval,gen)
-            r.append(f"Paper {pap[0]:.1f}/{pap[1]:.1f}\nRepo {cur['acc']*100:.1f}/{cur['ap']*100:.1f}")
+            r.append(f"Bài báo {pap[0]:.1f}/{pap[1]:.1f}\nNhóm {cur['acc']*100:.1f}/{cur['ap']*100:.1f}".replace(".", ","))
         vals.append(r)
     p.table(94, 178, 772, ["Generator", "S=5 · ACC/AP", "S=10 · ACC/AP", "S=20 · ACC/AP"], vals,
             [142,210,210,210], 73, 11)
     p.rect(110, 410, 740, 58, "redp", stroke="red", radius=10)
-    p.text(127, 420, 706, 38, "Different: SD-v1 vs SD-v2; paper full data vs pilot; paper vs 200-per-cell; documented training protocol differs. No delta = reproduction claim.", 11, "red", bold=True, align="center", valign="mid")
+    p.text(127, 420, 706, 38, "Khác SD-v1/SD-v2, dữ liệu đầy đủ/tập thí điểm 200 ảnh mỗi ô và giao thức huấn luyện. Không diễn giải chênh lệch là kết quả tái lập.", 11, "red", bold=True, align="center", valign="mid")
     p.note()
 
     # 40 Table5 state
-    p = d.page("18 · Table 5", "Table 5 inputs are staged; this checkout contains no project result ledger",
-        "modal-runs/experiments/experiments/table5/table5-lsun-pilot/inputs/_protocol.json",
-        notes_for("Table 5 input protocol is present; no table5.json ledger is checked in"))
-    reps=[["REC", "reconstruction image"],["RGB", "raw image baseline"],["RGB_DIRE", "six-channel paired input"],["DIRE", "three-channel residual map"]]
+    p = d.page("18 · Bảng 5", "Đã chuẩn bị đầu vào; nhóm chưa có sổ kết quả Bảng 5",
+        "Giao thức đầu vào thí điểm Bảng 5",
+        notes_for("Table 5 input protocol is present; no result ledger is available"))
+    reps=[["REC", "ảnh tái tạo"],["RGB", "ảnh màu gốc"],["RGB_DIRE", "đầu vào ghép cặp sáu kênh"],["DIRE", "bản đồ sai số ba kênh"]]
     for i,(a,b) in enumerate(reps):
         x=69+i*217; arrow_box(p,x,177,184,100,a,b,"bluep" if i<3 else "greenp","teal")
     p.rect(113, 321, 734, 110, "goldp", stroke="gold", radius=12)
     p.text(135, 335, 688, 81,
-           "Repo protocol: S=20 · 40 NFE/image · 256×256 · float16 inputs. Inputs materialized; no Table 5 training/evaluation ledger found. REC needs reconstruction data, not residual .npy alone.",
+           "Đã chuẩn bị đầu vào với S=20 nhưng chưa có kết quả huấn luyện/đánh giá. REC cần ảnh tái tạo, không chỉ bản đồ sai số.",
            13, "ink", bold=True, align="center", valign="mid")
-    p.badge(331, 454, 296, "STATUS · INPUTS ONLY · NO METRICS", "goldp", "gold")
+    p.badge(331, 454, 296, "TRẠNG THÁI · CHỈ CÓ ĐẦU VÀO · CHƯA CÓ SỐ ĐO", "goldp", "gold")
     p.note()
 
     # 41 Table5 paper results and comparison
-    p = d.page("18 · Paper vs project Table 5", "The paper's representation ablation is available; this project's Table 5 remains unmeasured",
-        "Wang et al. (2023), Table 5 · current repo has protocol only",
-        notes_for("Paper values from docs/dire-tu-so-0.pdf p.36; current repo Table 5 protocol lists SD-v2 test data, no output ledger"))
+    p = d.page("18 · Bài báo và Bảng 5", "Bài báo có kết quả so sánh biểu diễn; nhóm chưa đo Bảng 5",
+        "Wang et al. (2023), Bảng 5 · nhóm hiện mới có giao thức",
+        notes_for("Paper values from docs/dire-tu-so-0.pdf p.36; group Table 5 protocol lists SD-v2 test data, no output ledger"))
     p.table(74, 163, 812, ["Representation", "Paper SD-v1 ACC/AP", "Pilot status"], [
-        ["REC", "46.9 / 57.0", "not measured"],
-        ["RGB", "77.4 / 85.8", "not measured"],
-        ["RGB_DIRE", "62.4 / 92.4", "not measured"],
-        ["DIRE", "99.7 / 100.0", "not measured"],
+        ["REC", "46.9 / 57.0", "chưa đo"],
+        ["RGB", "77.4 / 85.8", "chưa đo"],
+        ["RGB_DIRE", "62.4 / 92.4", "chưa đo"],
+        ["DIRE", "99.7 / 100.0", "chưa đo"],
     ], [200,252,360], 49, 11,
         cell_colors=[["ink","teal","gold"] for _ in range(4)])
-    p.text(121, 432, 717, 44, "The source protocol uses SD-v2; that differs from this paper SD-v1 table. These columns are deliberately not combined.", 12, "red", bold=True, align="center")
-    p.note()
-
-    # 42 Figure4 current
-    p = d.page("19 · Figure 4", "The project has a robustness protocol, but no Figure 4 results ledger",
-        "docs/table4-table5-figure4-runbook.md · repository artifact inventory",
-        notes_for("Figure 4 runbook; current checkout contains no experiments/figure4 ledger"))
-    conditions=[("clean", "baseline"),("blur σ=1", "Gaussian"),("blur σ=2", "Gaussian"),
-                ("blur σ=3", "Gaussian"),("JPEG q=65", "compression"),("JPEG q=30", "compression")]
-    for i,(a,b) in enumerate(conditions):
-        x=52+i*149; arrow_box(p,x,177,133,87,a,b,"grayp" if i else "bluep","teal")
-    p.arrow(85, 306, 872, 306, "muted", 1.4)
-    p.text(181, 286, 594, 18, "each condition × generator → measured AP shard → result ledger", 10.3, "muted", align="center")
-    p.rect(105, 352, 750, 91, "goldp", stroke="gold", radius=12)
-    p.text(126, 365, 708, 64,
-           "Planned matrix: 30 condition×generator shards (6×5), each comparing 2 project-trained detectors = 60 model-condition metrics. Current output: none found. Runner is not the paper's CNNDetection/PatchForensics baseline reproduction.",
-           12.1, "ink", bold=True, align="center", valign="mid")
-    p.badge(350, 462, 261, "NOT RUN / NO LEDGER", "goldp", "gold")
+    p.text(121, 432, 717, 44, "Giao thức của nhóm dùng SD-v2, khác với SD-v1 trong bảng bài báo; giữ riêng hai kết quả, không gộp để so sánh.", 12, "red", bold=True, align="center")
     p.note()
 
     # 43 subset architecture
-    p = d.page("20 · Subset / resumption", "One manifest locks sample identity across Table 4, Table 5 and Figure 4",
-        "docs/incremental-paper-subsets.md · repo subset protocol manifest",
+    p = d.page("20 · Tập con / chạy tiếp", "Một bản kê giữ nguyên mã mẫu giữa các Bảng 4, 5 và Hình 4",
+        "Giao thức tập con · bản kê mẫu",
         notes_for("docs/incremental-paper-subsets.md; subset manifest SHA from Table 4 ledger"))
     p.rect(74, 167, 312, 235, "bluep", stroke="teal", radius=13)
-    p.text(99, 183, 262, 25, "SNAPSHOT 200 / CELL", 14, "teal", bold=True, align="center")
+    p.text(99, 183, 262, 25, "BẢN CHỤP · 200 / Ô", 14, "teal", bold=True, align="center")
     for i in range(4):
         for j in range(4): p.circle(131+j*55,241+i*30,7,"teal" if (i+j)%3 else "mint")
-    p.text(108, 374, 242, 19, "up to 2,000 sample rows", 11,"ink",bold=True,align="center")
+    p.text(108, 374, 242, 19, "tối đa 2.000 mẫu", 11,"ink",bold=True,align="center")
     p.rect(574, 143, 312, 259, "greenp", stroke="teal", radius=13)
-    p.text(599, 158, 262, 25, "NESTED SNAPSHOT 400 / CELL", 13, "teal", bold=True, align="center")
+    p.text(599, 158, 262, 25, "BẢN CHỤP LỒNG · 400 / Ô", 13, "teal", bold=True, align="center")
     for i in range(5):
         for j in range(5): p.circle(628+j*42,220+i*27,5.7,"mint" if i<4 and j<4 else "teal")
-    p.text(607, 367, 246, 19, "up to 4,000 · contains 200 stage", 10.5,"ink",bold=True,align="center")
+    p.text(607, 367, 246, 19, "tối đa 4.000 · gồm 200 mẫu ban đầu", 10.5,"ink",bold=True,align="center")
     p.arrow(402, 283, 555, 283, "gold", 2)
-    p.text(404, 253, 149, 20, "increase cap, keep IDs", 9.4,"gold",bold=True,align="center")
+    p.text(404, 253, 149, 20, "tăng giới hạn, giữ mã mẫu", 9.4,"gold",bold=True,align="center")
     p.text(104, 426, 747, 38, "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · chọn mẫu xác định theo từng ô · số mẫu trong sổ.", 11.7, "ink", bold=True, align="center")
     p.note()
 
     # 44 experiment matrix
-    p = d.page("20 · Ba nghiên cứu", "Ba experiment families share the subset identity but vary different factors",
-        "docs/slide-agent-brief.md · experiment runbook and current artifact statuses",
+    p = d.page("20 · Ba nhóm thí nghiệm", "Trạng thái số liệu: một phần đã đo, hai phần chưa có kết quả",
+        "Kế hoạch thí nghiệm · sổ kết quả hiện có",
         notes_for("docs/slide-agent-brief.md; docs/table4-table5-figure4-runbook.md; checked-in ledgers"))
-    exp=[("Table 4", "Số bước S", "5 · 10 · 20", "3 mức S đã có số đo", "teal"),
-         ("Table 5", "Input representation", "REC · RGB · RGB_DIRE · DIRE", "inputs only; no results", "gold"),
-         ("Figure 4", "Corruption robustness", "clean · blur · JPEG", "no result ledger", "red")]
+    exp=[("Bảng 4", "Số bước S", "5 · 10 · 20", "Đã đo ba mức S", "teal"),
+         ("Bảng 5", "Biểu diễn đầu vào", "REC · RGB · RGB_DIRE · DIRE", "Chưa có kết quả", "gold"),
+         ("Hình 4", "Độ bền vững", "Chưa có số đo", "Chưa có kết quả", "red")]
     for i,(name,axis,vals,status,accent) in enumerate(exp):
         x=56+i*293; p.rect(x,177,264,237,"paper",stroke="line",radius=12)
         p.text(x+14,192,236,23,name,17,accent,bold=True,align="center")
@@ -2352,20 +2360,20 @@ def build_deck() -> Deck:
     p.note()
 
     # 47 generator taxonomy project
-    p = d.page("22 · Dataset & generators", "Paper benchmark and repository extensions must remain separate",
-        "Wang et al. (2023), Table 1 · paper-cac-mo-hinh-sinh.html §§09–10 · report.json",
-        notes_for("Paper Table 1 and model-family notes; report JSON includes extra project generator tags"))
+    p = d.page("22 · Tập dữ liệu và bộ sinh", "Tách riêng phạm vi bài báo và kết quả bổ sung của nhóm",
+        "Wang et al. (2023), Bảng 1 · tài liệu mô hình sinh · report.json",
+        notes_for("Paper Table 1 and model-family notes; report JSON includes extra group generator tags"))
     p.rect(58, 157, 402, 260, "bluep", stroke="teal", radius=11)
-    p.text(79, 171, 360, 25, "PAPER BENCHMARK", 13, "teal", bold=True)
+    p.text(79, 171, 360, 25, "PHẠM VI BÀI BÁO", 13, "teal", bold=True)
     p.text(80, 210, 356, 150,
-           "LSUN-Bedroom: ADM · DDPM · iDDPM · PNDM · LDM · SD-v1 · SD-v2 · VQ-Diffusion\n\nImageNet: ADM · SD-v1\n\nTrain / test roles and prompt conditions are specified in the paper.",
+           "LSUN-Bedroom: ADM · DDPM · iDDPM · PNDM · LDM · SD-v1 · SD-v2 · VQ-Diffusion\n\nImageNet: ADM · SD-v1\n\nBài báo quy định vai trò tập huấn luyện/kiểm thử và điều kiện câu lệnh.",
            12, "ink")
     p.rect(500, 157, 402, 260, "goldp", stroke="gold", radius=11)
-    p.text(521, 171, 360, 25, "REPO EXTENSIONS / UNCERTAINTY", 13, "gold", bold=True)
+    p.text(521, 171, 360, 25, "BỔ SUNG CỦA NHÓM / CHƯA CHẮC CHẮN", 13, "gold", bold=True)
     p.text(522, 210, 356, 175,
-           "Report inventory adds DALL·E 2, IF, projected GAN, hybrids and other tags.\n\nSome family assignments are uncertain or model-closed. Names such as diff-projectedgan are not evidence of architecture.",
+           "Danh mục của nhóm có thêm DALL·E 2, IF, GAN chiếu, mô hình lai và các nhãn khác.\n\nMột số phân loại họ mô hình chưa chắc chắn hoặc thuộc mô hình đóng. Tên diff-projectedgan không xác nhận kiến trúc.",
            12, "ink")
-    p.text(105, 444, 750, 31, "Do not merge out-of-paper generators into a paper mean or claim exact source architecture from a folder name.", 11.5, "red", bold=True, align="center")
+    p.text(105, 444, 750, 31, "Không gộp bộ sinh ngoài bài báo vào giá trị trung bình hoặc suy ra kiến trúc chỉ từ tên thư mục.", 11.5, "red", bold=True, align="center")
     p.note()
 
     # 50 scientific limitations
@@ -2383,16 +2391,16 @@ def build_deck() -> Deck:
     p.note()
 
     # 52 conclusion
-    p = d.page("27 · Kết luận", "The strongest deliverable today is a transparent evidence system — not a full reproduction",
-        "Summary of paper, repository artifacts, known caveats and pilot constraints",
+    p = d.page("27 · Kết luận", "Giá trị chính hiện nay là hệ thống bằng chứng minh bạch, chưa phải tái lập đầy đủ",
+        "Tổng hợp bài báo, số liệu của nhóm, giới hạn và phạm vi thí điểm",
         notes_for("Synthesis; sources are cited on each relevant slide and in appendix"), dark=True)
     p.rect(0, 0, PW, PH, "navy", radius=0)
-    p.text(50, 127, 860, 42, "DIRE provides a reproducible representation hypothesis;" , 25, "white", bold=True, align="center")
-    p.text(70, 180, 820, 55, "the repository now contains a pilot ledger and gallery, but evidence boundaries still matter.", 18.5, "mint", bold=True, align="center")
+    p.text(50, 127, 860, 42, "DIRE đưa ra giả thuyết biểu diễn có thể tái lập;" , 25, "white", bold=True, align="center")
+    p.text(70, 180, 820, 55, "nhóm đã có số liệu thí điểm và thư viện ảnh, nhưng cần giữ rõ ranh giới bằng chứng.", 18.5, "mint", bold=True, align="center")
     for x, head, body, accent in [
-        (93, "Theory", "A deterministic diffusion round trip yields a structured residual.", "mint"),
-        (367, "Evidence", "Paper results and repo results must stay in separate lanes.", "gold"),
-        (641, "Next", "Resolve dates, live state and metrics before more compute.", "white"),
+        (93, "Cơ sở", "Phép đi-về khuếch tán tất định tạo ra sai số có cấu trúc.", "mint"),
+        (367, "Bằng chứng", "Tách biệt kết quả trong bài báo và số đo của nhóm.", "gold"),
+        (641, "Tiếp theo", "Đối soát thời gian, dữ liệu trực tuyến và chỉ số trước khi mở rộng tính toán.", "white"),
     ]:
         p.rect(x, 280, 226, 116, "navy2", stroke="deepmuted", radius=10)
         p.text(x+14, 294, 198, 24, head, 14, accent, bold=True, align="center")
@@ -2417,43 +2425,43 @@ def build_deck() -> Deck:
     p.note()
 
     # A2 raw Table 4 pilot AP/AUC/ACC complete 15 cells plus explicit missing
-    p = d.page("Appendix B · Pilot data", "Complete Table 4 pilot metrics from the checked-in ledger",
-        "table4.json · per-generator test cell metrics; threshold recorded as 0.5",
-        notes_for("All values below are from the current repo JSON. They are repository-recorded values; timeline / live Volume remain unverified."))
+    p = d.page("Phụ lục B · Số liệu thí điểm", "Đầy đủ số đo Bảng 4 do nhóm ghi nhận",
+        "Số đo kiểm thử theo bộ sinh · ACC tại ngưỡng 0,5",
+        notes_for("Values from the group ledger; timeline and live Volume remain unverified."))
     r=[]
     for sval in [5,10,20]:
         for gen in ["adm","ddpm","iddpm","pndm","sdv2"]:
             m=s_metrics(sval,gen)
-            r.append([f"{sval}",gen.upper(),str(m.get("n")),f"{m['ap']*100:.3f}",f"{m['auc']*100:.3f}",f"{m['acc']*100:.2f}"])
-    p.table(67, 145, 826, ["S","Test generator","n","AP %","AUC %","ACC@0.5 %"], r,
+            r.append([f"{sval}",gen.upper(),str(m.get("n")),f"{m['ap']*100:.3f}".replace(".", ","),f"{m['auc']*100:.3f}".replace(".", ","),f"{m['acc']*100:.2f}".replace(".", ",")])
+    p.table(67, 145, 826, ["S","Bộ sinh kiểm thử","n","AP (%)","AUC (%)","ACC tại 0,5 (%)"], r,
             [64,192,75,147,147,201], 17.3, 8.7)
     p.text(122, 491, 716, 14, "Chỉ hiển thị 15 ô đã đo ở S=5/10/20; mỗi ô n=400 (200 ảnh thật + 200 ảnh sinh).", 8.6, "muted", align="center")
     p.note()
 
     # A3 pilot train metadata
-    p = d.page("Appendix B · Pilot protocol", "Independent detector training metadata by S",
-        "S5/S10/S20 train.json · manifest protocol hashes",
+    p = d.page("Phụ lục B · Giao thức thí điểm", "Số vòng huấn luyện và ngưỡng chọn theo từng mức S",
+        "Số liệu huấn luyện S=5/10/20",
         notes_for("modal-runs/experiments/experiments/table4/table4-lsun-pilot/S*/subsets/per-cell-000200/model/train.json"))
     r=[]
     for sval in ["5","10","20"]:
-        block=T4_RUNS[sval]; t=block["train"]; hp=t["hparams"]
-        r.append(["S="+sval,str(t.get("epochs_run")),str(t.get("best_epoch")),f"{t.get('best_val_ap',0):.5f}",f"{t.get('threshold_from_val',0):.4f}",str(hp.get("batch")),str(hp.get("lr")),str(hp.get("crop"))])
-    p.table(65, 180, 830, ["Stage","Epochs run","Best epoch","Val AP","Val threshold","Batch","LR","Crop"], r,
-            [94,115,112,116,132,85,90,86], 57, 9.5)
+        block=T4_RUNS[sval]; t=block["train"]
+        r.append(["S="+sval,str(t.get("epochs_run")),str(t.get("best_epoch")),f"{t.get('best_val_ap',0):.5f}".replace(".", ","),f"{t.get('threshold_from_val',0):.4f}".replace(".", ",")])
+    p.table(105, 180, 790, ["Mức S","Epoch đã chạy","Epoch tốt nhất","AP xác thực","Ngưỡng xác thực"], r,
+            [115,150,150,170,205], 57, 10.5)
     p.rect(111, 399, 738, 63, "goldp", stroke="gold", radius=10)
-    p.text(128, 409, 704, 43, "Ledger protocol target says 400 epochs with patience 5; actual run stopped early at 12–15 epochs. Do not present target epochs as executed epochs.", 11.3, "ink", bold=True, align="center", valign="mid")
+    p.text(128, 409, 704, 43, "Giao thức đặt mục tiêu tối đa 400 epoch và dừng sớm sau 5 epoch không cải thiện; thực tế các lượt chạy dừng ở epoch 12–15.", 11.3, "ink", bold=True, align="center", valign="mid")
     p.note()
 
     # A4 Table4 paper sweep and pilot S=50 difference
-    p = d.page("Appendix C · Protocol comparison", "Paper and pilot use different generators and execution scales",
-        "Paper Table 4 · repo Table 4 protocol + ledger",
-        notes_for("Paper full-data S sweep reports S=5/10/20/50 with SD-v1; repo pilot measured S=5/10/20 with SD-v2 and 200/cell. S=50 is not included in the reproduction sweep."))
-    p.table(73, 165, 814, ["Dimension","Paper Table 4","Repo pilot Table 4"], [
-        ["Dataset / scale", "Full author protocol; about 1,000 real + 1,000 fake per cell", "200 images/cell subset; n=400 per binary test cell"],
-        ["Generator", "ADM, DDPM, iDDPM, PNDM, SD-v1", "ADM, DDPM, iDDPM, PNDM, SD-v2"],
-        ["Steps S", "5 / 10 / 20 / 50", "5 / 10 / 20 (sweep tái lập)"],
-        ["Detector training", "Paper protocol", "ImageNet init, batch 32, LR 1e−4, early stopped"],
-        ["Use", "Paper reference", "Pilot measurement candidate; time provenance unresolved"],
+    p = d.page("Phụ lục C · Đối chiếu giao thức", "Bài báo và thí điểm khác bộ sinh và quy mô thực hiện",
+        "Bảng 4 bài báo · giao thức và sổ kết quả của nhóm",
+        notes_for("Paper S sweep: S=5/10/20/50 with SD-v1; group pilot measured S=5/10/20 with SD-v2 and 200/cell. S=50 is not part of the pilot."))
+    p.table(73, 165, 814, ["Khía cạnh","Bảng 4 bài báo","Bảng 4 thí điểm của nhóm"], [
+        ["Dữ liệu / quy mô", "Dữ liệu đầy đủ; khoảng 1.000 ảnh thật + 1.000 ảnh tạo mỗi ô", "Tập con 200 ảnh/ô; n=400 mỗi ô kiểm thử"],
+        ["Bộ sinh", "ADM, DDPM, iDDPM, PNDM, SD-v1", "ADM, DDPM, iDDPM, PNDM, SD-v2"],
+        ["Số bước S", "5 / 10 / 20 / 50", "5 / 10 / 20"],
+        ["Huấn luyện", "Theo giao thức bài báo", "Khởi tạo ImageNet; dừng sớm"],
+        ["Cách dùng", "Số liệu tham chiếu trong bài báo", "Số đo thí điểm; thời điểm cần đối soát"],
     ], [162,325,327], 54, 9.9)
     p.note()
 
@@ -2485,9 +2493,8 @@ def build_deck() -> Deck:
         "Dinh, L. et al. Density Estimation using Real NVP. ICLR 2017. arXiv:1605.08803.",
         "Rombach, R. et al. High-Resolution Image Synthesis with Latent Diffusion Models. CVPR 2022. arXiv:2112.10752.",
         "Gu, S. et al. Vector Quantized Diffusion Model for Text-to-Image Synthesis. CVPR 2022.",
-        "Ricker, J. et al. AEROBLADE: Training-Free Detection of Latent Diffusion Images Using Autoencoder Reconstruction Error. CVPR 2024. arXiv:2401.17879.",
-        "Project sources: docs/dire-tu-so-0.pdf; docs/paper-cac-mo-hinh-sinh.html; docs/paper-code-walkthrough.md; docs/adr-0006-reproduction-levels.md.",
-        "Project artifacts: src/dire_modal/paper_table2.tsv; modal-runs/runs/; modal-runs/experiments/; modal-runs/gallery/.",
+        "Nguồn bài báo và tài liệu: docs/dire-tu-so-0.pdf; docs/paper-cac-mo-hinh-sinh.html; docs/paper-code-walkthrough.md; docs/adr-0006-reproduction-levels.md.",
+        "Số liệu và tư liệu của nhóm: src/dire_modal/paper_table2.tsv; modal-runs/runs/; modal-runs/experiments/; modal-runs/gallery/.",
     ]
     for i,ref in enumerate(refs):
         col=i//6; row=i%6; x=55+col*432; y=151+row*54
@@ -2558,16 +2565,25 @@ def main():
     write_equation_source()
     deck = build_deck()
     # Inspect presentation text / PDF output consistency and evidence content.
-    expected = ["U-Net", "ResNet-50", "DDIM", "Table 4", "S=50", "chưa có"]
+    expected = ["U-Net", "ResNet-50", "DDIM", "Bảng 4", "S=50", "chưa có"]
     all_text = "\n".join(shape.text for slide in deck.prs.slides for shape in slide.shapes if getattr(shape, "has_text_frame", False))
     missing = [item for item in expected if item.lower() not in all_text.lower()]
     if missing:
         raise SystemExit(f"deck missing expected phrases: {missing}")
+    slide_text = ["\n".join(shape.text for shape in slide.shapes
+                            if getattr(shape, "has_text_frame", False))
+                  for slide in deck.prs.slides]
+    if any("AEROBLADE" in text.upper() for text in slide_text):
+        raise SystemExit("AEROBLADE comparison slide should not be present")
+    if any("CÁCH ĐỌC BẰNG CHỨNG" in text.upper() or "01 · TÓM TẮT" in text.upper()
+           for text in slide_text):
+        raise SystemExit("remove the requested summary and evidence-reading pages")
+    measurement_slides = [text for text in slide_text if "SỐ ĐO CỦA NHÓM" in text.upper()]
+    if any("NFE" in text.upper() for text in measurement_slides):
+        raise SystemExit("NFE must not appear on group measurement slides")
     pilot_sections = []
-    for slide in deck.prs.slides:
-        visible = "\n".join(shape.text for shape in slide.shapes
-                              if getattr(shape, "has_text_frame", False))
-        if "PILOT TABLE 4" in visible or "PILOT TABLE 4" in _vi_copy(visible):
+    for visible in slide_text:
+        if visible.upper().startswith("17 · THÍ ĐIỂM BẢNG 4") or "PILOT TABLE 4" in visible:
             pilot_sections.append(visible)
     if not pilot_sections or any("S=50" in text for text in pilot_sections):
         raise SystemExit("pilot sweep must contain only measured S=5/10/20; S=50 belongs to paper reference only")
