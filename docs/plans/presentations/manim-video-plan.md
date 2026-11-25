@@ -1,7 +1,7 @@
 # Ý tưởng video manim — DIRE, giải thích cho người chưa biết gì
 
 - **Trạng thái:** đề xuất (chưa chốt) · **Ngày:** 2026-10-28
-- **Liên quan:** `tools/manim/` (5 scene đã có code), `docs/adr-0003-demo-training.md`,
+- **Liên quan:** `tools/manim/` (5 scene đã có code), `docs/adr/adr-0003-demo-training.md`,
   `docs/runbook-free.md` §8b
 - **Mục đích của tài liệu này:** chốt *nội dung và thứ tự* trước khi viết thêm
   code. Code hiện có là 5 scene rời; tài liệu này biến chúng thành **một bộ phim

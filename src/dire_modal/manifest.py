@@ -296,7 +296,7 @@ TRAINX: list[Entry] = _tars(
 # 2. Ba file ngoài real+adm là dữ liệu train cho lsun_iddpm/pndm/stylegan.pth
 # mà e5 dùng làm ensemble. Kê ra đây để audit hết báo "không ai kê".
 # KHÔNG mặc định: chỉ cần cho FR-8 (train lại để ĐỐI CHIẾU trọng số tác giả,
-# xem docs/adr-0004-retrain-for-reconciliation.md). Train lại không bao giờ
+# xem docs/adr/adr-0004-retrain-for-reconciliation.md). Train lại không bao giờ
 # dùng làm số của paper, nên tier này không nằm trên đường chạy mặc định.
 TRAINENS: list[Entry] = _tars(
     "dire/train/lsun_bedroom",

@@ -45,7 +45,7 @@ __all__ = [
     "provenance_line",
 ]
 
-#: 10 MB — cùng giới hạn với `docs/demo-web-plan.md` §6.
+#: 10 MB — cùng giới hạn với `docs/plans/demos/demo-web-plan.md` §6.
 MAX_BYTES = 10 * 1024 * 1024
 
 #: `S` hợp lệ. 20 là cấu hình của bài (Table 4); trên 20 chỉ tốn tiền, không thêm

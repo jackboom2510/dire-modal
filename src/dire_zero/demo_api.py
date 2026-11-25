@@ -13,7 +13,7 @@ Ba thứ Modal cho, và đúng ba thứ demo cần
 * `@modal.enter(snap=True)` + `enable_memory_snapshot` — nạp ADM **trước** khi chụp
   snapshot, để container ấm không phải nạp lại 2,5 GB;
 * `scaledown_window` / `min_containers` — chọn giữa "trả tiền cho container ấm"
-  và "chờ cold start". Số cụ thể ở `docs/demo-modal-plan.md` §3.
+  và "chờ cold start". Số cụ thể ở `docs/plans/demos/demo-modal-plan.md` §3.
 
 Lệnh::
 

@@ -1186,7 +1186,7 @@ Nó **không** chứng minh:
 - detector train lại được (đó là R2 / FR-8);
 - ảnh sinh lại được (R3).
 
-Ba trục **độc lập**, không phải cấp bậc. Chi tiết: `docs/adr-0006-reproduction-levels.md`.
+Ba trục **độc lập**, không phải cấp bậc. Chi tiết: `docs/adr/adr-0006-reproduction-levels.md`.
 
 ---
 

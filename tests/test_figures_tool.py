@@ -88,7 +88,7 @@ def test_every_registered_figure_exposes_its_inputs_in_list(capsys):
     out = capsys.readouterr().out
     for name in fig.FIGURES:
         assert name in out
-    assert "docs/figures-plan.md" in out
+    assert "docs/plans/research/figures-plan.md" in out
 
 
 def test_all_allowed_labels_are_the_documented_ones():

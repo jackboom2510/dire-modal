@@ -503,7 +503,7 @@ khớp đường đo của họ. Nó **không** chứng minh:
 - ảnh sinh lại được (`R3`).
 
 Ba trục **độc lập**, không phải cấp bậc. Nhãn `R0` **cấm** dùng cụm "tái lập DIRE".
-Chi tiết: `docs/adr-0006-reproduction-levels.md`.
+Chi tiết: `docs/adr/adr-0006-reproduction-levels.md`.
 
 ## 11.1 Kiến trúc: ba đường vào, một lõi
 

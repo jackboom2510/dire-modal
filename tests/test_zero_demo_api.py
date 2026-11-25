@@ -8,7 +8,7 @@ dựa vào (`line`, `stats`, `resized`).
 `TorchEngine` không được test ở đây: nó chỉ là lớp mỏng trên `dire_map`, mà
 `dire_map` đã có test riêng (kể cả parity với bản tham chiếu). Test đường ảnh →
 map trên GPU thật là việc của lần chạy `modal serve` đầu tiên, có ghi lại trong
-`docs/demo-modal-plan.md` §6.
+`docs/plans/demos/demo-modal-plan.md` §6.
 """
 
 from __future__ import annotations

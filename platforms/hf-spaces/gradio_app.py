@@ -9,7 +9,7 @@ thẩm mỹ: SDK `gradio` của HF Spaces tự lo hàng đợi, trạng thái ph
 **Cái KHÔNG được dựng lại** là tab cũ của bản Gradio đầu tiên: upload ảnh RGB →
 `P(fake)`. Model ResNet-50 trong repo nhận **DIRE map**, không nhận ảnh RGB.
 Đưa ảnh RGB vào là chấm một phân bố chưa từng được train; con số vẫn ra, vẫn
-trông hợp lý, và không có nghĩa gì. Lý do đầy đủ: `docs/demo-web-plan.md` §2.
+trông hợp lý, và không có nghĩa gì. Lý do đầy đủ: `docs/plans/demos/demo-web-plan.md` §2.
 
 Vì thế, ở đây **chỉ có một chỗ nhận ảnh của người xem**: tab *Tính DIRE thật*.
 Nó tính **map** rồi hiện map. Có thể tùy chọn một checkpoint ResNet để chấm

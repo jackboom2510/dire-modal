@@ -4,7 +4,7 @@
 Đây KHÔNG phải đường báo cáo chính. Mọi câu "DIRE đạt X%" chỉ được nói bằng
 checkpoint tác giả (``eval::main`` trên ``lsun_adm.pth``). File này trả lời một
 câu khác: *trọng số mà tác giả phát hành có tái tạo được không, và nếu lệch thì
-lệch ở đâu* — xem ``docs/adr-0004-retrain-for-reconciliation.md``.
+lệch ở đâu* — xem ``docs/adr/adr-0004-retrain-for-reconciliation.md``.
 
 Hợp đồng (spec.md §7 FR-8):
   * Đầu vào là **DIRE map đã phát hành** (tar ``/raw/dire/train/...``), nên
@@ -45,4 +45,4 @@ def main(exp: str = "lsun_adm_repro", resume: bool = True) -> None:
     # 3. train loop: lưu epoch_{i}.pt + last.pt mỗi epoch, ghi loss_log.json
     # 4. chọn epoch tốt nhất trên VAL, rồi mới eval trên TEST
     # 5. ghi run.json với detector=dire_retrained + provenance=retrained
-    raise NotImplementedError("FR-8: port vòng train của Wang (xem docs/adr-0004)")
+    raise NotImplementedError("FR-8: port vòng train của Wang (xem docs/adr/adr-0004)")

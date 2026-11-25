@@ -2,7 +2,7 @@
 set -euo pipefail
 # Chạy DIRE trên RunPod Pod (A100 80GB ~$1.79/h — rẻ hơn Modal $2.50/h).
 #
-# Dùng khi: job dài > 4 GPU-h và đã ổn định (xem docs/adr-0002 §ngưỡng rời Modal).
+# Dùng khi: job dài > 4 GPU-h và đã ổn định (xem docs/adr/adr-0002 §ngưỡng rời Modal).
 # Dữ liệu lấy từ R2/HF (KHÔNG copy dữ liệu vào pod: pod có thể bị thu hồi).
 #
 # Cách dùng:

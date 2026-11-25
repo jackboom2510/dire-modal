@@ -28,7 +28,7 @@ Chạy
     python tools/figures.py f5-noise      --out figs --maps F:/dire-zero-r0/maps --label R0
     python tools/figures.py f1-teaser     --out figs --images DIR --maps DIR --label R1+R2
 
-Kế hoạch đầy đủ (hình nào, đợt nào, vì sao): ``docs/figures-plan.md``.
+Kế hoạch đầy đủ (hình nào, đợt nào, vì sao): ``docs/plans/research/figures-plan.md``.
 """
 
 from __future__ import annotations
@@ -421,7 +421,7 @@ def a1_provenance(args) -> dict:
         "claim_label": None,
         "n": None,
         "seed": None,
-        "sources": {"plan": "docs/figures-plan.md", "levels": "docs/adr-0006-reproduction-levels.md"},
+        "sources": {"plan": "docs/plans/research/figures-plan.md", "levels": "docs/adr/adr-0006-reproduction-levels.md"},
         "cmd": "python tools/figures.py a1-provenance --out figs",
         "warnings": ["hình vẽ: quy ước nhãn, không chứa số liệu"],
     })
@@ -545,7 +545,7 @@ def f1_teaser(args) -> dict:
                 f"  ảnh: {img_root / split / g} ({len(imgs)} file)\n"
                 f"  map: {map_root / split / g} ({len(maps)} file)\n"
                 "Ghép theo thứ tự chỉ hợp lệ khi đã kiểm bằng `pair_tars`; "
-                "ở đây cần tên khớp. Xem docs/figures-plan.md §2.1."
+                "ở đây cần tên khớp. Xem docs/plans/research/figures-plan.md §2.1."
             )
         shared.sort(key=lambda x: hashlib.sha256(f"{args.seed}/{x}".encode()).hexdigest())
         panels.append((g, [(img_root / split / g / f"{x}.png",
@@ -955,7 +955,7 @@ def cmd_list() -> int:
     print(f"{'tên':<14} {'nhãn mặc định':<20} {'đầu vào':<18} mô tả")
     for name, (_fn, label, inputs, desc) in FIGURES.items():
         print(f"{name:<14} {label:<20} {inputs:<18} {desc}")
-    print("\nChi tiết + thứ tự làm: docs/figures-plan.md")
+    print("\nChi tiết + thứ tự làm: docs/plans/research/figures-plan.md")
     return 0
 
 

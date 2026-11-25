@@ -48,7 +48,7 @@ Gallery Gradio có biểu đồ độ phủ theo generator và hai gallery map t
   ResNet chỉ nhận tensor DIRE RGB `[0,2]` vừa tính, tuyệt đối không nhận ảnh RGB
   gốc hay ảnh PNG xám dùng để hiển thị. Không chọn checkpoint thì không chấm.
   Bản Gradio cũ từng chấm ảnh upload trực tiếp; lỗi đó được ghi ở
-  `docs/demo-web-plan.md` §2 và không được dựng lại.
+  `docs/plans/demos/demo-web-plan.md` §2 và không được dựng lại.
 - Sau khi tính DIRE, operator có thể chọn checkpoint tác giả hoặc checkpoint tự
   train theo ADM/iDDPM/PNDM/StyleGAN. UI gợi ý `F:\DiffusionForensics\checkpoints\lsun_adm.pth`
   và `D:\Documents\Code\dire-modal\modal-runs\runs\rebuild\rebuild-2026-10-14\train\gen-*\detector.pth`,
@@ -120,7 +120,7 @@ có trong `.npy`. Đổi lại, `(256, 256)` và `(1, 256, 256)` vẫn được 
 kênh), và con số trong `.json` (`display.channels`) nói rõ ảnh đang xem có 1 hay 3
 kênh.
 
-Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/demo-web-plan.md`
+Thêm `--scores scores.json --gate passed` chỉ khi cổng 2 (`docs/plans/demos/demo-web-plan.md`
 §5) đã chạy; mặc định `--gate failed` nên **không** điểm nào được hiện.
 
 ## Deploy (0 ₫)
@@ -237,7 +237,7 @@ Muốn Space chạy **bản Streamlit** thay thế: sửa front-matter thành
 `requirements.txt`.
 
 Chi tiết, số đo cold start, cổng kiểm và phương án rollback:
-**`docs/demo-hf-spaces-plan.md`**.
+**`docs/plans/demos/demo-hf-spaces-plan.md`**.
 
 ## Đọc log của Space: dòng nào là bình thường
 
@@ -352,7 +352,7 @@ python tools/make_gallery_recons.py --all
 
 Nếu không đặt biến môi trường, script dò gallery mặc định như Gradio (`modal-runs/gallery`, hoặc `platforms/hf-spaces/gallery` nếu gallery chính không có). Có thể truyền `--gallery <đường-dẫn-gallery>`. Chạy một số mẫu riêng vẫn hỗ trợ `--name <stem>` lặp lại; `--force` tính lại và thay recon đã có. Mỗi mẫu S=20 cần 40 lượt ADM forward (~404 giây trên CPU 2-vCPU đã đo), nên xem tổng ước tính trước khi chạy cả gallery. Nếu thiếu/sai checkpoint, script dừng thay vì sinh ảnh giả.
 
-Modal là tùy chọn riêng: đặt `DEMO_URL` và `DEMO_TOKEN` (Settings → Secrets), rồi người dùng phải chọn **Modal GPU** trước khi bấm. Server của Space mới gọi endpoint; trình duyệt không nhận token. Triển khai endpoint: `docs/demo-modal-plan.md`.
+Modal là tùy chọn riêng: đặt `DEMO_URL` và `DEMO_TOKEN` (Settings → Secrets), rồi người dùng phải chọn **Modal GPU** trước khi bấm. Server của Space mới gọi endpoint; trình duyệt không nhận token. Triển khai endpoint: `docs/plans/demos/demo-modal-plan.md`.
 
 Ảnh người dùng chỉ được đọc cục bộ khi dùng local; ở chế độ Modal bytes được gửi sang endpoint đã chọn. Cache local giữ ảnh trung gian x_t/x̂₀ (có khả năng tiết lộ nội dung), giới hạn 8 lượt và có nút xóa; quyền ghi phụ thuộc mount/đĩa của Space. Kiểm tra chính sách lưu trữ Space trước khi xử lý ảnh nhạy cảm.
 

@@ -121,7 +121,7 @@ thí nghiệm. Đó là **chấm lại** (re-scoring): kiểm tra đường đo 
 
 Nhãn hợp (ví dụ `R1+R2`) mô tả **đúng những gì đã làm**. Nhãn `R0` **cấm** dùng
 cụm "tái lập DIRE"; phải nói "chấm lại trên artefact của tác giả". Quy định này
-nằm trong `docs/adr-0006-reproduction-levels.md` của kho.
+nằm trong `docs/adr/adr-0006-reproduction-levels.md` của kho.
 
 ## Kiến thức cần có trước
 

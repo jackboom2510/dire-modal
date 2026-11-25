@@ -216,7 +216,7 @@ arXiv:2401.17879. (Cùng ý tưởng "sai số tái tạo là tín hiệu", như
 của LDM thay cho diffusion model, và LPIPS thay cho `|Δ|` theo điểm ảnh.)
 
 ::: note
-Các tài liệu nội bộ của kho này nên đọc kèm: `docs/adr-0006-reproduction-levels.md`
+Các tài liệu nội bộ của kho này nên đọc kèm: `docs/adr/adr-0006-reproduction-levels.md`
 (định nghĩa `R0`–`R3`), `docs/paper-code-walkthrough.md` (bản đối chiếu code ngắn
 hơn), `spec.md` và `plan.md` (yêu cầu và kế hoạch của dự án).
 :::

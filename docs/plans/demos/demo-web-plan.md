@@ -1,14 +1,14 @@
 # Kế hoạch demo web — cái gì chạy được thật, cái gì phải nói "chưa"
 
-- **Trạng thái:** kế hoạch (đã sửa app — xem `docs/demo-hf-spaces-plan.md`) · **Ngày:** 2026-11-16
+- **Trạng thái:** kế hoạch (đã sửa app — xem `docs/plans/demos/demo-hf-spaces-plan.md`) · **Ngày:** 2026-11-16
 - **Liên quan:** `platforms/hf-spaces/` (app hiện có), `platforms/site/` (trang
-  tĩnh), `docs/figures-plan.md` (dùng chung gallery), `docs/dataset-own.md` (nhãn
+  tĩnh), `docs/plans/research/figures-plan.md` (dùng chung gallery), `docs/dataset-own.md` (nhãn
   R0/R1+R2/R3), `docs/runbook-free.md` (§ demo), ADR-0003
 - **Đã thực hiện:** app Gradio → Streamlit 5 trang (2026-11) → **quay lại Gradio**
   5 tab (2026-10) vì SDK gradio tự lo hàng đợi/phiên/restart. Việc đổi framework
   **không** đổi một quy tắc nào ở đây: Tab upload ảnh → `P(fake)` vẫn bị bỏ, và
   tab nhận ảnh của bản mới chỉ trả **DIRE map**. Kế hoạch triển khai, số đo và
-  quy trình deploy: **`docs/demo-hf-spaces-plan.md`**.
+  quy trình deploy: **`docs/plans/demos/demo-hf-spaces-plan.md`**.
 - **Mục đích:** chốt *demo làm được gì trên CPU free* trước khi viết thêm UI.
   Repo đã có sẵn một app Gradio; vấn đề không phải "chưa có demo", mà là **app
   hiện tại đang trả một con số vô nghĩa** (mục 2).
@@ -96,7 +96,7 @@ Ngưỡng quyết định, chốt trước khi đo để không tự thương l�
 ⇒ `S = 5` = **101 s**, `S = 20` = **404 s**. Rơi vào hàng cuối ⇒ chế độ B **tắt**
 theo đúng ngưỡng đã chốt ở trên. Vẫn có trang "Tính DIRE thật" nhưng **mặc định
 tắt**, phải tick xác nhận thời gian chờ. Chi tiết + ba cách thấy phép tính:
-`docs/demo-hf-spaces-plan.md` §13.
+`docs/plans/demos/demo-hf-spaces-plan.md` §13.
 
 Nếu bật: `S = 5` mặc định (paper Table 4: `S=5` vẫn 100/100 trên ADM, 87,5/99,8
 trên SD-v1), và `S` hiện **trên** kết quả. Không được im lặng dùng `S=20` rồi để
@@ -116,7 +116,7 @@ qua `demolib/remote.py`. Ba ràng buộc đã thành code, không còn là lời
 - **giới hạn 10 MB + 6 ảnh/60 s** + `S ≤ 20`, nếu không một người có thể đốt hết
   credit trong một buổi chiều.
 
-Chi phí, cold start, và cách chạy buổi nói: `docs/demo-modal-plan.md`.
+Chi phí, cold start, và cách chạy buổi nói: `docs/plans/demos/demo-modal-plan.md`.
 
 ## 4. Màn hình: chữ nào bắt buộc phải có
 
@@ -232,4 +232,4 @@ D4 cần bạn chạy trên máy thật. D5 để sau, và có thể không bao 
 - **Không** dùng ảnh do người khác sinh trong gallery mà không ghi nguồn.
 - **Không** hiện `P(fake)` khi chuỗi `checkpoint ↔ map ↔ chuẩn hoá` chưa qua cổng 2.
 - **Không** vẽ panel "ảnh tái tạo" cho generator không có `recons/` (thiếu `adm`,
-  `ddpm`, `iddpm`, `sdv2`, `vqdiffusion`, …) — xem `docs/figures-plan.md` §2.
+  `ddpm`, `iddpm`, `sdv2`, `vqdiffusion`, …) — xem `docs/plans/research/figures-plan.md` §2.

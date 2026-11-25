@@ -147,5 +147,5 @@ Tải về:             modal volume get dire-ckpt results ./results
 
 Nếu đang chạy DETACH=1:  modal app list · modal app logs <app-id>
 Việc còn treo của quy trình này: xem plan.md. Table 4/5/6 cần TRAIN LẠI nên
-thuộc FR-8 (đối chiếu trọng số) — xem docs/adr-0004-retrain-for-reconciliation.md.
+thuộc FR-8 (đối chiếu trọng số) — xem docs/adr/adr-0004-retrain-for-reconciliation.md.
 EOF

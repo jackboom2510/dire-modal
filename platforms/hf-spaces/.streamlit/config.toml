@@ -2,7 +2,7 @@
 # khi khởi động: `streamlit run app.py`.
 #
 # `gatherUsageStats = false` không phải chuyện khẩu vị: demo công khai cho người
-# xem thuộc trường đại học, và yêu cầu ở `docs/demo-hf-spaces-plan.md` §8 là
+# xem thuộc trường đại học, và yêu cầu ở `docs/plans/demos/demo-hf-spaces-plan.md` §8 là
 # **không có request nào ra ngoài `*.hf.space`**. Telemetry của Streamlit là
 # request duy nhất có thể vi phạm điều đó mà không ai thấy.
 

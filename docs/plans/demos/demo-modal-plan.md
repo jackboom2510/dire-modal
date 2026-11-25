@@ -1,8 +1,8 @@
 # Modal làm backend cho demo — kiểm được hay không, và tốn bao nhiêu
 
 - **Trạng thái:** đã kiểm bằng số đo + endpoint đã viết (chưa deploy) · **Ngày:** 2026-11-17
-- **Liên quan:** `docs/demo-hf-spaces-plan.md` (§13 chế độ tính tại chỗ),
-  `docs/demo-web-plan.md` §3 chế độ C, `src/dire_zero/demo_api.py`,
+- **Liên quan:** `docs/plans/demos/demo-hf-spaces-plan.md` (§13 chế độ tính tại chỗ),
+  `docs/plans/demos/demo-web-plan.md` §3 chế độ C, `src/dire_zero/demo_api.py`,
   `platforms/hf-spaces/demolib/remote.py`
 - **Câu hỏi:** *dùng Modal làm nơi chạy demo được không, vì Modal cũng có container?*
 

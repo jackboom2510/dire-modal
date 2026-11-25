@@ -3,7 +3,7 @@
 - **Trạng thái:** kế hoạch + app đã viết và chạy thử · **Ngày:** 2026-11-17 (cập nhật 2026-10-14: quay lại Gradio)
 - **UI hiện tại:** `platforms/hf-spaces/gradio_app.py` (Gradio, 5 tab) — bản
   Streamlit cũ vẫn còn ở `app.py` và vẫn chạy được; xem §0b.
-- **Liên quan:** `docs/demo-web-plan.md` (§2 lỗi phải sửa, §3 ba chế độ, §5 cổng
+- **Liên quan:** `docs/plans/demos/demo-web-plan.md` (§2 lỗi phải sửa, §3 ba chế độ, §5 cổng
   kiểm), `platforms/hf-spaces/` (mã), `tools/make_gallery.py` (dựng gallery),
   `docs/from-zero-clean-room.md` (§3.6 về `--n` và ước lượng tiền), ADR-0003
 - **Câu hỏi của mục này:** *đưa demo lên HF Spaces bằng Streamlit, chạy được, 0 ₫,
@@ -57,7 +57,7 @@ trích dẫn con số nào khác.
 | Điểm detector lấy từ đâu? | `.json` của từng mẫu, chỉ hiện khi `gate == "passed"` và ngưỡng chọn trên `val` | để "chưa qua cổng" hiện thành chữ, không thành một con số |
 | Phép đo chạy thật trên Space | thí nghiệm khuếch tán 2 chiều có score chính xác | 61 ms/lượt, không cần GPU, và là chỗ giải thích *cơ chế* |
 | Tính DIRE thật trên CPU | **có, nhưng mặc định tắt** — `S=5` là **101 s**/ảnh | đo được 10,1 s/forward trên 2 vCPU; `demo-web-plan.md` §3 chốt > 45 s thì tắt (mục 13) |
-| Tính DIRE thật trên GPU | **có, qua Modal** — `S=5` là **0,92 s**, 0,0003 USD/ảnh | token ở server Space, không xuống trình duyệt; `docs/demo-modal-plan.md` |
+| Tính DIRE thật trên GPU | **có, qua Modal** — `S=5` là **0,92 s**, 0,0003 USD/ảnh | token ở server Space, không xuống trình duyệt; `docs/plans/demos/demo-modal-plan.md` |
 | Chi phí | **0 ₫** (hardware `cpu-basic`) | không có GPU, không gọi mạng ngoài |
 
 Ba con số quyết định kế hoạch này, **đo trên máy** (mục 4): cold start 0,57 s ·
@@ -341,7 +341,7 @@ Secrets thì trang 3 **không nạp ADM tại chỗ** nữa mà gọi endpoint G
 (`demolib/remote.py`, token chỉ nằm ở server Space). `S = 5` còn **0,92 s**, vẫn
 thấy map + ảnh tái tạo, và câu nguồn gốc ghi rõ "Modal A10G". Không có secret ⇒
 hành vi y như mục 13.2 (mặc định tắt, hướng dẫn cách bật). Chi tiết và chi phí:
-`docs/demo-modal-plan.md`.
+`docs/plans/demos/demo-modal-plan.md`.
 
 ### 13.3 Ba cách để *thấy* phép tính, xếp theo thời gian chờ
 
@@ -356,7 +356,7 @@ Kết luận cho buổi nói: dùng **trang 4** để giải thích cơ chế (n
 **trang 2** để nói về kết quả trên dữ liệu thật, và **một lần** bấm trang 3 để
 người xem thấy ADM thật đang chạy — rồi nói thẳng "cùng phép tính này, trên 2 vCPU
 là 101 giây, trên A10G là 0,92 giây". Nếu có endpoint Modal thì chính lần bấm đó
-chạy trên GPU (`docs/demo-modal-plan.md`); muốn khán giả thấy giá của CPU thì tắt
+chạy trên GPU (`docs/plans/demos/demo-modal-plan.md`); muốn khán giả thấy giá của CPU thì tắt
 secret `DEMO_URL` trước buổi nói.
 
 ### 13.4 Chỗ dễ tự lừa, và test chặn

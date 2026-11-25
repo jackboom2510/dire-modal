@@ -133,7 +133,7 @@ của cả cây gán nhầm cho Tier A. Tier A cũ (20 file) thực tế **7.42 
 định mới `e2,e4` là **3.39 GB**. Toàn cây đã audit **61.40 GB**, trong đó
 **47 GB (77%) là dữ liệu train** — bỏ được gần hết vì đường báo cáo chính chỉ
 *eval checkpoint tác giả*. Chỉ FR-8 (train lại để đối chiếu) mới cần tier `train`
-(4 file / 5.74 GB) — xem `docs/adr-0004-retrain-for-reconciliation.md`.
+(4 file / 5.74 GB) — xem `docs/adr/adr-0004-retrain-for-reconciliation.md`.
 
 Chi phí thực tế chủ yếu là **thời gian chờ Baidu** (server chậm); CPU 0.25 core
 ≈ $0.012/giờ → rẻ. `fetch_one` là resumable và idempotent: chạy lại sẽ skip file
@@ -635,7 +635,7 @@ python3 tools/free_quota.py --used kaggle=0
 Đường báo cáo chính dùng **checkpoint tác giả**, không train gì. Bước train của
 runbook cũ (~$8–20, `train.py` vẫn là TODO) **không còn nằm trên đường chạy**.
 
-Từ SPEC-001 v1.1, **N1 đã được nới** (`docs/adr-0004-retrain-for-reconciliation.md`):
+Từ SPEC-001 v1.1, **N1 đã được nới** (`docs/adr/adr-0004-retrain-for-reconciliation.md`):
 train lại **được phép**, nhưng chỉ ở chế độ **đối chiếu** — giải thích trọng số
 ResNet-50 mà tác giả đã train, bằng cách train lại trên đúng split của họ rồi in
 hai dòng cạnh nhau trên cùng test (`dire` vs `dire_retrained`). Ba điều kiện:
@@ -683,7 +683,7 @@ lần chạy.
 ### 7b. Ngoại lệ có kiểm soát: `demo_train` (để quay video, KHÔNG để lấy số)
 
 `src/dire_modal/demo_train.py` train ResNet50 **2 000 ảnh × 5 epoch** trên L4 để
-có một đường loss **thật** cho video manim. Xem `docs/adr-0003-demo-training.md`
+có một đường loss **thật** cho video manim. Xem `docs/adr/adr-0003-demo-training.md`
 — đây không phải "train lại", và nó bị cấm ghi vào `/ckpt/results/**`.
 
 ```bash
@@ -833,8 +833,8 @@ Scene `TrainMechanism` cần log thật (§7b). **Chưa có log thì scene hiệ
 ## 9. Gallery + demo công khai (~$0.5 + $0)
 
 Demo là **Streamlit, không có ô upload**, và **không nạp checkpoint trên Space** —
-kế hoạch đầy đủ ở `docs/demo-hf-spaces-plan.md`. Đường "ảnh RGB → `P(fake)`" của
-bản Gradio cũ đã bị bỏ (`docs/demo-web-plan.md` §2): nó chấm một phân bố đầu vào
+kế hoạch đầy đủ ở `docs/plans/demos/demo-hf-spaces-plan.md`. Đường "ảnh RGB → `P(fake)`" của
+bản Gradio cũ đã bị bỏ (`docs/plans/demos/demo-web-plan.md` §2): nó chấm một phân bố đầu vào
 chưa từng được train.
 
 ```bash
@@ -1101,7 +1101,7 @@ Nên `load_state_dict` từ chối, và vì nó nằm trong `eval_one` (một `.
 | `resnet50(num_classes=2)` cố định | `fc_out_features(state)` đọc `fc.weight` shape **từ checkpoint**, dựng đúng 1 hay 2 lớp; không đọc được thì báo rõ thay vì đoán |
 | `softmax(dim=1)[:, 1]` cho mọi checkpoint | `prob_fake(rows, n_out)`: `n_out=1` ⇒ `sigmoid` (DIRE gốc), `n_out>=2` ⇒ `softmax[:, 1]`; chặn tràn số ở logit ±800 |
 | một cặp lỗi ⇒ `.map()` huỷ tất cả, mất trắng | `eval_one` không raise: trả `{"error": …}`, `main` ghi CSV với metric **để trống** + cột `error`, commit, rồi mới `SystemExit` để script dừng (không đốt thêm 3 detector với cùng lỗi) |
-| `platforms/hf-spaces/app.py` (bản Gradio): `num_classes=2` + `strict=False`, rồi `Resize/CenterCrop/Normalize` được sửa cho khớp lúc train | **bỏ cả đường đó**: sửa tiền xử lý cho khớp không làm một model học trên DIRE map có nghĩa khi nhận ảnh RGB. App Streamlit hiện tại không có bộ phân loại nào; điểm chỉ đọc từ `.json` của gallery sau cổng `gate == "passed"` (`docs/demo-hf-spaces-plan.md`) |
+| `platforms/hf-spaces/app.py` (bản Gradio): `num_classes=2` + `strict=False`, rồi `Resize/CenterCrop/Normalize` được sửa cho khớp lúc train | **bỏ cả đường đó**: sửa tiền xử lý cho khớp không làm một model học trên DIRE map có nghĩa khi nhận ảnh RGB. App Streamlit hiện tại không có bộ phân loại nào; điểm chỉ đọc từ `.json` của gallery sau cổng `gate == "passed"` (`docs/plans/demos/demo-hf-spaces-plan.md`) |
 
 Đọc kết quả khi có cặp lỗi:
 

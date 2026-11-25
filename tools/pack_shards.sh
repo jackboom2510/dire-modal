@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # TIỆN ÍCH — không phải quy trình thực nghiệm (pack shards chỉ cần khi TRAIN).
 # Đường báo cáo chính KHÔNG train; chỉ FR-8 (train lại để đối chiếu trọng số
-# tác giả — docs/adr-0004-retrain-for-reconciliation.md) có thể cần.
+# tác giả — docs/adr/adr-0004-retrain-for-reconciliation.md) có thể cần.
 # `train.py`/`demo_train` thì đọc tar /raw trực tiếp, không cần bước pack.
 set -euo pipefail
 

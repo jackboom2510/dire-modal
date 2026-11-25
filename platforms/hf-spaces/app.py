@@ -5,7 +5,7 @@ Nguyên tắc của tệp này, ngắn hơn cả code
 1. **Không** có đường nào nhận ảnh của người xem rồi trả `P(fake)`. Một model
    ResNet-50 học trên DIRE map không có nghĩa gì khi nhận ảnh RGB thô; app cũ
    (`platforms/hf-spaces/app.py` phiên bản Gradio) làm đúng điều đó, và đó là lý
-   do nó bị thay. Xem `docs/demo-web-plan.md` §2.
+   do nó bị thay. Xem `docs/plans/demos/demo-web-plan.md` §2.
 2. Mọi con số hiện ra đều kèm **nguồn**: dòng
    `DIRE: … · detector: … · nhãn: … · S=…` nằm ngay dưới số, không nằm trong tab
    "Giới thiệu".
@@ -330,7 +330,7 @@ def page_live(samples: list[provenance.Sample]) -> None:
         for h in stt.hints:
             st.markdown(f"- `{h}`")
         st.markdown(
-            "Vì sao mặc định tắt: `docs/demo-web-plan.md` §3 chốt ngưỡng — p95 > 45 s "
+            "Vì sao mặc định tắt: `docs/plans/demos/demo-web-plan.md` §3 chốt ngưỡng — p95 > 45 s "
             "thì tắt chế độ tự tính. Đo được **101 s** cho `S = 5`, tức vượt ngưỡng 2,2 lần. "
             "Bật lên thì mỗi người xem bấm một lần là 1,7 phút CPU của Space."
         )
@@ -344,7 +344,7 @@ def page_live(samples: list[provenance.Sample]) -> None:
             "Đặt `DEMO_URL` và `DEMO_TOKEN` trong **Space → Settings → Secrets** để dùng "
             "endpoint trên Modal (A10G, ~0,9 s cho `S=5` thay vì 101 s). Token nằm ở "
             "server của Space, **không** xuống trình duyệt. Cách dựng endpoint, chi phí "
-            "và giới hạn: `docs/demo-modal-plan.md`."
+            "và giới hạn: `docs/plans/demos/demo-modal-plan.md`."
         )
         return
 

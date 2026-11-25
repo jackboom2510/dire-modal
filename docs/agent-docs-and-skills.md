@@ -14,7 +14,7 @@ status: reference
 - **Skill** trả lời: “khi gặp task loại X, quy trình chuyên biệt nào cần dùng?” Skill nên kích hoạt theo mô tả rõ, chứa workflow và trỏ tới reference/scripts/assets theo nhu cầu.
 - **Run history** trả lời: “lần chạy cụ thể đã làm gì, trên tập nào, sinh artefact nào?” Đây là record có provenance, không phải skill hay hướng dẫn thao tác chung.
 - **ADR/spec/runbook/plan** có vai trò riêng: quyết định, yêu cầu có tiêu chí, cách chạy có thể làm theo, và trạng thái/hướng đi. Không gộp chúng thành một “agent prompt” khổng lồ.
-- Chỉ mục có mã DOC/ADR/SCI/EXP/OPS/HIST để agent định vị nhanh. Các path cũ được giữ ổn định vì nhiều chỗ trong repo trỏ tới chúng.
+- Chỉ mục có mã DOC/ADR/SCI/EXP/OPS/HIST để agent định vị nhanh. ADR được tập trung trong `docs/adr/`; các plan chủ đề ở `docs/plans/` được phân nhóm theo research, demo và presentation. Runbook/reference còn lại giữ path canonical vì code, tests và notes dùng trực tiếp, được gom theo workflow trong `docs/workflows/README.md`.
 
 ## Các loại tài liệu thường gặp
 
@@ -25,7 +25,7 @@ status: reference
 | `README.md` | Người mới bắt đầu: repo làm gì, cách chạy và link tới chi tiết | Root và từng subsystem | README không thay thế runbook hay API reference. |
 | `CONTRIBUTING.md` | Cách đóng góp, test, PR, review | Root | Dành cho người đóng góp và agent chuẩn bị thay đổi upstream. |
 | `SKILL.md` | Workflow chuyên biệt được nạp theo task | Thư mục riêng cho từng skill | Trigger qua metadata; hướng dẫn quy trình; reference/script/assets chỉ đọc hoặc chạy khi cần. |
-| ADR | Vì sao một quyết định được chọn và trạng thái quyết định | `docs/adr-*` hoặc `docs/decisions/` | Quyết định đã chốt; không dùng làm hướng dẫn chạy từng bước. |
+| ADR | Vì sao một quyết định được chọn và trạng thái quyết định | `docs/adr/adr-*.md` | Quyết định đã chốt; không dùng làm hướng dẫn chạy từng bước. |
 | Spec / plan / runbook | Yêu cầu, tiến độ, thao tác lặp lại | `spec`, `plan`, `docs/` | Có tiêu chí hoàn tất; phân biệt trạng thái mong muốn với trạng thái đã đo. |
 | History / experiment record | Một run thật đã thực hiện và bằng chứng của nó | `docs/history/` + machine-readable ledger | Không sửa số gốc bằng tay; ghi counts, protocol, commit/artifact và caveat. |
 

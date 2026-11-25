@@ -327,7 +327,7 @@ modal run -m dire_zero.modal_app::bench
 - Tài liệu nội bộ để chuyển plan thành thao tác: `docs/dire-from-scratch.md`
   (protocol paper), `docs/paper-code-walkthrough.md` (paper ↔ code),
   `docs/from-zero-clean-room.md` (`dire_zero`), `docs/dataset-own.md` (inventory
-  ổ F:) và `docs/adr-0006-reproduction-levels.md` (provenance).
+  ổ F:) và `docs/adr/adr-0006-reproduction-levels.md` (provenance).
 
 Mọi chi tiết chưa đối chiếu với phiên bản paper/repo đã ghim là **chưa xác nhận**,
 không phải mặc định đúng. Các bảng số trong paper nếu được trích trong báo cáo

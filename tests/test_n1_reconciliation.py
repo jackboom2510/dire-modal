@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = (ROOT / "spec.md").read_text(encoding="utf-8")
-ADR4 = ROOT / "docs" / "adr-0004-retrain-for-reconciliation.md"
+ADR4 = ROOT / "docs" / "adr" / "adr-0004-retrain-for-reconciliation.md"
 
 
 def _row(spec: str, key: str) -> str:
