@@ -1,10 +1,11 @@
 # AGENT.md — điểm vào cho mọi agent
 
 > Đọc file này trước, rồi mới mở code. Cập nhật lần cuối: 2026-10-25.
-> Các file còn lại: [instructions.md](instructions.md) (cách làm việc) ·
-> [plan.md](plan.md) (đang ở đâu, làm gì tiếp) · [skills.md](skills.md) (công thức
-> cho từng loại việc) · [CLAUDE.md](CLAUDE.md) (ghi chú riêng cho Claude) ·
-> [spec.md](spec.md) (đặc tả SPEC-001: tái tạo DIRE + cải thiện theo AEROBLADE).
+> Các file còn lại: [AGENTS.md](AGENTS.md) (router chuẩn cho agent) ·
+> [instructions.md](instructions.md) (cách làm việc) · [plan.md](plan.md) (đang ở đâu,
+> làm gì tiếp) · [skills.md](skills.md) (công thức cho từng loại việc) ·
+> [CLAUDE.md](CLAUDE.md) (ghi chú riêng cho Claude) · [spec.md](spec.md) (đặc tả
+> SPEC-001) · [docs/README.md](docs/README.md) (chỉ mục tài liệu đánh số).
 
 ## Repo này là gì
 
@@ -41,6 +42,10 @@ bản sao thứ hai của pipeline tiền xử lý (`tests/test_core_parity.py` 
 | Đường dẫn | Nội dung |
 |---|---|
 | `src/dire_core/` | **Lõi thuần** — tiền xử lý, đọc checkpoint, `prob_fake`, nhãn, vòng lặp batch. Không import `modal`/`torch` ở tầng module |
+| `docs/README.md` | Chỉ mục tài liệu đánh số theo chủ đề; route tới source phù hợp, không đọc toàn bộ `docs/` |
+| `docs/agent-docs-and-skills.md` | Khảo sát AGENTS.md/SKILL.md và skills repos; quy tắc progressive disclosure |
+| `docs/history/00-index.md` | Quy ước ghi lịch sử run; phân biệt inventory, unique maps và train/eval counts |
+| `docs/history/01-modal-dataset-runs.md` | Snapshot kích thước/phạm vi các run đã có trong repo; không phải Modal live history |
 | `docs/adr-0006-reproduction-levels.md` | ADR: R0 = *chấm lại*, không phải tái lập; ba trục độc lập; nhãn vào `run.json` + CSV |
 | `src/dire_core/provenance.py` | **Mức tái lập** R0/R1/R2/R3 — thành phần nào của tác giả. R0 = *chấm lại*, **không** được gọi là tái lập. Ghi vào `run.json` + cột `data_source` |
 | `src/dire_local/` | Chạy ở máy nhà: `dire info|detect|batch|serve` + FastAPI (`server.py`) |
@@ -154,6 +159,8 @@ container. Sửa policy mà chỉ sửa `configs/` là sửa vào chỗ vô tác
 ## Bắt đầu từ đâu
 
 - Muốn biết **sẽ xây cái gì và tại sao** → [spec.md](spec.md), rồi [plan.md](plan.md)
+- Muốn route tới tài liệu đúng chủ đề → [docs/README.md](docs/README.md)
+- Muốn biết lịch sử/scope run đã lưu → [docs/history/00-index.md](docs/history/00-index.md)
 - Muốn biết đang làm gì tiếp → [plan.md](plan.md)
 - Sắp sửa code → [instructions.md](instructions.md)
 - Gặp một việc cụ thể (tải hỏng, thêm tier, guard GPU, viết test) →
