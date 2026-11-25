@@ -201,6 +201,35 @@ table.nums .cell-bar i { display: block; height: 6px; border-radius: 3px; backgr
 .stat--hi { border-color: rgba(255,200,87,.4); }
 .stat--hi b { color: var(--map); }
 
+/* ---------- benchmark / phương pháp ---------- */
+.method-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: .25em 0 1em; }
+.method-card { min-width: 0; padding: 13px 14px; border: 1px solid var(--line); border-radius: 12px; background: rgba(255,255,255,.02); }
+.method-card h3 { margin-bottom: .45em; }
+.method-card p { margin: 0 0 .45em; color: #cbd1da; font-size: 12.5px; }
+.method-card small { display: block; color: var(--dim); font-size: 11px; line-height: 1.4; }
+.method-card--rgb { border-top: 2px solid var(--real); }
+.method-card--freq { border-top: 2px solid var(--net); }
+.method-card--patch { border-top: 2px solid var(--fake); }
+.method-card--dire { border-top: 2px solid var(--map); }
+.method-bench { display: grid; grid-template-columns: minmax(190px, .8fr) minmax(0, 1.5fr); gap: 16px; align-items: start; }
+.method-bench h3 { margin-bottom: .35em; }
+.nums--compact { font-size: 11px !important; }
+.nums--compact th { font-size: 9px !important; letter-spacing: .05em !important; }
+.nums--compact th, .nums--compact td { padding: 5px 7px !important; }
+.nums--compact td:last-child { color: var(--dim); font-family: var(--font); }
+.table-scroll { width: 100%; overflow-x: auto; }
+.table-scroll table { min-width: 580px; }
+.matrix th, .matrix td { white-space: nowrap; }
+.matrix tr:nth-child(4) th, .matrix tr:nth-child(4) td { color: var(--map); }
+.matrix th:first-child { min-width: 100px; }
+.paper-figure { margin: .3em 0 .7em; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.paper-figure img { display: block; width: 100%; max-height: min(48vh, 420px); object-fit: contain; }
+.paper-figure figcaption { margin-top: 8px; color: #30343b; font-size: 11.5px; line-height: 1.4; }
+@media (max-width: 900px) {
+  .method-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .method-bench { grid-template-columns: 1fr; }
+}
+
 /* ---------- trạng thái ---------- */
 .status-legend { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12.5px; color: var(--dim); margin-bottom: 14px; }
 .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }

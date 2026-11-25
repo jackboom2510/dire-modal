@@ -1,12 +1,10 @@
 # `platforms/site/` — trang pitch deck (tĩnh, offline)
 
-Trang một-file-để-thuyết-trình: 12 slide, chuyển bằng phím, **không CDN, không
-mạng, không build step**. Mở là chạy; dữ liệu do `build.py` sinh từ repo.
+Trang deck tĩnh: 10 slide, chuyển bằng phím, **không CDN, không phụ thuộc dịch vụ ngoài**. Dữ liệu paper do `build.py` sinh từ TSV; build lại sau khi nguồn thay đổi.
 
-Mục đích: đưa người nghe từ *vấn đề* → *ý tưởng DIRE* → *bằng chứng của paper*
-→ *trạng thái THẬT của repo* → *việc còn thiếu* → *giới hạn*, trong ~7 phút.
-Cùng mạch kể với `docs/manim-video-plan.md`, để nói miệng và xem video không
-kể hai câu chuyện khác nhau.
+Mục đích: giải thích DIRE → so sánh các phương pháp → trình bày bằng chứng paper
+đã công bố → nêu trạng thái repo và giới hạn. Deck không trình bày số benchmark
+repo chưa được xác minh.
 
 ## Chạy
 
@@ -32,26 +30,21 @@ dữ liệu (trình duyệt chặn), trang sẽ hiện cảnh báo đỏ thay v�
 
 URL có `#<số>` nên gửi link đúng slide được (`…/#4`).
 
-## Ba tầng số — đừng trộn
+## Quy tắc provenance
 
-Mỗi con số trên trang thuộc đúng một tầng, và tầng đó được **in ngay cạnh số**:
-
-| Nhãn | Nghĩa | Ví dụ |
-|---|---|---|
-| *số của paper* | Table 2, ICCV 2023 — **không phải** số của mình | ACC 99.9 % của ADM |
-| *số đo của repo* | đo thật, có ngày + nguồn | 76.6 KiB/s Baidu, bẫy `ls -l` lệch 3 901 B |
-| *ước lượng demo* | do `demo_train --mode plan` tính, **chưa đo** | 160 step ≈ $0.013, `measured: false` |
-
-Trang **không có** tầng thứ tư, và không có ô nào ghi "acc của dự án" — vì dự án
-chưa chạy eval thật. Chỗ đó ghi thẳng *"chưa có"*.
+- Các số ACC/AP và hình robustness trong deck đều là **kết quả paper ICCV 2023**, gắn Table/Figure nguồn tại slide.
+- Không có metric hiệu năng, chi phí hay thời gian chạy của repo trong deck.
+- Các file run chưa được dùng làm bằng chứng hiệu năng repo; chỉ đưa vào sau khi ledger, thời điểm đo, mẫu số và protocol được xác minh.
+- Trạng thái repo là ghi chú tiến độ, không phải kết quả benchmark.
 
 ## Kiến trúc
 
 ```
 build.py     đọc repo → data.json     (nguồn số DUY NHẤT)
 data.json    sinh ra, KHÔNG sửa tay
-index.html   khung + tiêu đề; không chứa số, chỉ [data-bind]
-deck.js      điều hướng + đổ số; không chứa số, chỉ logic
+index.html   cấu trúc + nội dung giải thích; số liệu chỉ có trong data.json
+              thông qua data-bind hoặc các bảng được render từ dữ liệu
+deck.js      điều hướng + renderer an toàn cho bảng; không chứa metric
 style.css    bảng màu lấy từ tools/manim/style.py (web và video cùng một bộ màu)
 ```
 
@@ -59,26 +52,25 @@ style.css    bảng màu lấy từ tools/manim/style.py (web và video cùng m�
 
 | Nguồn | Dùng cho |
 |---|---|
-| `src/dire_modal/paper_table2.tsv` | bảng Table 2 + trung bình 4 detector |
-| `src/dire_modal/manifest.py` (tier `e2`) | 15 cặp · 16 tar · 60 container |
-| `src/dire_modal/demo_train.yaml` + `demo_train.estimate()` | tham số & chi phí demo |
-| hằng `MEASURED` trong `build.py` | số đo tay (có nguồn ghi kèm) |
-| hằng `STATUS`, `ROADMAP` | trạng thái thật + việc còn thiếu |
+| `src/dire_modal/paper_table2.tsv` | kết quả DIRE theo generator trong Table 2 |
+| `src/dire_modal/paper_detector_benchmark.tsv` | baseline Table 2: detector gốc, retrain và DIRE |
+| `src/dire_modal/paper_table5.tsv` | ablation representation (REC / RGB / RGB + DIRE / DIRE) |
+| hằng `STATUS` trong `build.py` | trạng thái repo, không có metric hiệu năng |
 
-Sửa TSV/manifest/yaml ⇒ `data.json` **cũ** ⇒ `tests/test_site.py` đỏ cho tới khi
-chạy lại `build.py`. Đó là chủ ý.
+Sửa TSV ⇒ `data.json` **cũ** ⇒ `tests/test_site.py` đỏ cho tới khi chạy lại
+`build.py`. Đó là chủ ý.
 
 ## Kiểm
 
 ```bash
 python3 platforms/site/build.py --check   # exit 1 nếu data.json cũ
-python3 -m pytest tests/test_site.py -q   # 24 test (+1 skip nếu không có jsdom)
+python3 -m pytest tests/test_site.py -q
 ```
 
-Test kiểm: số trong `data.json` khớp TSV/manifest/`demo_train` · `data.json`
+Test kiểm: số trong `data.json` khớp TSV paper · không có run metrics repo chưa xác minh · `data.json`
 không cũ · HTML/CSS/JS **không** chứa số liệu viết tay · mọi khoá `data-bind`
 tồn tại · không tài nguyên ngoài · bảng màu khớp `tools/manim/style.py` ·
-thứ tự slide · có mục "chưa có" (trang không được tự khen). Nếu máy có
+thứ tự slide · có mục giới hạn. Nếu máy có
 `node` + `jsdom` thì có thêm một test dựng DOM thật và đọc lại số; không có
 thì `skip` (CI không cài `node_modules`).
 

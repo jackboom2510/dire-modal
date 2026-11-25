@@ -5,10 +5,9 @@ Vì sao có file này
 Một trang giới thiệu là nơi số liệu dễ trôi nhất trong cả repo: HTML trông đúng
 ngay cả khi số đã sai ba tháng. Ba lớp kiểm:
 
-1. **Nguồn số.** `index.html` / `deck.js` không được chứa số liệu; mọi số đến từ
-   `data.json`, và `data.json` phải khớp TSV / manifest / `demo_train.yaml`.
-2. **Không lệch.** `data.json` phải được sinh lại y hệt (`build.py --check`),
-   capital: sửa dữ liệu mà quên build là test đỏ.
+1. **Nguồn số.** Kết quả paper đến từ TSV trong repo; không đưa run metrics chưa xác minh vào `data.json`.
+2. **Không lệch.** `data.json` phải được sinh lại y hệt (`build.py --check`);
+   sửa dữ liệu mà quên build là test đỏ.
 3. **Trang tự đứng được.** Không CDN, không tài nguyên ngoài, mọi khoá
    `data-bind` phải có dữ liệu (thiếu thì trang hiện "⚠ thiếu dữ liệu", không
    hiện 0).
@@ -59,7 +58,7 @@ def data() -> dict:
 def test_data_json_exists_and_parses(data):
     assert data["schema"] == 1
     assert data["generated_by"] == "platforms/site/build.py"
-    for key in ("paper", "pipeline", "demo", "measured", "status", "roadmap", "labels"):
+    for key in ("paper", "status", "labels", "sources"):
         assert key in data, key
 
 
@@ -78,61 +77,47 @@ def test_paper_numbers_match_the_tsv(data):
         assert abs(det["mean_acc"] - det["avg_row"]["acc"]) <= 0.05
 
 
+def test_detector_comparisons_are_source_bound(data):
+    comparison = data["paper"]["comparisons"]
+    assert comparison["baseline_source"].endswith("paper_detector_benchmark.tsv · ICCV 2023, Table 2")
+    assert comparison["table5_source"].endswith("paper_table5.tsv · ICCV 2023, Table 5")
+    means = {row["method"]: (row["acc"], row["ap"])
+             for row in comparison["detector_baselines"]}
+    assert means["CNNDetection*"] == (86.5, 97.3)
+    assert means["DIRE (ADM)"] == (99.9, 100.0)
+    assert comparison["sdv1_delta_pp"] == {"acc": 22.3, "ap": 14.2}
+    assert comparison["table5"]["RGB_DIRE"]["sdv1"] == {"acc": 62.4, "ap": 92.4}
+
+
 def test_paper_has_eight_columns_and_four_rows(data):
     assert len(data["paper"]["generators"]) == 8
     assert [d["label"] for d in data["paper"]["detectors"]] == ["ADM", "PNDM", "iDDPM", "StyleGAN"]
 
 
-def test_pipeline_counts_come_from_the_manifest(data):
-    from dire_modal.manifest import resolve_many  # noqa: PLC0415
-
-    ents = resolve_many("e2")
-    tars = [e for e in ents if e.remote.endswith(".tar.gz")]
-    fakes = [e for e in tars if not e.remote.endswith("/real.tar.gz")]
-    assert data["pipeline"]["items"] == len(ents)
-    assert data["pipeline"]["tars"] == len(tars) == 16
-    assert data["pipeline"]["pairs"] == len(fakes) == 15
-    assert data["pipeline"]["containers"] == 15 * 4 == 60
-    assert data["pipeline"]["detectors_count"] == len(data["paper"]["detectors"])
+def test_repo_run_metrics_are_not_reported_as_verified(data):
+    """Unverified repo runs and estimates must not enter the published-results deck."""
+    assert "benchmark" not in data
+    assert "measured" not in data
+    assert "pipeline" not in data
+    assert "demo" not in data
+    assert "roadmap" not in data
+    assert "modal-runs/runs/report.json" not in json.dumps(data, ensure_ascii=False)
 
 
-def test_demo_numbers_come_from_demo_train(data):
-    """Chi phí trên trang phải là chi phí mà `demo_train` thật sự ước lượng."""
-    from dire_modal import demo_train as DT  # noqa: PLC0415
-
-    cfg = DT.load_config()
-    est = DT.estimate(images=int(cfg["images"]), epochs=int(cfg["epochs"]),
-                      batch=int(cfg["batch_size"]),
-                      sec_per_step=float(cfg["sec_per_step"]),
-                      usd_per_gpu_hour=float(cfg["usd_per_gpu_hour"]),
-                      val_images=int(cfg["val_images"]))
-    assert data["demo"]["steps"] == est["train_steps"]
-    assert data["demo"]["usd"] == est["usd"]
-    assert data["demo"]["seed"] == cfg["seed"] and data["demo"]["n_out"] == cfg["n_out"]
-    # Chưa đo thì phải nói chưa đo.
-    assert data["demo"]["measured"] is False
-
-
-def test_every_number_carries_a_source(data):
-    assert "ICCV" in data["paper"]["source"]
-    assert "manifest" in data["pipeline"]["source"]
-    assert "demo_train" in data["demo"]["source"]
-    for key in ("baidu_kib_s", "ls_rounding", "fc_weight"):
-        assert data["measured"][key]["source"].strip(), key
-
-
-def test_labels_cover_all_three_kinds_of_number(data):
-    """Ba loại nhãn = ba loại số. Không có loại thứ tư."""
+def test_reported_numbers_are_paper_sourced(data):
+    assert "ICCV 2023" in data["paper"]["source"]
+    assert data["paper"]["comparisons"]["baseline_source"].endswith("Table 2")
+    assert data["paper"]["comparisons"]["table5_source"].endswith("Table 5")
     assert "paper" in data["labels"]["paper"].lower()
-    assert "CHƯA" in data["labels"]["paper"]
-    assert "paper" in data["labels"]["demo"]          # nhãn demo nói rõ nó KHÔNG phải paper
+    assert "không phải số đo của repo" in data["labels"]["paper"]
+    assert "trạng thái repo" in data["labels"]["repo"]
 
 
 # ---------------------------------------------------------------------------
 # 2. data.json không được cũ
 # ---------------------------------------------------------------------------
 def test_data_json_is_up_to_date():
-    """Sửa TSV/manifest/demo_train.yaml mà quên `build.py` ⇒ test này đỏ."""
+    """Sửa TSV mà quên `build.py` ⇒ test này đỏ."""
     r = subprocess.run([sys.executable, str(SITE / "build.py"), "--check"],
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout + r.stderr
@@ -182,21 +167,10 @@ def test_no_quantity_is_typed_into_the_markup():
     )
 
 
-def test_demo_scale_is_claimed_correctly(data):
-    """So sánh quy mô demo vs tác giả phải lấy từ dữ liệu, không gõ tay."""
-    adr = (ROOT / "docs" / "adr-0003-demo-training.md").read_text(encoding="utf-8")
-    assert f"| {data['demo']['paper_epochs']} + earlystop 5 |" in adr, (
-        "`paper_epochs` trên trang không khớp bảng trong ADR-0003"
-    )
-    assert data["demo"]["paper_epochs"] > data["demo"]["epochs"]
-    # "images_epochs" là chuỗi hiển thị ⇒ phải khớp hai trường số bên cạnh nó.
-    assert data["demo"]["images_epochs"] == f"{data['demo']['images']} × {data['demo']['epochs']}"
-
-
 def test_every_data_bind_has_a_value(data):
     """Khoá trỏ sai ⇒ trang hiện '⚠ thiếu dữ liệu'. Test bắt trước khi mở trình duyệt."""
     keys = sorted(set(re.findall(r'data-bind="([^"]+)"', HTML.read_text(encoding="utf-8"))))
-    assert len(keys) >= 20, f"quá ít khoá bind ({len(keys)}) — trang đang bỏ số ra ngoài?"
+    assert len(keys) >= 3, f"thiếu khoá nguồn cho nội dung paper ({len(keys)})"
 
     def pick(obj, path):
         for part in path.split("."):
@@ -260,12 +234,11 @@ def test_slides_are_ordered_and_complete():
         assert re.search(r"<h1|<h2", body), f"slide {name} không có tiêu đề"
 
 
-def test_status_and_roadmap_are_not_rosy():
+def test_status_and_scope_are_not_rosy():
     """Trang không được tự khen: phải có mục 'chưa có' và một slide nói giới hạn."""
     data = json.loads(DATA.read_text(encoding="utf-8"))
     states = {s["state"] for s in data["status"]["items"]}
     assert {"run", "todo"} <= states, states
-    assert data["roadmap"], "roadmap rỗng"
     html = HTML.read_text(encoding="utf-8")
     assert 'data-slide="limits"' in html
     assert "không" in html.lower()

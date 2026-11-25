@@ -1,0 +1,9 @@
+method	train_set	acc	ap	group
+CNNDetection	LSUN / ProGAN	51.1	72.6	pretrained
+GANDetection	LSUN / ProGAN	58.5	58.3	pretrained
+PatchForensics	FF++ / multi	57.4	77.4	pretrained
+SBI	FF++ / multi	58.9	62.3	pretrained
+CNNDetection*	ADM subset	86.5	97.3	retrained
+PatchForensics*	ADM subset	90.9	96.4	retrained
+F3Net*	ADM subset	91.6	97.7	retrained
+DIRE (ADM)	ADM subset	99.9	100.0	dire

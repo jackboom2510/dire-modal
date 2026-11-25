@@ -3,7 +3,7 @@
 
    Hai quy tắc, giống `tools/manim/`:
    1. **Không con số nào viết trong file này.** Số đến từ `data.json` (do
-      `build.py` sinh ra từ TSV/manifest/demo_train.yaml). Ở đây chỉ có logic.
+      `build.py` sinh ra từ TSV paper trong repo). Ở đây chỉ có logic.
    2. **Thiếu dữ liệu thì hiện lỗi rõ ràng**, không im lặng hiện "0" — cùng
       nguyên tắc với `data.py::DataMissing` trong video.
 */
@@ -20,27 +20,9 @@
 
   /* ---------- dữ liệu ---------- */
   const fmt = {
-    num: (v) => (typeof v === "number" ? String(v) : String(v)),
-    // Byte: nhóm bằng DẤU CÁCH, không dùng dấu chấm. `Intl` của vi-VN cho
-    // "3.901" — người Việt đọc thành "ba phẩy chín", trong khi nó là số byte
-    // (bốn chữ số). Với số đếm byte, nhầm dấu thập phân đúng là loại lỗi mà
-    // cả repo này đang cảnh báo.
-    bytes: (v) => String(v).replace(/\B(?=(\d{3})+(?!\d))/g, " "),
-    // ACC/AP của paper in 1 chữ số thập phân ⇒ giữ 1 chữ số cho khớp bảng giấy.
+    num: (v) => String(v),
     pct: (v) => (typeof v === "number" ? v.toFixed(1) : String(v)),
-    // Trung bình TỰ TÍNH: 2 chữ số, để không ai đọc nhầm nó với ô `avg` in sẵn.
     pct2: (v) => (typeof v === "number" ? v.toFixed(2) : String(v)),
-    usd: (v) => (typeof v === "number" ? "$" + v.toFixed(3) : String(v)),
-    sci: (v) => (typeof v === "number" && Math.abs(v) < 1e-3 ? v.toExponential(0) : String(v)),
-  };
-
-  const FORMATTERS = {
-    "demo.usd": fmt.usd,
-    "measured.ls_rounding.reversed_bytes": fmt.bytes,
-    "measured.ls_rounding.real_bytes": fmt.bytes,
-    "measured.ls_rounding.delta_bytes": fmt.bytes,
-    "demo.lr": fmt.sci,
-    "demo.seed": (v) => String(v),
   };
 
   /** Lấy giá trị theo đường dẫn "a.b.c"; trả undefined nếu thiếu. */
@@ -59,8 +41,7 @@
         missing += 1;
         return;
       }
-      const f = FORMATTERS[key] || fmt.num;
-      el.textContent = f(raw);
+      el.textContent = fmt.num(raw);
     });
     return missing;
   }
@@ -101,6 +82,39 @@
     });
   }
 
+  function renderPaperComparisons(data) {
+    const comparison = data.paper.comparisons;
+    const baselineBody = $("#baseline-table tbody");
+    baselineBody.replaceChildren();
+    comparison.detector_baselines.forEach((row) => {
+      const tr = el("tr");
+      tr.append(el("th", null, row.method),
+                el("td", null, fmt.pct(row.acc) + "%"),
+                el("td", null, fmt.pct(row.ap) + "%"),
+                el("td", null, row.train_set));
+      baselineBody.append(tr);
+    });
+
+    const tbody = $("#table5-table tbody");
+    const label = { REC: "REC", RGB: "RGB", RGB_DIRE: "RGB + DIRE", DIRE: "DIRE" };
+    const order = ["REC", "RGB", "RGB_DIRE", "DIRE"];
+    const generators = ["adm", "ddpm", "iddpm", "pndm", "sdv1"];
+    tbody.replaceChildren();
+    order.forEach((representation) => {
+      const tr = el("tr");
+      tr.append(el("th", null, label[representation]));
+      generators.forEach((generator) => {
+        const result = comparison.table5[representation]?.[generator];
+        tr.append(el("td", null, result
+          ? fmt.pct(result.acc) + "/" + fmt.pct(result.ap)
+          : "—"));
+      });
+      tbody.append(tr);
+    });
+    $("#sdv1-acc-delta").textContent = "+" + fmt.pct(comparison.sdv1_delta_pp.acc);
+    $("#sdv1-ap-delta").textContent = "+" + fmt.pct(comparison.sdv1_delta_pp.ap);
+  }
+
   function renderStatus(data) {
     const list = $("#status-list");
     list.innerHTML = "";
@@ -124,18 +138,6 @@
       body.append(nt, el("div", "ref", s.ref));
       li.append(dot, body);
       list.append(li);
-    });
-  }
-
-  function renderRoadmap(data) {
-    const ol = $("#roadmap");
-    ol.innerHTML = "";
-    data.roadmap.forEach((r) => {
-      const li = el("li");
-      const body = el("div");
-      body.append(el("div", "what", r.what), el("div", "why", r.why));
-      li.append(body, el("div", "cost", r.cost));
-      ol.append(li);
     });
   }
 
@@ -193,6 +195,11 @@
     let locked = false;
     window.addEventListener("wheel", (e) => {
       if (document.body.classList.contains("all")) return;
+      const active = slides[index];
+      const canScroll = active.scrollHeight > active.clientHeight + 2;
+      const atTop = active.scrollTop <= 0;
+      const atBottom = active.scrollTop + active.clientHeight >= active.scrollHeight - 2;
+      if (canScroll && ((e.deltaY > 0 && !atBottom) || (e.deltaY < 0 && !atTop))) return;
       if (locked) return;
       locked = true;
       setTimeout(() => { locked = false; }, 420);
@@ -220,8 +227,8 @@
       const data = await res.json();
       const missing = bindAll(data);
       renderPaper(data);
+      renderPaperComparisons(data);
       renderStatus(data);
-      renderRoadmap(data);
       $("#cover-date").textContent = String(new Date().getFullYear());
       if (missing) {
         console.warn("[" + missing + "] khoá dữ liệu bị thiếu trong data.json");

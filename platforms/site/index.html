@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DIRE — phát hiện ảnh do AI sinh ra · demo sản phẩm</title>
-<meta name="description" content="Tái lập DIRE (Diffusion Reconstruction Error, ICCV 2023) theo hướng serverless, chi phí gần 0. Trang giới thiệu: cơ chế, bằng chứng, trạng thái thật và việc còn thiếu.">
+<meta name="description" content="Giải thích DIRE (Diffusion Reconstruction Error, ICCV 2023) và trình bày các kết quả đã công bố của paper, không gán số paper cho repo.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -17,25 +17,22 @@
 
 <main id="deck" aria-live="polite">
 
-  <!-- 1 ─────────────────────────────────────────────────────────────── -->
+  <!-- 1 -->
   <section class="slide slide--cover" data-slide="cover">
     <p class="kicker">demo sản phẩm · <span id="cover-date">2026</span></p>
     <h1>Một ảnh do AI sinh ra<br><em>để lại dấu vết.</em></h1>
     <p class="lede">
       Dự án tái lập <b>DIRE</b> — <span class="dim">Diffusion Reconstruction Error</span> —
-      của Wang và cộng sự (ICCV 2023), theo hướng serverless và chi phí gần 0.
-      Mục tiêu không phải “train lại cho giống paper”, mà là <b>dựng đúng đường đo</b>,
-      rồi mở rộng nó.
+      của Wang và cộng sự (ICCV 2023). Demo này giải thích phương pháp và chỉ trình bày
+      <b>kết quả đã công bố trong paper</b>; chưa gán số hiệu năng nào cho repo.
     </p>
     <div class="cover-meta">
       <div class="pill pill--warn" data-bind="honesty.pill">đang tải…</div>
-      <div class="pill pill--ghost">0 ₫ — chỉ free tier</div>
-      <div class="pill pill--ghost">chạy trên Modal · HF Spaces · Kaggle</div>
     </div>
     <p class="hint">← → để chuyển slide · nhấn <kbd>?</kbd> để xem phím tắt</p>
   </section>
 
-  <!-- 2 ─────────────────────────────────────────────────────────────── -->
+  <!-- 2 -->
   <section class="slide" data-slide="problem">
     <p class="eyebrow">Vấn đề</p>
     <h2>Mắt người đã thua.</h2>
@@ -55,7 +52,80 @@
     </div>
   </section>
 
-  <!-- 3 ─────────────────────────────────────────────────────────────── -->
+  <!-- 3 -->
+  <section class="slide" data-slide="methods">
+    <p class="eyebrow">Bối cảnh · detector trong benchmark</p>
+    <h2>Các phương pháp khác nhau ở tín hiệu chúng khai thác.</h2>
+    <div class="method-grid">
+      <article class="method-card method-card--rgb">
+        <h3>RGB / dấu vết ảnh</h3>
+        <p><b>CNNDetection · GANDetection</b></p>
+        <p>Phân loại từ pixel RGB; benchmark này dùng checkpoint huấn luyện trên ProGAN.</p>
+        <small>Kết quả paper thấp trên generator ngoài tập train; đây không phải cùng protocol với nhóm retrain.</small>
+      </article>
+      <article class="method-card method-card--freq">
+        <h3>Miền tần số</h3>
+        <p><b>F3Net*</b></p>
+        <p>Nhóm tác giả đưa bản huấn luyện lại vào đối chứng trên ADM subset.</p>
+        <small>Trong Table 2, so sánh chặt hơn với DIRE nhờ cùng tập train; không đồng nghĩa với detector tần số luôn kém bền.</small>
+      </article>
+      <article class="method-card method-card--patch">
+        <h3>Patch / học tăng cường dữ liệu</h3>
+        <p><b>PatchForensics · SBI</b></p>
+        <p>PatchForensics học dấu vết cục bộ theo patch; SBI dùng self-blended training cho face forgery.</p>
+        <small>Paper dùng checkpoint FF++/nhiều nguồn; PatchForensics* là bản retrain ADM riêng. Khác miền với ảnh bedroom diffusion.</small>
+      </article>
+      <article class="method-card method-card--dire">
+        <h3>DIRE · sai số tái tạo</h3>
+        <p><b>Ảnh → tái tạo bằng ADM/DDIM → DIRE map → ResNet-50</b></p>
+        <p>Classifier nhận bản đồ sai số pixel-wise giữa ảnh và ảnh tái tạo.</p>
+        <small>Đóng góp chính là representation DIRE; Table 5 cho thấy DIRE đơn lẻ thường chuyển tốt hơn RGB hoặc REC.</small>
+      </article>
+    </div>
+    <div class="method-bench">
+      <div>
+        <h3>Table 2 · trung bình qua 8 generator</h3>
+        <p class="fine">Các số là trung bình ACC/AP qua 8 generator của paper. Chỉ nhóm * và DIRE cùng được train trên ADM subset; 4 detector gốc có tập train khác.</p>
+      </div>
+      <table class="nums nums--compact" id="baseline-table">
+        <thead><tr><th>Phương pháp</th><th>ACC</th><th>AP</th><th>Train</th></tr></thead>
+        <tbody><!-- render từ dữ liệu bài báo --></tbody>
+      </table>
+    </div>
+    <p class="fine">Paper Table 2 đặt DIRE (ADM) cao hơn các baseline retrain *. Đây là kết quả trong thiết lập paper, không phải số của repo; baseline pretrained còn khác train set và preprocessing.</p>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide" data-slide="representation">
+    <p class="eyebrow">Bằng chứng · Table 5 của paper</p>
+    <h2>DIRE giúp ích ở representation nào?</h2>
+    <p class="lede">Cùng detector benchmark trên các đầu vào khác nhau: ảnh tái tạo (REC), ảnh RGB, RGB + DIRE và DIRE.</p>
+    <div class="table-scroll">
+      <table class="nums matrix" id="table5-table">
+        <thead><tr><th>Đầu vào</th><th>ADM</th><th>DDPM</th><th>iDDPM</th><th>PNDM</th><th>SD-v1</th></tr></thead>
+        <tbody><!-- render ACC/AP từ Table 5 --></tbody>
+      </table>
+    </div>
+    <div class="callout callout--dire">
+      <b>Ví dụ SD-v1 (kết quả bài báo):</b>
+      RGB → DIRE: ACC <span id="sdv1-acc-delta">·</span> điểm; AP <span id="sdv1-ap-delta">·</span> điểm tăng.
+      <span class="fine">DIRE biểu diễn sai số của phép tái tạo; bảng cho thấy chỉ ghép thêm RGB không bảo đảm cải thiện.</span>
+    </div>
+    <p class="fine">Nguồn: Wang et al. (2023), Table 5 · kết quả paper, train trên ADM subset. Chỉ bốn generator hiển thị; phạm vi paper không đại diện mọi mô hình hay miền ảnh.</p>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide" data-slide="robustness">
+    <p class="eyebrow">Độ bền · Figure 4 của paper</p>
+    <h2>Trong phép thử paper, RGB giảm dưới blur và JPEG.</h2>
+    <figure class="paper-figure">
+      <img src="illustrations/official_paper_figure4_plot.png" alt="Figure 4: các detector được so sánh dưới Gaussian blur ở hàng trên và JPEG compression ở hàng dưới; biểu diễn AP theo mức biến đổi.">
+      <figcaption><b>Figure 4.</b> Hàng trên: Gaussian blur (Sigma). Hàng dưới: JPEG compression (Quality). Các dấu * là baseline được huấn luyện lại trên tập con ADM.</figcaption>
+    </figure>
+    <p class="fine">Kết quả trong hình là benchmark của tác giả. Dùng để minh họa độ bền; không quy thành số đo của nhóm.</p>
+  </section>
+
+  <!-- 6 -->
   <section class="slide" data-slide="idea">
     <p class="eyebrow">Ý tưởng · DIRE</p>
     <h2>Model nào sinh ra ảnh,<br>thì tái tạo ảnh đó <em>tốt hơn</em>.</h2>
@@ -78,43 +148,8 @@
     </div>
   </section>
 
-  <!-- 4 ─────────────────────────────────────────────────────────────── -->
-  <section class="slide" data-slide="detector">
-    <p class="eyebrow">Detector</p>
-    <h2>Từ ảnh tới một con số.</h2>
-    <div class="chain">
-      <div class="node">ảnh RGB</div><i class="arrow">→</i>
-      <div class="node node--map">DIRE map</div><i class="arrow">→</i>
-      <div class="node node--net">ResNet-50</div><i class="arrow">→</i>
-      <div class="node node--out">1 logit</div><i class="arrow">→</i>
-      <div class="node node--prob">sigmoid → P(fake)</div>
-    </div>
-    <div class="cols cols--tight">
-      <div class="card card--ok">
-        <h3>Ba chi tiết quyết định</h3>
-        <ul>
-          <li><b>1 logit, không phải 2 lớp.</b> Checkpoint của tác giả train bằng
-            <code>BCEWithLogitsLoss</code> ⇒ <code>fc.weight</code> là
-            <code data-bind="measured.fc_weight.paper_shape">·</code>. Code cũ dựng
-            2 lớp ⇒ <code data-bind="measured.fc_weight.old_code_shape">·</code>
-            ⇒ <code>load_state_dict</code> từ chối.</li>
-          <li><b>Tiền xử lý cố định:</b> Resize 256 → CenterCrop 224 → Normalize ImageNet.</li>
-          <li><b>Không có bước DIRE thì không phải detector này.</b> Demo HF Spaces
-            chạy ResNet trực tiếp trên ảnh, nên độ chính xác của demo
-            <em>không phải</em> của detector trong paper.</li>
-        </ul>
-      </div>
-      <div class="card">
-        <h3>Điều dự án này không làm</h3>
-        <p>Không train lại detector. Ràng buộc N1: <b>chỉ cải thiện, không train lại</b>
-        — nên toàn bộ phần tái lập dùng checkpoint có sẵn của tác giả.</p>
-        <p class="fine">Ngoại lệ duy nhất là <code>demo_train</code> — một bản
-        train cỡ demo để <em>quay video</em>, và nó bị cấm ghi vào chỗ của số thật.</p>
-      </div>
-    </div>
-  </section>
 
-  <!-- 5 ─────────────────────────────────────────────────────────────── -->
+  <!-- 7 -->
   <section class="slide" data-slide="evidence">
     <p class="eyebrow">Bằng chứng</p>
     <h2>Table 2 của paper.</h2>
@@ -132,64 +167,10 @@
     </div>
   </section>
 
-  <!-- 6 ─────────────────────────────────────────────────────────────── -->
-  <section class="slide" data-slide="pipeline">
-    <p class="eyebrow">Đường đi của dữ liệu</p>
-    <h2>Từ Baidu tới bảng ACC.</h2>
-    <div class="stat-row">
-      <div class="stat"><b data-bind="measured.baidu_kib_s.text">·</b>
-        <small>tốc độ tải</small><em data-bind="measured.baidu_kib_s.note">·</em></div>
-      <div class="stat"><b data-bind="pipeline.pairs">·</b>
-        <small>cặp fake-vs-real</small><em>tar giả, KHÔNG đếm <code>real</code></em></div>
-      <div class="stat"><b data-bind="pipeline.detectors_count">·</b>
-        <small>detector</small><em>4 hàng của Table 2</em></div>
-      <div class="stat stat--hi"><b data-bind="pipeline.containers">·</b>
-        <small>container eval</small><em>cặp × detector — tính, không gõ</em></div>
-    </div>
-    <div class="chain chain--small">
-      <div class="node">Baidu Netdisk</div><i class="arrow">→</i>
-      <div class="node">staging (máy)</div><i class="arrow">→</i>
-      <div class="node">volume put</div><i class="arrow">→</i>
-      <div class="node node--ok">verify: gzip -t + sha256</div><i class="arrow">→</i>
-      <div class="node node--warn">eval</div>
-    </div>
-    <p class="fine" data-bind="pipeline.source">·</p>
-  </section>
 
-  <!-- 7 ─────────────────────────────────────────────────────────────── -->
-  <section class="slide" data-slide="incidents">
-    <p class="eyebrow">Những cái bẫy đã gặp</p>
-    <h2>Ba lỗi thật, ba bài học.</h2>
-    <div class="cards-3">
-      <div class="card">
-        <h3>Làm tròn là sai số</h3>
-        <p><code>ls -l</code> in <b data-bind="measured.ls_rounding.shown">·</b>.
-        Quy đổi ngược ra <b data-bind="measured.ls_rounding.reversed_bytes">·</b> B,
-        file thật <b data-bind="measured.ls_rounding.real_bytes">·</b> B — lệch
-        <b data-bind="measured.ls_rounding.delta_bytes">·</b> B.</p>
-        <p class="fine">Đòi khớp từng byte với con số làm tròn ⇒ báo “tải dở dang”
-        cho file đã tải đủ 100 %. Nay sai số được mang trong kiểu dữ liệu.</p>
-      </div>
-      <div class="card">
-        <h3>Hai quy ước lớp cuối</h3>
-        <p><code>size mismatch for fc.weight</code>:
-        <b data-bind="measured.fc_weight.paper_shape">·</b> so với
-        <b data-bind="measured.fc_weight.old_code_shape">·</b>.</p>
-        <p class="fine">Không phải dữ liệu hỏng. Và vì nó nằm trong <code>.map()</code>,
-        một cặp lỗi làm hỏng cả lượt chấm — nay lỗi được ghi vào CSV, không raise.</p>
-      </div>
-      <div class="card">
-        <h3>Hai chiều của MSYS</h3>
-        <p>Git Bash đổi <code>/raw</code> thành <code>C:/Program Files/Git/raw</code>.
-        Tắt việc đó đi thì tới lượt binary Windows nhận <code>/d/…</code> và đọc thành
-        <code>D:\d\…</code>.</p>
-        <p class="fine">Một helper <code>native_path()</code> cho một chiều, biến môi
-        trường tắt cho chiều kia.</p>
-      </div>
-    </div>
-  </section>
 
-  <!-- 8 ─────────────────────────────────────────────────────────────── -->
+
+  <!-- 8 -->
   <section class="slide" data-slide="status">
     <p class="eyebrow">Trạng thái thật</p>
     <h2>Chỗ nào xong, chỗ nào chưa.</h2>
@@ -204,72 +185,23 @@
     <em>không hỏng</em>, không chứng minh nó <em>đã chạy</em>.</p>
   </section>
 
-  <!-- 9 ─────────────────────────────────────────────────────────────── -->
-  <section class="slide" data-slide="demo-train">
-    <p class="eyebrow">Một thứ chạy được ngay</p>
-    <h2><code>demo_train</code> — train thật, nhưng có nhãn.</h2>
-    <div class="cols cols--tight">
-      <div class="card">
-        <h3>Tham số</h3>
-        <dl class="kv">
-          <dt>seed</dt><dd data-bind="demo.seed">·</dd>
-          <dt>arch</dt><dd data-bind="demo.arch">·</dd>
-          <dt>lớp cuối</dt><dd><span data-bind="demo.n_out">·</span> logit</dd>
-          <dt>loss</dt><dd data-bind="demo.loss">·</dd>
-          <dt>batch</dt><dd data-bind="demo.batch_size">·</dd>
-          <dt>lr</dt><dd data-bind="demo.lr">·</dd>
-          <dt>quy mô</dt>
-          <dd data-bind="demo.images_epochs">·</dd>
-        </dl>
-        <p class="fine">Chép từ <code>vendor/utils/config.py</code> của tác giả và
-        được test đối chiếu từng số.</p>
-      </div>
-      <div class="card card--accent">
-        <h3>Chi phí</h3>
-        <p class="mega"><span data-bind="demo.steps">·</span> step</p>
-        <p class="dim">trên <b data-bind="demo.gpu">·</b>, khoảng
-        <b data-bind="demo.usd">·</b> USD.</p>
-        <p class="fine"><code>sec/step</code> là <b>ước lượng, chưa đo</b> —
-        đo rồi truyền lại để con số tiền có nghĩa.</p>
-        <div class="banner banner--warn" data-bind="demo.labels">·</div>
-        <p class="fine">Train <span data-bind="demo.images_epochs">·</span> (ảnh ×
-        epoch) không thể so với <span data-bind="demo.paper_epochs">·</span> epoch của
-        tác giả. Nó tồn tại để có một đường loss <em>thật</em> cho video — một
-        đường loss bịa trông y hệt đường thật.</p>
-      </div>
-    </div>
-  </section>
 
-  <!-- 10 ────────────────────────────────────────────────────────────── -->
-  <section class="slide" data-slide="roadmap">
-    <p class="eyebrow">Việc còn thiếu</p>
-    <h2>Cái gì chặn cái gì.</h2>
-    <ol class="roadmap" id="roadmap"><!-- render --></ol>
-    <p class="fine">Thứ tự này xếp theo “chặn nhiều thứ nhất trước”, không theo
-    độ thú vị. Việc đầu tiên sửa một lỗi tiền thật: <code>eval --tiers</code>
-    đang bị bỏ qua.</p>
-  </section>
 
-  <!-- 11 ────────────────────────────────────────────────────────────── -->
+  <!-- 9 -->
   <section class="slide" data-slide="limits">
     <p class="eyebrow">Giới hạn</p>
     <h2>Trang này <em>không</em> chứng minh gì.</h2>
     <ul class="honest">
-      <li><b>Chưa có số của dự án.</b> Mọi con số ACC/AP ở slide 5 là của paper,
-      lấy từ <code>paper_table2.tsv</code>. Khi có số thật, nó sẽ nằm ở
-      <code>eval::report</code> kèm Δ so với paper.</li>
-      <li><b>Chưa có AEROBLADE, chưa có fusion.</b> Phần “cải thiện” — thứ duy nhất
-      dự án này định làm mới — hiện là hai file chưa tồn tại.</li>
-      <li><b>Video giải thích chưa render.</b> 5 scene đã có code; chưa có khung
-      hình nào vì máy render cần cairo/pango.</li>
-      <li><b>Một chỗ trống được ghi đúng</b> thì tốt hơn một con số đẹp không nguồn.</li>
+      <li><b>Số hiệu năng trong deck đều thuộc paper ICCV 2023.</b> Bảng và hình ghi rõ nguồn; không dùng chúng làm kết quả của repo.</li>
+      <li><b>Không có benchmark hiệu năng của repo trong deck.</b> Các tệp run hiện có không được dùng để tuyên bố kết quả đã đo/xác minh.</li>
+      <li><b>Phạm vi kết luận của paper có giới hạn.</b> Table 2, Table 5 và Figure 4 chỉ hỗ trợ kết luận trong các thiết lập, dữ liệu và biến đổi được tác giả thử.</li>
     </ul>
   </section>
 
-  <!-- 12 ────────────────────────────────────────────────────────────── -->
+  <!-- 10 -->
   <section class="slide slide--end" data-slide="end">
     <h2>Chạy thử trong ba lệnh.</h2>
-    <pre class="term"><code><span class="c"># 1. kiểm môi trường + test (0 credit)</span>
+    <pre class="term"><code><span class="c"># 1. kiểm môi trường + test</span>
 bash scripts/check.sh
 
 <span class="c"># 2. tải dữ liệu tối thiểu rồi verify</span>
@@ -280,8 +212,6 @@ modal run -m dire_modal.download::verify
 modal run -m dire_modal.eval::main --tiers e2min</code></pre>
     <div class="end-links">
       <a class="btn" href="https://github.com/jackboom2510/dire-modal">repo trên GitHub</a>
-      <a class="btn btn--ghost" href="../../docs/runbook-free.md">runbook đầy đủ</a>
-      <a class="btn btn--ghost" href="../../docs/manim-video-plan.md">kế hoạch video</a>
     </div>
     <p class="fine">Trang tĩnh, không phụ thuộc CDN, không gửi dữ liệu đi đâu.
     Số liệu do <code>platforms/site/build.py</code> sinh ra từ chính repo.</p>
