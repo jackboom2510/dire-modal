@@ -51,6 +51,7 @@ REBUILD_RUN_ID = "rebuild-2026-10-14"
 REBUILD_ROOT = ROOT / "modal-runs" / "runs" / "rebuild" / REBUILD_RUN_ID
 REPORT_PATH = REBUILD_ROOT / "report.json"
 EVAL_PATH = REBUILD_ROOT / "eval" / "gen-adm" / "eval.json"
+ADM_SCORES_PATH = REBUILD_ROOT / "eval" / "gen-adm" / "scores.json"
 
 sys.path.insert(0, str(ROOT / "platforms/prototype"))
 from data import (  # noqa: E402
@@ -69,6 +70,7 @@ C = {
 }
 PW, PH = 960.0, 540.0  # points; 13.333 x 7.5 inches, 16:9
 FONT_PPT = "Aptos"
+FONT_PPT_DISPLAY = "Aptos Display"
 FONT_PDF = "DIREDejaVu"
 FONT_PDF_BOLD = "DIREDejaVu-Bold"
 FONT_PDF_ITALIC = FONT_PDF
@@ -1077,10 +1079,13 @@ LEDGER = table4()
 T4_ROWS = table4_rows(LEDGER)
 REPORT = read_json(REPORT_PATH) or {}
 EVAL = read_json(EVAL_PATH) or {}
+ADM_SCORES = (read_json(ADM_SCORES_PATH) or {}).get("samples", {})
 if REPORT.get("run_id") != REBUILD_RUN_ID:
     raise RuntimeError(f"Deck requires report for {REBUILD_RUN_ID}: {REPORT_PATH}")
 if EVAL.get("run_id") != REBUILD_RUN_ID:
     raise RuntimeError(f"Deck requires eval for {REBUILD_RUN_ID}: {EVAL_PATH}")
+if not isinstance(ADM_SCORES, dict):
+    raise RuntimeError(f"Expected per-sample scores in {ADM_SCORES_PATH}")
 GALLERY_SAMPLE = json.loads((GALLERY / "adm_004006349103115c.json").read_text(encoding="utf-8"))
 T4_RUNS = {s: block for s, block in (LEDGER or {}).get("by_steps", {}).items()}
 
@@ -1127,6 +1132,23 @@ def gallery_entries_for(generator: str) -> list[tuple[dict[str, Any], Path, Path
     return entries
 
 
+def eval_prediction_for(meta: dict[str, Any]) -> tuple[str, bool]:
+    """Return the actual gen-adm score/verdict, or a scoped no-record note."""
+    score = ADM_SCORES.get(meta.get("name"))
+    if not isinstance(score, dict) or "p_fake" not in score:
+        return ("Không có mẫu khớp trong runs/eval/gen-adm/scores.json; không suy diễn.", False)
+    p_fake = float(score["p_fake"])
+    threshold = float(score.get("threshold", EVAL.get("threshold_prob", 0.5)))
+    predicted_fake = p_fake > threshold
+    true_fake = meta.get("generator") != "real"
+    predicted = "ảnh sinh" if predicted_fake else "ảnh thật"
+    correctness = "đúng" if predicted_fake == true_fake else "sai so với nhãn mẫu"
+    return (
+        f"gen-adm · P(giả)={p_fake:.3f} · τ={threshold:.3f} → {predicted} ({correctness}) · gate={score.get('gate', '—')}",
+        True,
+    )
+
+
 class Page:
     """Single page rendered in parallel as native PPTX elements and PDF vectors."""
     def __init__(self, owner: "Deck", section: str, title: str, source: str,
@@ -1150,8 +1172,11 @@ class Page:
             return
         ink = "white" if self.dark else "ink"
         muted = "deepmuted" if self.dark else "muted"
-        self.text(42, 23, 850, 16, self.section.upper(), 9.2, "mint", bold=True, char_space=True)
-        self.text(42, 43, 875, 56, self.title, 19.5, ink, bold=True, valign="mid")
+        self.text(42, 22, 850, 17, self.section.upper(), 9.0, "mint", bold=True, char_space=True)
+        title_len = len(self.title)
+        title_size = 20.0 if title_len <= 66 else 18.0 if title_len <= 88 else 16.0
+        self.text(42, 43, 875, 55, self.title, title_size, ink, bold=True, valign="mid",
+                  font_name=FONT_PPT_DISPLAY)
         self.line(42, 108, 918, 108, "navy2" if self.dark else "line", 0.8)
         self.line(42, 505, 918, 505, "navy2" if self.dark else "line", 0.8)
         self.text(43, 512, 812, 16, self.source, 7.4, muted)
@@ -1227,23 +1252,25 @@ class Page:
 
     def text(self, x: float, y: float, w: float, h: float, text: str, size: float = 16,
              color: str = "ink", bold: bool = False, italic: bool = False,
-             align: str = "left", valign: str = "top", char_space: bool = False):
+             align: str = "left", valign: str = "top", char_space: bool = False,
+             font_name: str | None = None):
         text = _vi_copy(str(text))
         shape = self.slide.shapes.add_textbox(inches(x), inches(y), inches(w), inches(h))
         tf = shape.text_frame; tf.clear(); tf.word_wrap = True
         tf.margin_left = Inches(0.015); tf.margin_right = Inches(0.015)
         tf.margin_top = Inches(0.0); tf.margin_bottom = Inches(0.0)
         tf.vertical_anchor = {"top": MSO_ANCHOR.TOP, "mid": MSO_ANCHOR.MIDDLE, "bottom": MSO_ANCHOR.BOTTOM}[valign]
+        font_name = font_name or FONT_PPT
         lines = text.split("\n")
         for i, line_text in enumerate(lines):
             p = tf.paragraphs[0] if i == 0 else tf.add_paragraph()
             p.text = line_text
             p.space_before = Pt(0); p.space_after = Pt(0)
             p.alignment = {"left": PP_ALIGN.LEFT, "center": PP_ALIGN.CENTER, "right": PP_ALIGN.RIGHT}[align]
-            p.font.name = FONT_PPT; p.font.size = Pt(size); p.font.bold = bold; p.font.italic = italic
+            p.font.name = font_name; p.font.size = Pt(size); p.font.bold = bold; p.font.italic = italic
             p.font.color.rgb = ppt_rgb(color)
             for run in p.runs:
-                run.font.name = FONT_PPT; run.font.size = Pt(size); run.font.bold = bold
+                run.font.name = font_name; run.font.size = Pt(size); run.font.bold = bold
                 run.font.italic = italic; run.font.color.rgb = ppt_rgb(color)
         # PDF counterpart: use Paragraph for robust Vietnamese wrapping.
         pdf_font = FONT_PDF_BOLD if bold else FONT_PDF_ITALIC if italic else FONT_PDF
@@ -1258,7 +1285,14 @@ class Page:
         _, used_h = para.wrap(w, h)
         if used_h > h + 1.5:
             self.owner.overflow.append((self.pageno, "text", text[:80], used_h, h))
-        para.drawOn(self.pdf, x, PH-y-min(used_h, h))
+        draw_h = min(used_h, h)
+        if valign == "mid":
+            pdf_y = PH - y - (h + draw_h) / 2
+        elif valign == "bottom":
+            pdf_y = PH - y - h
+        else:
+            pdf_y = PH - y - draw_h
+        para.drawOn(self.pdf, x, pdf_y)
         return shape
 
     def badge(self, x: float, y: float, w: float, label: str, fill: str = "bluep",
@@ -1430,7 +1464,8 @@ def build_deck() -> Deck:
     p.arrow(662, 202, 735, 224, "deepmuted", 1.2)
     p.arrow(758, 224, 835, 202, "deepmuted", 1.2)
     p.text(55, 54, 440, 20, "TECHNICAL DEEP DIVE  ·  RESEARCH UPDATE", 10, "mint", bold=True)
-    p.text(55, 112, 520, 112, "DIRE: từ phép tái tạo\ntới bằng chứng", 35, "white", bold=True)
+    p.text(55, 112, 520, 112, "DIRE: từ phép tái tạo\ntới bằng chứng", 35, "white", bold=True,
+           font_name=FONT_PPT_DISPLAY)
     p.text(58, 238, 500, 60,
            "DIRE · toán học, kiến trúc mô hình,\nđối chiếu bài báo và kết quả pilot trong kho mã", 15, "deepmuted")
     p.badge(58, 325, 174, "PAPER-REPORTED", "navy2", "mint")
@@ -2046,7 +2081,7 @@ def build_deck() -> Deck:
     p.note()
 
     # 33 latest per-generator training metrics in the rebuild namespace
-    p = d.page("15 · Project measurements", f"Rebuild {REBUILD_RUN_ID} reports different results by trained generator",
+    p = d.page("15 · Project measurements", f"Kết quả huấn luyện khác nhau giữa các bộ sinh · {REBUILD_RUN_ID}",
         f"{REPORT_PATH.relative_to(ROOT)}:train_by_generator",
         notes_for(f"{REPORT_PATH.relative_to(ROOT)} train_by_generator; per-generator split and provenance in {REBUILD_ROOT.relative_to(ROOT)}/train/gen-*/train.json"))
     names=[k.removeprefix("gen-") for k in REPORT.get("train_by_generator",{})]
@@ -2057,7 +2092,7 @@ def build_deck() -> Deck:
     p.table(73, 150, 814, ["Run tag", "ACC", "AP", "AUC", "n", "Best epoch"], rows,
             [202,122,122,122,106,140], 31, 9.8)
     p.rect(91, 465, 778, 31, "goldp", stroke="gold", radius=8)
-    p.text(104, 470, 750, 21, "Rebuild R1+R2 · hash split · scratch init · n=2,000/test per row; not paper Table 2.", 9.8, "ink", bold=True, align="center", valign="mid")
+    p.text(104, 470, 750, 21, "R1+R2 · chia tập theo mã băm · khởi tạo từ đầu · 2.000 mẫu kiểm thử mỗi bộ sinh; không phải Table 2 bài báo.", 9.8, "ink", bold=True, align="center", valign="mid")
     p.note()
 
     # 34 heldout eval from the matching rebuild namespace
@@ -2110,53 +2145,62 @@ def build_deck() -> Deck:
            10.6, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    # 36+ · Exhaustive gallery: every hash-verified original/DIRE pair, grouped
-    # by generator and paginated; reconstruction images are never fabricated.
+    # 36–37 · One deterministic, hash-verified representative per model.
+    # Do not expand the deck with every gallery record or fabricate reconstructions.
     generator_labels = {
         "adm": "ADM", "dalle2": "DALL·E 2", "ddpm": "DDPM",
         "diff-projectedgan": "Diff.-ProjectedGAN", "iddpm": "iDDPM",
-        "diff-stylegan": "Diff.-StyleGAN", "if": "IF", "real": "Real control",
+        "diff-stylegan": "Diff.-StyleGAN", "if": "IF", "real": "Đối chứng ảnh thật",
     }
     gallery_generators = sorted({
         (read_json(path) or {}).get("generator")
         for path in GALLERY.glob("*.json")
         if (read_json(path) or {}).get("generator")
     })
-    gallery_total = sum(len(gallery_entries_for(generator)) for generator in gallery_generators)
+    representatives = []
     for generator in gallery_generators:
         entries = gallery_entries_for(generator)
-        label = generator_labels.get(generator, generator)
-        for batch_start in range(0, len(entries), 4):
-            batch = entries[batch_start:batch_start + 4]
-            batch_end = batch_start + len(batch)
-            p = d.page(
-                "16 · Ví dụ đa bộ sinh",
-                f"{label} · gallery {batch_start + 1}–{batch_end}/{len(entries)} · đủ ảnh gốc và DIRE map",
-                "modal-runs/gallery · hash-verified display PNGs · metadata kèm theo",
-                notes_for(
-                    f"modal-runs/gallery/*.json; all {len(entries)} entries for {generator}; "
-                    "original and display-map PNG SHA-256 verified against metadata. "
-                    "The gallery does not contain reconstructions or source NPY files."
-                ),
-            )
-            columns = [(231, "ẢNH GỐC"), (646, "DIRE MAP")]
-            for x, column_label in columns:
-                p.text(x, 137, 330, 18, column_label, 9.5, "muted", bold=True, align="center")
-            for row, (meta, original, dire_map) in enumerate(batch):
-                y = 160 + row * 83
-                sample_name = meta["name"].removeprefix(generator + "_")
-                p.text(43, y + 15, 112, 18, label, 8.4, "teal", bold=True, align="center")
-                p.text(43, y + 36, 112, 24, sample_name, 7.0, "muted", align="center")
-                for x in (160, 575):
-                    p.rect(x, y, 380, 72, "paper", stroke="line", radius=6)
-                p.image(original, 164, y + 3, 372, 66, f"Ảnh gốc · {meta['name']}")
-                p.image(dire_map, 579, y + 3, 372, 66, f"DIRE map hiển thị · {meta['name']}")
-            p.rect(89, 462, 782, 30, "goldp", stroke="gold", radius=8)
-            p.text(99, 467, 762, 20,
-                   f"Đã đưa {len(batch)}/{len(entries)} mẫu của {label} lên trang này · toàn gallery: {gallery_total} cặp. "
-                   "Reconstruction ADM/DDIM không có sẵn; không được suy ra từ DIRE map.",
-                   8.7, "ink", bold=True, align="center", valign="mid")
-            p.note()
+        if entries:
+            # Stable sample choice: alphabetically first valid gallery metadata record.
+            representatives.append((generator, generator_labels.get(generator, generator), entries[0]))
+    for page_start in range(0, len(representatives), 4):
+        batch = representatives[page_start:page_start + 4]
+        page_end = page_start + len(batch)
+        p = d.page(
+            "16 · Ví dụ đa bộ sinh",
+            f"Một ảnh đại diện đã chọn cho mỗi model · {page_start + 1}–{page_end}/{len(representatives)}",
+            "modal-runs/gallery · modal-runs/runs/rebuild/rebuild-2026-10-14/eval/gen-adm/scores.json",
+            notes_for(
+                "One alphabetically first gallery record per model; original and display-map PNG SHA-256 "
+                "verified against metadata. Sample predictions are joined by exact sample ID from "
+                f"{ADM_SCORES_PATH.relative_to(ROOT)}; unmatched samples are explicitly marked. "
+                f"Detector SHA={EVAL.get('detector_sha256', '—')}; report flags it as different from the current detector checkpoint."
+            ),
+        )
+        for row, (generator, label, (meta, original, dire_map)) in enumerate(batch):
+            x = 44 + (row % 2) * 440
+            y = 132 + (row // 2) * 160
+            sample_name = meta["name"].removeprefix(generator + "_")
+            p.rect(x, y, 430, 150, "paper", stroke="line", radius=10)
+            p.text(x + 12, y + 7, 406, 20, f"{label}  ·  {sample_name}",
+                   11.2, "ink", bold=True, font_name=FONT_PPT_DISPLAY)
+            p.text(x + 12, y + 28, 98, 13, "ẢNH GỐC", 7.8, "muted", bold=True, align="center")
+            p.text(x + 118, y + 28, 98, 13, "DIRE MAP", 7.8, "muted", bold=True, align="center")
+            p.text(x + 224, y + 28, 194, 13, "DỰ ĐOÁN GEN-ADM", 7.8, "muted", bold=True, align="center")
+            p.rect(x + 12, y + 43, 98, 98, "paper", stroke="line", radius=6)
+            p.rect(x + 118, y + 43, 98, 98, "paper", stroke="line", radius=6)
+            p.image(original, x + 13, y + 44, 96, 96, f"Ảnh gốc · {meta['name']}")
+            p.image(dire_map, x + 119, y + 44, 96, 96, f"DIRE map hiển thị · {meta['name']}")
+            prediction, has_score = eval_prediction_for(meta)
+            p.rect(x + 224, y + 43, 194, 98, "bluep" if has_score else "grayp", stroke="line", radius=6)
+            p.text(x + 233, y + 49, 176, 86, prediction, 8.2, "ink", bold=has_score,
+                   align="left", valign="mid")
+        p.rect(65, 453, 830, 40, "goldp", stroke="gold", radius=8)
+        p.text(78, 459, 804, 29,
+               "Kết quả lấy từ gen-adm; report cảnh báo SHA detector khác checkpoint hiện tại. "
+               "Chưa có reconstruction ADM/DDIM thật để trình bày.",
+               8.6, "ink", bold=True, align="center", valign="mid")
+        p.note()
 
     # 38 Table4 design
     p = d.page("17 · Table 4 pilot", "Pilot protocol shares a fixed 200-per-cell subset across S settings",
