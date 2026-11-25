@@ -1099,6 +1099,19 @@ def paper_value(det: str, gen: str, metric: str) -> float:
     return PAPER_MAP[(det, gen)][0 if metric == "acc" else 1]
 
 
+def gallery_pair_for(generator: str) -> tuple[Path, Path] | None:
+    """Return a display pair for a generator; never invent reconstructions."""
+    for meta_path in sorted(GALLERY.glob(f"{generator}_*.json")):
+        meta = read_json(meta_path)
+        name = (meta or {}).get("name")
+        if not isinstance(name, str) or Path(name).name != name:
+            continue
+        orig, dire = GALLERY / f"{name}_orig.png", GALLERY / f"{name}_diff.png"
+        if orig.is_file() and dire.is_file():
+            return orig, dire
+    return None
+
+
 class Page:
     """Single page rendered in parallel as native PPTX elements and PDF vectors."""
     def __init__(self, owner: "Deck", section: str, title: str, source: str,
@@ -1261,6 +1274,7 @@ class Page:
 
     def formula(self, tex: str, x: float, y: float, w: float, h: float,
                 size: float = 25, color: str = "ink", label: str | None = None):
+        # Keep source/equation notation exactly as supplied; localization is for prose only.
         key = hashlib.sha1(tex.encode("utf-8")).hexdigest()[:12]
         path = self.owner.tmp / f"formula-{key}.png"
         if not path.exists():
@@ -1427,7 +1441,7 @@ def build_deck() -> Deck:
     p.card(345, 260, 270, 147, "Chưa có kết quả",
            "Table 5 mới có giao thức/đầu vào; Figure 4 chưa có kết quả. Không suy diễn S=50 cho pilot.", "gold", "goldp")
     p.card(642, 260, 270, 147, "Giới hạn nguồn",
-           "Checkpoint chưa có trong checkout; hash ảnh gallery chỉ xác nhận PNG hiển thị, không thay thế map nguồn.", "red", "redp")
+           "Checkpoint chưa có trong checkout; ảnh gallery là PNG hiển thị, không thay thế map nguồn.", "red", "redp")
     p.text(52, 431, 855, 46,
            "Kết luận: báo cáo nêu rõ đâu là kết quả công bố, đâu là số đo pilot và đâu là câu hỏi chưa được kiểm chứng.",
            14, "ink", bold=True)
@@ -1998,9 +2012,9 @@ def build_deck() -> Deck:
     report_cards=[("Map inventory", "5,900", "maps.total/by_split_generator"),
                   ("DDIM setting", "S=20", "steps_mixed=[20]"),
                   ("NFE in report", "234,760", "reported field"),
-                  ("Manifest", "04ff262b…", "SHA-256 prefix")]
+                  ("Eval scope", "ADM / test", "held-out evaluation")]
     for i,(a,b,c) in enumerate(report_cards):
-        label_value(p,52+i*221,158,198,a,b,"gold" if i==3 else "teal",21,"paper")
+        label_value(p,52+i*221,158,198,a,b,"gold" if i==3 else "teal",18 if i==3 else 21,"paper")
         p.text(63+i*221, 246, 176, 26, c, 9.6, "muted", align="center")
     p.rect(80, 299, 800, 123, "goldp", stroke="gold", radius=12)
     p.text(99, 311, 761, 92,
@@ -2043,73 +2057,89 @@ def build_deck() -> Deck:
            12, "ink", bold=True, align="center")
     p.note()
 
-    # 35 · Cặp ảnh gốc/map DIRE đã lưu trong gallery.
-    p = d.page("16 · Ví dụ map DIRE", "Ảnh ADM kiểm thử và bản đồ DIRE được lưu thành một cặp có nguồn gốc",
-        "modal-runs/gallery/adm_004006349103115c.json · SHA-256 PNG trong metadata",
-        notes_for("Both committed PNGs match declared display-file SHA-256; source NPY and the corresponding reconstruction were not retrieved."))
-    p.rect(47,151,320,258,"paper",stroke="line",radius=12)
-    p.image(GALLERY/"adm_004006349103115c_orig.png",62,164,290,218,"Ảnh gốc ADM/test")
-    p.text(64,386,286,16,"ẢNH GỐC · ADM / test · R1+R2",9.5,"teal",bold=True,align="center")
-    p.rect(593,151,320,258,"paper",stroke="line",radius=12)
-    p.image(GALLERY/"adm_004006349103115c_diff.png",608,164,290,218,"Bản đồ DIRE hiển thị")
-    p.text(610,386,286,16,"BẢN ĐỒ DIRE · S=20 · PNG hiển thị",9.5,"gold",bold=True,align="center")
-    p.arrow(382,275,578,275,"teal",2)
-    p.text(393,206,174,52,"ADM + DDIM\nđảo rồi tái tạo",12,"ink",bold=True,align="center",valign="mid")
-    p.formula(r"\mathrm{DIRE}(x_0)=|x_0-\hat{x}_0|",395,298,168,44,size=16)
-    p.rect(88,431,784,54,"goldp",stroke="gold",radius=9)
-    p.text(103,439,754,37,"Đây là cặp ảnh/map lưu trong gallery, không phải lượt inference mới. File tái tạo và map .npy gốc chưa có trong checkout; PNG map chỉ dùng để hiển thị.",9.6,"ink",bold=True,align="center",valign="mid")
+    # 35 · Confusion matrix: counts, not only a single accuracy percentage.
+    cm = EVAL.get("metrics", {}).get("confusion", {})
+    p = d.page("15 · Project measurements", "Ma trận nhầm lẫn cho thấy số mẫu đúng và sai ở từng lớp",
+        "modal-runs/runs/eval/gen-adm/eval.json · test split · threshold chọn trên validation",
+        notes_for("modal-runs/runs/eval/gen-adm/eval.json; confusion counts are shown as recorded, with positive class = generated/fake"))
+    p.text(111, 155, 710, 25, "Dự đoán của detector", 14, "muted", bold=True, align="center")
+    p.text(363, 182, 210, 22, "Dự đoán: ảnh thật", 11, "teal", bold=True, align="center")
+    p.text(583, 182, 210, 22, "Dự đoán: ảnh sinh", 11, "red", bold=True, align="center")
+    p.text(58, 250, 190, 24, "Thực tế: ảnh thật", 12, "ink", bold=True, align="center", valign="mid")
+    p.text(58, 362, 190, 24, "Thực tế: ảnh sinh", 12, "ink", bold=True, align="center", valign="mid")
+    matrix_cells = [
+        (270, 211, cm.get("tn", 0), "TN · thật → thật", "greenp", "teal"),
+        (490, 211, cm.get("fp", 0), "FP · thật → sinh", "redp", "red"),
+        (270, 323, cm.get("fn", 0), "FN · sinh → thật", "redp", "red"),
+        (490, 323, cm.get("tp", 0), "TP · sinh → sinh", "greenp", "teal"),
+    ]
+    for x, y, count, label, fill, accent in matrix_cells:
+        p.rect(x, y, 210, 100, fill, stroke=accent, radius=12)
+        p.text(x+8, y+12, 194, 48, f"{count:,}".replace(",", "."), 28, accent, bold=True, align="center", valign="mid")
+        p.text(x+8, y+66, 194, 20, label, 10.4, "ink", bold=True, align="center", valign="mid")
+    n = int(EVAL.get("metrics", {}).get("n", sum(int(v) for v in cm.values())))
+    correct = int(cm.get("tn", 0)) + int(cm.get("tp", 0))
+    p.rect(129, 450, 702, 43, "bluep", stroke="line", radius=9)
+    n_label = format(n, ",").replace(",", ".")
+    correct_label = format(correct, ",").replace(",", ".")
+    acc_label = f"{100*correct/max(n,1):.1f}".replace(".", ",")
+    p.text(143, 457, 674, 29,
+           f"Đúng {correct_label}/{n_label} mẫu · {acc_label}%  |  Ngưỡng {EVAL.get('threshold_prob', 0.5):.5f} chọn trên validation · lớp dương = ảnh sinh",
+           10.6, "ink", bold=True, align="center", valign="mid")
     p.note()
 
-    # 36 Table4 design
+    # 36–37 · Multi-generator examples. Never invent reconstructions from residual maps.
+    def generator_examples_slide(section: str, title: str, generators: list[str]):
+        p = d.page(section, title,
+            "modal-runs/gallery · PNG hiển thị đã lưu cùng metadata nguồn",
+            notes_for("modal-runs/gallery; shown originals and maps are committed display PNGs; no reconstruction images or source NPY files are present in this checkout"))
+        columns = [(160, "ẢNH GỐC"), (390, "TÁI TẠO  x̂₀"), (620, "DIRE MAP")]
+        for x, label in columns:
+            p.text(x, 157, 200, 18, label, 9.5, "muted", bold=True, align="center")
+        for row, generator in enumerate(generators):
+            y = 194 + row*143
+            pair = gallery_pair_for(generator)
+            generator_label = {"ddpm": "DDPM", "iddpm": "iDDPM", "dalle2": "DALL·E 2",
+                               "diff-stylegan": "Diffusion StyleGAN"}.get(generator, generator)
+            p.text(42, y+45, 106, 30, generator_label,
+                   8.4, "teal", bold=True, align="center", valign="mid")
+            if pair:
+                p.rect(160, y, 200, 118, "paper", stroke="line", radius=8)
+                p.image(pair[0], 166, y+5, 188, 108, f"Ảnh gốc · {generator}")
+                p.rect(620, y, 200, 118, "paper", stroke="line", radius=8)
+                p.image(pair[1], 626, y+5, 188, 108, f"DIRE map hiển thị · {generator}")
+            else:
+                for x in (160, 620):
+                    p.rect(x, y, 200, 118, "grayp", stroke="line", radius=8)
+                    p.text(x+8, y+37, 184, 42, "Chưa có ảnh trong gallery", 10, "muted", align="center", valign="mid")
+            p.rect(390, y, 200, 118, "grayp", stroke="gold", radius=8)
+            p.text(402, y+24, 176, 67,
+                   "Chưa có ảnh tái tạo x̂₀\n(checkpoint / output chưa có trong checkout)",
+                   9.5, "muted", align="center", valign="mid")
+        p.rect(101, 468, 758, 29, "goldp", stroke="gold", radius=8)
+        p.text(111, 473, 738, 19,
+               "Không suy dựng reconstruction từ DIRE map: map chỉ lưu |x − x̂₀|, không chứa dấu của sai số.",
+               9.5, "ink", bold=True, align="center", valign="mid")
+        p.note()
+
+    generator_examples_slide("16 · Ví dụ đa bộ sinh", "Ảnh gốc và DIRE map từ DDPM, iDDPM",
+                             ["ddpm", "iddpm"])
+    generator_examples_slide("16 · Ví dụ đa bộ sinh", "Ảnh gốc và DIRE map từ DALL·E 2, StyleGAN khuếch tán",
+                             ["dalle2", "diff-stylegan"])
+
+    # 38 Table4 design
     p = d.page("17 · Table 4 pilot", "Pilot protocol shares a fixed 200-per-cell subset across S settings",
-        "Table 4 ledger · _subset_protocol.json · manifest SHA-256",
+        "Table 4 ledger · _subset_protocol.json · sampling protocol",
         notes_for("modal-runs/experiments/experiments/table4/table4-lsun-pilot; local repository artifact; live Volume not checked"))
-    proto=T4_RUNS.get("5",{}).get("protocol",{})
     p.table(85, 154, 790, ["Protocol field", "Repo-recorded value"], [
         ["Subset / seed", "lsun-pilot · 3407"],
-        ["Sampling", "sha256-ranked-cell-v1"],
+        ["Sampling rule", "deterministic per-cell ranking"],
         ["Images / cell", "200 maximum · 10 cells · up to 2,000 rows"],
         ["Train generator", "ADM"],
         ["Test generators", "ADM, DDPM, iDDPM, PNDM, SD-v2"],
         ["Detector initialization", "ImageNet ResNet-50 · seed 3407"],
         ["Training actually recorded", "batch 32 · lr 1e−4 · crop 224 · early stopping"],
-        ["Diffusion reference hash", str(proto.get("adm_ckpt_sha256","—"))[:16]+"…"],
-        ["Manifest hash", str(proto.get("manifest_sha256","—"))[:16]+"…"],
-    ], [240,550], 31, 10.2)
-    p.note()
-
-    # 37 Table4 AP chart
-    p = d.page("17 · Table 4 pilot", "Pilot chỉ so sánh ba mức đã chạy: S=5, S=10 và S=20",
-        "table4.json:by_steps[].by_test_generator[].metrics.ap · ACC recorded at threshold 0.5",
-        notes_for("Table 4 ledger. Chart plots only the 15 measured cells at S=5/10/20; no value is extrapolated."))
-    chart_x, chart_y, chart_w, chart_h = 106, 160, 625, 295
-    p.rect(chart_x, chart_y, chart_w, chart_h, "paper", stroke="line", radius=10)
-    xvals=[5,10,20]; ylo=.94; yhi=1.0
-    for tick in (.94,.95,.96,.97,.98,.99,1.0):
-        yy=chart_y+chart_h-34-(tick-ylo)/(yhi-ylo)*(chart_h-72)
-        p.line(chart_x+49,yy,chart_x+chart_w-15,yy,"line",0.5)
-        p.text(chart_x+5,yy-8,38,16,f"{tick*100:.0f}%",8.5,"muted",align="right")
-    px=[]
-    for j,sval in enumerate(xvals):
-        xx=chart_x+86+j*220;px.append(xx)
-        p.text(xx-20,chart_y+chart_h-29,40,17,f"S={sval}",9.4,"muted",align="center")
-    colorset=["teal","purple","gold","red","navy2"]
-    gens=["adm","ddpm","iddpm","pndm","sdv2"]
-    for gen,col in zip(gens,colorset):
-        pts=[]
-        for i,sval in enumerate(xvals[:3]):
-            met=s_metrics(sval,gen)
-            if met:
-                xx=px[i]; yy=chart_y+chart_h-34-(met["ap"]-ylo)/(yhi-ylo)*(chart_h-72)
-                pts.append((xx,yy))
-        for a,b in zip(pts,pts[1:]):p.line(a[0],a[1],b[0],b[1],col,1.8)
-        for xx,yy in pts:p.circle(xx,yy,3.4,col)
-        ly=180+gens.index(gen)*31
-        p.line(760,ly+7,784,ly+7,col,2.2);p.text(790,ly,112,16,gen.upper(),9.3,"ink",bold=True)
-    p.rect(738, 369, 151, 54, "greenp", stroke="teal", radius=8)
-    p.text(748,378,132,36,"15 Ô ĐÃ ĐO\n5 bộ sinh × 3 mức S",9.8,"teal",bold=True,align="center",valign="mid")
-    p.text(758, 437, 98, 19, "AP · test", 9.2, "muted", align="center")
-    p.badge(199, 463, 467, "PILOT · n=400 PER GENERATOR CELL · REPO LEDGER", "goldp", "gold")
+    ], [240,550], 37, 10.2)
     p.note()
 
     # 38 pilot score matrix as compact multiples: only measured S settings.
@@ -2227,7 +2257,7 @@ def build_deck() -> Deck:
     p.text(607, 367, 246, 19, "up to 4,000 · contains 200 stage", 10.5,"ink",bold=True,align="center")
     p.arrow(402, 283, 555, 283, "gold", 2)
     p.text(404, 253, 149, 20, "increase cap, keep IDs", 9.4,"gold",bold=True,align="center")
-    p.text(104, 426, 747, 38, "Manifest-only: source images stay unchanged; seed 3407 · sha256-ranked-cell-v1 · cell counts in ledger.", 11.7, "ink", bold=True, align="center")
+    p.text(104, 426, 747, 38, "Chỉ cập nhật manifest: ảnh nguồn không đổi; seed 3407 · chọn mẫu xác định theo từng ô · số mẫu trong sổ.", 11.7, "ink", bold=True, align="center")
     p.note()
 
     # 44 experiment matrix
@@ -2356,9 +2386,9 @@ def build_deck() -> Deck:
     p = d.page("Appendix E · Cổng bằng chứng", "A completed scientific cell requires metrics, labels, counts and compatible provenance",
         "docs/dire-tu-so-0.pdf Appendix C · table4/table5/figure4 runbook",
         notes_for("docs/dire-tu-so-0.pdf p. 76; runbook completion checks"))
-    gates=[("Before", "R-level · preprocessing · checkpoint hash · split / threshold plan"),
+    gates=[("Before", "R-level · preprocessing · split / threshold plan"),
            ("Per cell", "n_real · n_fake · status · test scores · sample IDs · config"),
-           ("After", "ledger complete · no empty class · repeatability / hash checks"),
+           ("After", "ledger complete · no empty class · repeatability checks"),
            ("For claims", "paper vs repo labels · pilot vs full-data · caveat / missingness")]
     for i,(a,b) in enumerate(gates):
         y=157+i*78; p.badge(81,y+7,105,a,"bluep","teal",10)

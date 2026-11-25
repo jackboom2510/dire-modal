@@ -439,6 +439,17 @@ CAVEATS = f"""### Điều không được quên khi trình bày
 """
 
 
+# Gallery không ép chiều cao để tránh vùng cuộn riêng; ảnh output được giới hạn
+# theo chiều cao màn hình và co vừa khung, không bị cắt méo.
+IMAGE_FIT_CSS = """
+.fit-image img {
+    object-fit: contain !important;
+    max-width: 100%;
+    max-height: min(60vh, 560px);
+}
+"""
+
+
 def build_app() -> gr.Blocks:
     with gr.Blocks(title="DIRE — sai số tái tạo", analytics_enabled=False) as demo:
         gr.Markdown(INTRO)
@@ -453,16 +464,16 @@ def build_app() -> gr.Blocks:
             )
             coverage_chart = gr.HTML()
             fake_map_gallery = gr.Gallery(label="DIRE map · toàn bộ mẫu ảnh sinh, nhóm theo generator", columns=4,
-                                          object_fit="contain", height=520)
+                                          object_fit="contain", height=None)
             real_map_gallery = gr.Gallery(label="DIRE map · toàn bộ ảnh thật (nhóm riêng)", columns=4,
-                                          object_fit="contain", height=300)
+                                          object_fit="contain", height=None)
             demo.load(gallery_map_overview, outputs=[coverage_chart, fake_map_gallery, real_map_gallery])
             choices = gallery_choices()
             if choices:
                 pick = gr.Dropdown(choices, value=choices[0], label="Chọn mẫu",
                                    info="generator · split")
                 panels = gr.Gallery(label="ảnh gốc · DIRE map · (tái tạo nếu có)",
-                                    columns=3, object_fit="contain", height=340)
+                                    columns=3, object_fit="contain", height=None)
                 evidence = gr.Markdown()
                 score_md = gr.Markdown()
                 with gr.Accordion("Nguồn gốc đầy đủ (.json)", open=False):
@@ -500,7 +511,7 @@ def build_app() -> gr.Blocks:
                     cache_steps = gr.Dropdown([5, 10, 20], value=5, label="S · số bước minh họa")
                     cache_frame = gr.Slider(0, 40, value=0, step=1, label="Frame trong chuỗi 2S")
                 cache_gallery = gr.Gallery(label="x_t và x̂₀ tại frame đã chọn", columns=2,
-                                           object_fit="contain", height=300)
+                                           object_fit="contain", height=None)
                 cache_caption = gr.Markdown()
                 demo.load(cached_illustration_frame, [cache_steps, cache_frame], [cache_gallery, cache_caption])
                 cache_steps.change(cached_illustration_frame, [cache_steps, cache_frame], [cache_gallery, cache_caption])
@@ -521,11 +532,14 @@ def build_app() -> gr.Blocks:
                 with gr.Column():
                     out_line = gr.Markdown()
                     with gr.Row():
-                        img_orig = gr.Image(label="Ảnh gốc", height=210)
-                        img_recon = gr.Image(label="Tái tạo x̂₀", height=210)
-                        img_map = gr.Image(label="DIRE map", height=210)
+                        img_orig = gr.Image(label="Ảnh gốc", height="min(60vh, 560px)",
+                                            elem_classes=["fit-image"])
+                        img_recon = gr.Image(label="Tái tạo x̂₀", height="min(60vh, 560px)",
+                                             elem_classes=["fit-image"])
+                        img_map = gr.Image(label="DIRE map", height="min(60vh, 560px)",
+                                           elem_classes=["fit-image"])
             live_frames = gr.Gallery(label="Từng frame đã cache · x_t và x̂₀ cho mỗi lượt mạng",
-                                     columns=4, object_fit="contain", height=560)
+                                     columns=4, object_fit="contain", height=None)
             gr.Markdown(
                 "Cache giữ tối đa 8 lượt; gồm các ảnh trung gian x_t/x̂₀ (có thể để lộ nội dung đầu vào), "
                 "chỉ trên đĩa máy chủ cục bộ và không lưu bản gốc riêng. Có thể xóa cache bên dưới."
@@ -675,6 +689,7 @@ if __name__ == "__main__":  # pragma: no cover - chỉ chạy khi phục vụ th
     if "ssr_mode" in _inspect.signature(demo.launch).parameters:
         _kw["ssr_mode"] = False
     demo.launch(
+        css=IMAGE_FIT_CSS,
         server_name=os.environ.get("GRADIO_SERVER_NAME", "0.0.0.0"),
         server_port=int(os.environ.get("GRADIO_SERVER_PORT", "7860")),
         **_kw,
