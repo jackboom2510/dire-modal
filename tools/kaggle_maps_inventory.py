@@ -139,20 +139,25 @@ def _inspect_archive(
         "duplicate_candidate_ids": sorted(
             candidate for candidate, count in candidate_counts.items() if count > 1
         ),
+        "duplicate_candidate_id_count": sum(
+            1 for count in candidate_counts.values() if count > 1
+        ),
         "members": members,
     }
 
 
 def _overlaps(archives: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    by_generator: dict[str, dict[str, dict[str, dict[str, Any]]]] = defaultdict(
-        lambda: defaultdict(dict)
+    by_generator: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = defaultdict(
+        lambda: defaultdict(lambda: defaultdict(list))
     )
+    archive_paths: dict[tuple[str, str], str] = {}
     for archive in archives:
-        ids = by_generator[archive["generator"]][archive["split"]]
+        generator = archive["generator"]
+        split = archive["split"]
+        archive_paths[(generator, split)] = archive["path"]
+        ids = by_generator[generator][split]
         for member in archive["members"]:
-            candidate = member["candidate_id"]
-            # Preserve all rows in the unusual case of repeated basenames.
-            ids.setdefault(candidate, member)
+            ids[member["candidate_id"]].append(member)
 
     rows: list[dict[str, Any]] = []
     for generator, splits in sorted(by_generator.items()):
@@ -161,25 +166,29 @@ def _overlaps(archives: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for candidate in sorted(train_ids.keys() & test_ids.keys()):
             left = train_ids[candidate]
             right = test_ids[candidate]
-            left_hash = left.get("content_sha256")
-            right_hash = right.get("content_sha256")
+            left_hashes = {m.get("content_sha256") for m in left}
+            right_hashes = {m.get("content_sha256") for m in right}
+            hashes_complete = (
+                all(digest is not None for digest in left_hashes)
+                and all(digest is not None for digest in right_hashes)
+            )
+            matching_hashes = sorted(left_hashes & right_hashes) if hashes_complete else []
             rows.append({
                 "generator": generator,
                 "candidate_id": candidate,
-                "left_path": next(
-                    a["path"] for a in archives
-                    if a["split"] == "train" and a["generator"] == generator
-                ),
-                "right_path": next(
-                    a["path"] for a in archives
-                    if a["split"] == "test" and a["generator"] == generator
-                ),
-                "map_bytes_identical": (
-                    left_hash == right_hash
-                    if left_hash is not None and right_hash is not None
-                    else None
-                ),
-                "content_sha256": left_hash if left_hash == right_hash else None,
+                "left_path": archive_paths[(generator, "train")],
+                "right_path": archive_paths[(generator, "test")],
+                "left_member_count": len(left),
+                "right_member_count": len(right),
+                "left_member_paths": [m["path"] for m in left[:10]],
+                "right_member_paths": [m["path"] for m in right[:10]],
+                "left_member_paths_truncated": len(left) > 10,
+                "right_member_paths_truncated": len(right) > 10,
+                # True means at least one pair of map payloads is byte-identical;
+                # it does not prove original source-image identity.
+                "map_bytes_identical": bool(matching_hashes) if hashes_complete else None,
+                "content_sha256": matching_hashes[0] if len(matching_hashes) == 1 else None,
+                "matching_content_sha256": matching_hashes,
             })
     return rows
 
@@ -209,6 +218,9 @@ def build_manifest(root: Path, *, hash_members: bool = False) -> dict[str, Any]:
             "kind": "candidate basename, not verified identity",
             "hash_members": hash_members,
             "member_hash_scope": "uncompressed regular tar-member bytes" if hash_members else None,
+            "overlap_semantics": (
+                "compare every member per candidate; map_bytes_identical=true if any exact member-byte match"
+            ),
         },
         "holdout_families": ["dall-e", "imagen", "midjourney", "stargan"],
         "seen_generator_control": "stable-diffusion",
