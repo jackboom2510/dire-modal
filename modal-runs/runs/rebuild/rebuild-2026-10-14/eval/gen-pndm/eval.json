@@ -1,0 +1,40 @@
+{
+  "tag": "gen-pndm",
+  "run_id": "rebuild-2026-10-14",
+  "maps_root": "/zero/rebuild/maps/rebuild-2026-10-14",
+  "split": "test",
+  "detector_sha256": "819994e4864ca6df87777ad017d3a22ca0435385cc910dd5a3d1d03d1dc8cfe6",
+  "generators_used": [
+    "pndm"
+  ],
+  "threshold_raw": 0.14987455308437347,
+  "threshold_space": "logit",
+  "threshold_prob": 0.537399,
+  "threshold_source": "val",
+  "n_val": 2000,
+  "gate": "passed",
+  "metrics": {
+    "n": 2000,
+    "n_real": 1000,
+    "n_fake": 1000,
+    "threshold": 0.537398636341095,
+    "acc": 0.8895,
+    "acc_at_0.5": 0.5,
+    "ap": 0.9604421908460516,
+    "auc": 0.949176,
+    "confusion": {
+      "tp": 824,
+      "fp": 45,
+      "tn": 955,
+      "fn": 176
+    },
+    "acc_ci95": [
+      0.875,
+      0.903
+    ],
+    "acc_ci95_threshold": 0.537398636341095,
+    "acc_ci95_covers_point": true
+  },
+  "crop": 224,
+  "honesty": "chấm trên map **tự tính** (R1) bằng detector train from scratch; không so được giá trị tuyệt đối với Table 2 của bài báo (khác init, khác số ảnh train, khác generator)."
+}

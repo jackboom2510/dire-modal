@@ -1,0 +1,4015 @@
+{
+  "created_at_utc": "2026-11-22T11:15:59Z",
+  "status": "planned",
+  "apply": false,
+  "log_path": "/zero/runs/relabel/relabel-20261122T111559-65cf01d9.json",
+  "plan": {
+    "maps_root": "/zero/maps",
+    "moves": [],
+    "unresolved": [
+      {
+        "rel_src": "test/fake/004006349103115c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/004006349103115c.png",
+        "src": "/zero/maps/test/fake/004006349103115c.npy",
+        "dst": "/zero/maps/test/adm/004006349103115c.npy",
+        "rel_dst": "test/adm/004006349103115c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0042edf15cabb8c2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0042edf15cabb8c2.png",
+        "src": "/zero/maps/test/fake/0042edf15cabb8c2.npy",
+        "dst": "/zero/maps/test/adm/0042edf15cabb8c2.npy",
+        "rel_dst": "test/adm/0042edf15cabb8c2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/004d757dbc154f6e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/004d757dbc154f6e.png",
+        "src": "/zero/maps/test/fake/004d757dbc154f6e.npy",
+        "dst": "/zero/maps/test/adm/004d757dbc154f6e.npy",
+        "rel_dst": "test/adm/004d757dbc154f6e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/00dded0e81a085b4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/00dded0e81a085b4.png",
+        "src": "/zero/maps/test/fake/00dded0e81a085b4.npy",
+        "dst": "/zero/maps/test/adm/00dded0e81a085b4.npy",
+        "rel_dst": "test/adm/00dded0e81a085b4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0112e78c5bd7095c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0112e78c5bd7095c.png",
+        "src": "/zero/maps/test/fake/0112e78c5bd7095c.npy",
+        "dst": "/zero/maps/test/adm/0112e78c5bd7095c.npy",
+        "rel_dst": "test/adm/0112e78c5bd7095c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/011af23e154eb294.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/011af23e154eb294.png",
+        "src": "/zero/maps/test/fake/011af23e154eb294.npy",
+        "dst": "/zero/maps/test/adm/011af23e154eb294.npy",
+        "rel_dst": "test/adm/011af23e154eb294.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/012e973d246df50e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/012e973d246df50e.png",
+        "src": "/zero/maps/test/fake/012e973d246df50e.npy",
+        "dst": "/zero/maps/test/adm/012e973d246df50e.npy",
+        "rel_dst": "test/adm/012e973d246df50e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/014651f3645f3e27.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/014651f3645f3e27.png",
+        "src": "/zero/maps/test/fake/014651f3645f3e27.npy",
+        "dst": "/zero/maps/test/adm/014651f3645f3e27.npy",
+        "rel_dst": "test/adm/014651f3645f3e27.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0156abd884b33188.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0156abd884b33188.png",
+        "src": "/zero/maps/test/fake/0156abd884b33188.npy",
+        "dst": "/zero/maps/test/adm/0156abd884b33188.npy",
+        "rel_dst": "test/adm/0156abd884b33188.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/01a5f323017e2450.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/01a5f323017e2450.png",
+        "src": "/zero/maps/test/fake/01a5f323017e2450.npy",
+        "dst": "/zero/maps/test/adm/01a5f323017e2450.npy",
+        "rel_dst": "test/adm/01a5f323017e2450.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/01ac68f7aef9d538.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/01ac68f7aef9d538.png",
+        "src": "/zero/maps/test/fake/01ac68f7aef9d538.npy",
+        "dst": "/zero/maps/test/adm/01ac68f7aef9d538.npy",
+        "rel_dst": "test/adm/01ac68f7aef9d538.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/025c700341ecaba3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/025c700341ecaba3.png",
+        "src": "/zero/maps/test/fake/025c700341ecaba3.npy",
+        "dst": "/zero/maps/test/adm/025c700341ecaba3.npy",
+        "rel_dst": "test/adm/025c700341ecaba3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/026217506ed6d106.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/026217506ed6d106.png",
+        "src": "/zero/maps/test/fake/026217506ed6d106.npy",
+        "dst": "/zero/maps/test/adm/026217506ed6d106.npy",
+        "rel_dst": "test/adm/026217506ed6d106.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/026332834bc5b998.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/026332834bc5b998.png",
+        "src": "/zero/maps/test/fake/026332834bc5b998.npy",
+        "dst": "/zero/maps/test/adm/026332834bc5b998.npy",
+        "rel_dst": "test/adm/026332834bc5b998.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/02931ce218514ffc.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/02931ce218514ffc.png",
+        "src": "/zero/maps/test/fake/02931ce218514ffc.npy",
+        "dst": "/zero/maps/test/adm/02931ce218514ffc.npy",
+        "rel_dst": "test/adm/02931ce218514ffc.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/02a95e281b3dfda4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/02a95e281b3dfda4.png",
+        "src": "/zero/maps/test/fake/02a95e281b3dfda4.npy",
+        "dst": "/zero/maps/test/adm/02a95e281b3dfda4.npy",
+        "rel_dst": "test/adm/02a95e281b3dfda4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/02e2cc6e0c99d8ad.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/02e2cc6e0c99d8ad.png",
+        "src": "/zero/maps/test/fake/02e2cc6e0c99d8ad.npy",
+        "dst": "/zero/maps/test/adm/02e2cc6e0c99d8ad.npy",
+        "rel_dst": "test/adm/02e2cc6e0c99d8ad.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/02f3aefa12808292.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/02f3aefa12808292.png",
+        "src": "/zero/maps/test/fake/02f3aefa12808292.npy",
+        "dst": "/zero/maps/test/adm/02f3aefa12808292.npy",
+        "rel_dst": "test/adm/02f3aefa12808292.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0316d5b1446c6b2c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0316d5b1446c6b2c.png",
+        "src": "/zero/maps/test/fake/0316d5b1446c6b2c.npy",
+        "dst": "/zero/maps/test/adm/0316d5b1446c6b2c.npy",
+        "rel_dst": "test/adm/0316d5b1446c6b2c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0407cd63a668095a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0407cd63a668095a.png",
+        "src": "/zero/maps/test/fake/0407cd63a668095a.npy",
+        "dst": "/zero/maps/test/adm/0407cd63a668095a.npy",
+        "rel_dst": "test/adm/0407cd63a668095a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/045c3eb39f9249cc.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/045c3eb39f9249cc.png",
+        "src": "/zero/maps/test/fake/045c3eb39f9249cc.npy",
+        "dst": "/zero/maps/test/adm/045c3eb39f9249cc.npy",
+        "rel_dst": "test/adm/045c3eb39f9249cc.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/048bd2f74ac46a0d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/048bd2f74ac46a0d.png",
+        "src": "/zero/maps/test/fake/048bd2f74ac46a0d.npy",
+        "dst": "/zero/maps/test/adm/048bd2f74ac46a0d.npy",
+        "rel_dst": "test/adm/048bd2f74ac46a0d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0498cf18b9ce2d33.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0498cf18b9ce2d33.png",
+        "src": "/zero/maps/test/fake/0498cf18b9ce2d33.npy",
+        "dst": "/zero/maps/test/adm/0498cf18b9ce2d33.npy",
+        "rel_dst": "test/adm/0498cf18b9ce2d33.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/04c7182c911f92c2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/04c7182c911f92c2.png",
+        "src": "/zero/maps/test/fake/04c7182c911f92c2.npy",
+        "dst": "/zero/maps/test/adm/04c7182c911f92c2.npy",
+        "rel_dst": "test/adm/04c7182c911f92c2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/050e8697a70a2fbf.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/050e8697a70a2fbf.png",
+        "src": "/zero/maps/test/fake/050e8697a70a2fbf.npy",
+        "dst": "/zero/maps/test/adm/050e8697a70a2fbf.npy",
+        "rel_dst": "test/adm/050e8697a70a2fbf.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/05483483f415c9b4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/05483483f415c9b4.png",
+        "src": "/zero/maps/test/fake/05483483f415c9b4.npy",
+        "dst": "/zero/maps/test/adm/05483483f415c9b4.npy",
+        "rel_dst": "test/adm/05483483f415c9b4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0554f04cd69b3471.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0554f04cd69b3471.png",
+        "src": "/zero/maps/test/fake/0554f04cd69b3471.npy",
+        "dst": "/zero/maps/test/adm/0554f04cd69b3471.npy",
+        "rel_dst": "test/adm/0554f04cd69b3471.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/059bec11544a9337.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/059bec11544a9337.png",
+        "src": "/zero/maps/test/fake/059bec11544a9337.npy",
+        "dst": "/zero/maps/test/adm/059bec11544a9337.npy",
+        "rel_dst": "test/adm/059bec11544a9337.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/06151846032016a2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/06151846032016a2.png",
+        "src": "/zero/maps/test/fake/06151846032016a2.npy",
+        "dst": "/zero/maps/test/adm/06151846032016a2.npy",
+        "rel_dst": "test/adm/06151846032016a2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/061ae2fe65213469.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/061ae2fe65213469.png",
+        "src": "/zero/maps/test/fake/061ae2fe65213469.npy",
+        "dst": "/zero/maps/test/adm/061ae2fe65213469.npy",
+        "rel_dst": "test/adm/061ae2fe65213469.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/06a6cf15519468c7.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/06a6cf15519468c7.png",
+        "src": "/zero/maps/test/fake/06a6cf15519468c7.npy",
+        "dst": "/zero/maps/test/adm/06a6cf15519468c7.npy",
+        "rel_dst": "test/adm/06a6cf15519468c7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/06d6ed73282de5c7.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/06d6ed73282de5c7.png",
+        "src": "/zero/maps/test/fake/06d6ed73282de5c7.npy",
+        "dst": "/zero/maps/test/adm/06d6ed73282de5c7.npy",
+        "rel_dst": "test/adm/06d6ed73282de5c7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/077cfdc543a4ee86.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/077cfdc543a4ee86.png",
+        "src": "/zero/maps/test/fake/077cfdc543a4ee86.npy",
+        "dst": "/zero/maps/test/adm/077cfdc543a4ee86.npy",
+        "rel_dst": "test/adm/077cfdc543a4ee86.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/07a4070fcd2c61b2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/07a4070fcd2c61b2.png",
+        "src": "/zero/maps/test/fake/07a4070fcd2c61b2.npy",
+        "dst": "/zero/maps/test/adm/07a4070fcd2c61b2.npy",
+        "rel_dst": "test/adm/07a4070fcd2c61b2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/07e1c19aa0b83ec1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/07e1c19aa0b83ec1.png",
+        "src": "/zero/maps/test/fake/07e1c19aa0b83ec1.npy",
+        "dst": "/zero/maps/test/adm/07e1c19aa0b83ec1.npy",
+        "rel_dst": "test/adm/07e1c19aa0b83ec1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/07f4f5aad87b55ca.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/07f4f5aad87b55ca.png",
+        "src": "/zero/maps/test/fake/07f4f5aad87b55ca.npy",
+        "dst": "/zero/maps/test/adm/07f4f5aad87b55ca.npy",
+        "rel_dst": "test/adm/07f4f5aad87b55ca.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0836aa6069f4ff59.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0836aa6069f4ff59.png",
+        "src": "/zero/maps/test/fake/0836aa6069f4ff59.npy",
+        "dst": "/zero/maps/test/adm/0836aa6069f4ff59.npy",
+        "rel_dst": "test/adm/0836aa6069f4ff59.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/08a9a99aad74627e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/08a9a99aad74627e.png",
+        "src": "/zero/maps/test/fake/08a9a99aad74627e.npy",
+        "dst": "/zero/maps/test/adm/08a9a99aad74627e.npy",
+        "rel_dst": "test/adm/08a9a99aad74627e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/090ac9905b1975c5.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/090ac9905b1975c5.png",
+        "src": "/zero/maps/test/fake/090ac9905b1975c5.npy",
+        "dst": "/zero/maps/test/adm/090ac9905b1975c5.npy",
+        "rel_dst": "test/adm/090ac9905b1975c5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/097c939bdd859a94.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/097c939bdd859a94.png",
+        "src": "/zero/maps/test/fake/097c939bdd859a94.npy",
+        "dst": "/zero/maps/test/adm/097c939bdd859a94.npy",
+        "rel_dst": "test/adm/097c939bdd859a94.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0a56c9e3649759e0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0a56c9e3649759e0.png",
+        "src": "/zero/maps/test/fake/0a56c9e3649759e0.npy",
+        "dst": "/zero/maps/test/adm/0a56c9e3649759e0.npy",
+        "rel_dst": "test/adm/0a56c9e3649759e0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0a9a94f78c410ac4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0a9a94f78c410ac4.png",
+        "src": "/zero/maps/test/fake/0a9a94f78c410ac4.npy",
+        "dst": "/zero/maps/test/adm/0a9a94f78c410ac4.npy",
+        "rel_dst": "test/adm/0a9a94f78c410ac4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0a9b3e3588ce55a4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0a9b3e3588ce55a4.png",
+        "src": "/zero/maps/test/fake/0a9b3e3588ce55a4.npy",
+        "dst": "/zero/maps/test/adm/0a9b3e3588ce55a4.npy",
+        "rel_dst": "test/adm/0a9b3e3588ce55a4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0a9c20eed0e8a44d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0a9c20eed0e8a44d.png",
+        "src": "/zero/maps/test/fake/0a9c20eed0e8a44d.npy",
+        "dst": "/zero/maps/test/adm/0a9c20eed0e8a44d.npy",
+        "rel_dst": "test/adm/0a9c20eed0e8a44d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0ae5770a10c76634.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0ae5770a10c76634.png",
+        "src": "/zero/maps/test/fake/0ae5770a10c76634.npy",
+        "dst": "/zero/maps/test/adm/0ae5770a10c76634.npy",
+        "rel_dst": "test/adm/0ae5770a10c76634.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0be2ac7dae557d2a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0be2ac7dae557d2a.png",
+        "src": "/zero/maps/test/fake/0be2ac7dae557d2a.npy",
+        "dst": "/zero/maps/test/adm/0be2ac7dae557d2a.npy",
+        "rel_dst": "test/adm/0be2ac7dae557d2a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0be667396e6a3a19.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0be667396e6a3a19.png",
+        "src": "/zero/maps/test/fake/0be667396e6a3a19.npy",
+        "dst": "/zero/maps/test/adm/0be667396e6a3a19.npy",
+        "rel_dst": "test/adm/0be667396e6a3a19.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0c125f63b125ff7b.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0c125f63b125ff7b.png",
+        "src": "/zero/maps/test/fake/0c125f63b125ff7b.npy",
+        "dst": "/zero/maps/test/adm/0c125f63b125ff7b.npy",
+        "rel_dst": "test/adm/0c125f63b125ff7b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0c4ba6e68841f375.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0c4ba6e68841f375.png",
+        "src": "/zero/maps/test/fake/0c4ba6e68841f375.npy",
+        "dst": "/zero/maps/test/adm/0c4ba6e68841f375.npy",
+        "rel_dst": "test/adm/0c4ba6e68841f375.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0c6ca0999f07db34.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0c6ca0999f07db34.png",
+        "src": "/zero/maps/test/fake/0c6ca0999f07db34.npy",
+        "dst": "/zero/maps/test/adm/0c6ca0999f07db34.npy",
+        "rel_dst": "test/adm/0c6ca0999f07db34.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0c86c02778ac58e8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0c86c02778ac58e8.png",
+        "src": "/zero/maps/test/fake/0c86c02778ac58e8.npy",
+        "dst": "/zero/maps/test/adm/0c86c02778ac58e8.npy",
+        "rel_dst": "test/adm/0c86c02778ac58e8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0d2410cda5317b9a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0d2410cda5317b9a.png",
+        "src": "/zero/maps/test/fake/0d2410cda5317b9a.npy",
+        "dst": "/zero/maps/test/adm/0d2410cda5317b9a.npy",
+        "rel_dst": "test/adm/0d2410cda5317b9a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0d49ade51b20d2d0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0d49ade51b20d2d0.png",
+        "src": "/zero/maps/test/fake/0d49ade51b20d2d0.npy",
+        "dst": "/zero/maps/test/adm/0d49ade51b20d2d0.npy",
+        "rel_dst": "test/adm/0d49ade51b20d2d0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0d8004d72c5e2c86.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0d8004d72c5e2c86.png",
+        "src": "/zero/maps/test/fake/0d8004d72c5e2c86.npy",
+        "dst": "/zero/maps/test/adm/0d8004d72c5e2c86.npy",
+        "rel_dst": "test/adm/0d8004d72c5e2c86.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0d80725c7dac8bd4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0d80725c7dac8bd4.png",
+        "src": "/zero/maps/test/fake/0d80725c7dac8bd4.npy",
+        "dst": "/zero/maps/test/adm/0d80725c7dac8bd4.npy",
+        "rel_dst": "test/adm/0d80725c7dac8bd4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0dc0d47f8498ef9b.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0dc0d47f8498ef9b.png",
+        "src": "/zero/maps/test/fake/0dc0d47f8498ef9b.npy",
+        "dst": "/zero/maps/test/adm/0dc0d47f8498ef9b.npy",
+        "rel_dst": "test/adm/0dc0d47f8498ef9b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0e3353a4696c677d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0e3353a4696c677d.png",
+        "src": "/zero/maps/test/fake/0e3353a4696c677d.npy",
+        "dst": "/zero/maps/test/adm/0e3353a4696c677d.npy",
+        "rel_dst": "test/adm/0e3353a4696c677d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0e7cad2ff08b4927.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0e7cad2ff08b4927.png",
+        "src": "/zero/maps/test/fake/0e7cad2ff08b4927.npy",
+        "dst": "/zero/maps/test/adm/0e7cad2ff08b4927.npy",
+        "rel_dst": "test/adm/0e7cad2ff08b4927.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0e7eecd2561c45d0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0e7eecd2561c45d0.png",
+        "src": "/zero/maps/test/fake/0e7eecd2561c45d0.npy",
+        "dst": "/zero/maps/test/adm/0e7eecd2561c45d0.npy",
+        "rel_dst": "test/adm/0e7eecd2561c45d0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0f9f9c53097a955f.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0f9f9c53097a955f.png",
+        "src": "/zero/maps/test/fake/0f9f9c53097a955f.npy",
+        "dst": "/zero/maps/test/adm/0f9f9c53097a955f.npy",
+        "rel_dst": "test/adm/0f9f9c53097a955f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0fb9d0f0533e28d1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0fb9d0f0533e28d1.png",
+        "src": "/zero/maps/test/fake/0fb9d0f0533e28d1.npy",
+        "dst": "/zero/maps/test/adm/0fb9d0f0533e28d1.npy",
+        "rel_dst": "test/adm/0fb9d0f0533e28d1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0fc2a4525fa88e41.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0fc2a4525fa88e41.png",
+        "src": "/zero/maps/test/fake/0fc2a4525fa88e41.npy",
+        "dst": "/zero/maps/test/adm/0fc2a4525fa88e41.npy",
+        "rel_dst": "test/adm/0fc2a4525fa88e41.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/0fda3387ad52bec3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/0fda3387ad52bec3.png",
+        "src": "/zero/maps/test/fake/0fda3387ad52bec3.npy",
+        "dst": "/zero/maps/test/adm/0fda3387ad52bec3.npy",
+        "rel_dst": "test/adm/0fda3387ad52bec3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/105f916a062852c4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/105f916a062852c4.png",
+        "src": "/zero/maps/test/fake/105f916a062852c4.npy",
+        "dst": "/zero/maps/test/adm/105f916a062852c4.npy",
+        "rel_dst": "test/adm/105f916a062852c4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/10791f4f54de2c0b.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/10791f4f54de2c0b.png",
+        "src": "/zero/maps/test/fake/10791f4f54de2c0b.npy",
+        "dst": "/zero/maps/test/adm/10791f4f54de2c0b.npy",
+        "rel_dst": "test/adm/10791f4f54de2c0b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/10d89c72b220dbc8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/10d89c72b220dbc8.png",
+        "src": "/zero/maps/test/fake/10d89c72b220dbc8.npy",
+        "dst": "/zero/maps/test/adm/10d89c72b220dbc8.npy",
+        "rel_dst": "test/adm/10d89c72b220dbc8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/10e83717e2ef858e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/10e83717e2ef858e.png",
+        "src": "/zero/maps/test/fake/10e83717e2ef858e.npy",
+        "dst": "/zero/maps/test/adm/10e83717e2ef858e.npy",
+        "rel_dst": "test/adm/10e83717e2ef858e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/118ee3e30dd2c8f1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/118ee3e30dd2c8f1.png",
+        "src": "/zero/maps/test/fake/118ee3e30dd2c8f1.npy",
+        "dst": "/zero/maps/test/adm/118ee3e30dd2c8f1.npy",
+        "rel_dst": "test/adm/118ee3e30dd2c8f1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/11c9e1b8839c1d40.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/11c9e1b8839c1d40.png",
+        "src": "/zero/maps/test/fake/11c9e1b8839c1d40.npy",
+        "dst": "/zero/maps/test/adm/11c9e1b8839c1d40.npy",
+        "rel_dst": "test/adm/11c9e1b8839c1d40.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/125585b1b71f6c1e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/125585b1b71f6c1e.png",
+        "src": "/zero/maps/test/fake/125585b1b71f6c1e.npy",
+        "dst": "/zero/maps/test/adm/125585b1b71f6c1e.npy",
+        "rel_dst": "test/adm/125585b1b71f6c1e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1296dae3e934d1b3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1296dae3e934d1b3.png",
+        "src": "/zero/maps/test/fake/1296dae3e934d1b3.npy",
+        "dst": "/zero/maps/test/adm/1296dae3e934d1b3.npy",
+        "rel_dst": "test/adm/1296dae3e934d1b3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/12a82f34b4c16cf0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/12a82f34b4c16cf0.png",
+        "src": "/zero/maps/test/fake/12a82f34b4c16cf0.npy",
+        "dst": "/zero/maps/test/adm/12a82f34b4c16cf0.npy",
+        "rel_dst": "test/adm/12a82f34b4c16cf0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/12be1a59ab05741c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/12be1a59ab05741c.png",
+        "src": "/zero/maps/test/fake/12be1a59ab05741c.npy",
+        "dst": "/zero/maps/test/adm/12be1a59ab05741c.npy",
+        "rel_dst": "test/adm/12be1a59ab05741c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1306291e77b626a8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1306291e77b626a8.png",
+        "src": "/zero/maps/test/fake/1306291e77b626a8.npy",
+        "dst": "/zero/maps/test/adm/1306291e77b626a8.npy",
+        "rel_dst": "test/adm/1306291e77b626a8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/13111bd21929af82.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/13111bd21929af82.png",
+        "src": "/zero/maps/test/fake/13111bd21929af82.npy",
+        "dst": "/zero/maps/test/adm/13111bd21929af82.npy",
+        "rel_dst": "test/adm/13111bd21929af82.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1391b58bc12def1a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1391b58bc12def1a.png",
+        "src": "/zero/maps/test/fake/1391b58bc12def1a.npy",
+        "dst": "/zero/maps/test/adm/1391b58bc12def1a.npy",
+        "rel_dst": "test/adm/1391b58bc12def1a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/142954f81297299a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/142954f81297299a.png",
+        "src": "/zero/maps/test/fake/142954f81297299a.npy",
+        "dst": "/zero/maps/test/adm/142954f81297299a.npy",
+        "rel_dst": "test/adm/142954f81297299a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/143283de0b496b0c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/143283de0b496b0c.png",
+        "src": "/zero/maps/test/fake/143283de0b496b0c.npy",
+        "dst": "/zero/maps/test/adm/143283de0b496b0c.npy",
+        "rel_dst": "test/adm/143283de0b496b0c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/14917f51173c2629.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/14917f51173c2629.png",
+        "src": "/zero/maps/test/fake/14917f51173c2629.npy",
+        "dst": "/zero/maps/test/adm/14917f51173c2629.npy",
+        "rel_dst": "test/adm/14917f51173c2629.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/15225d2fa5b92e21.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/15225d2fa5b92e21.png",
+        "src": "/zero/maps/test/fake/15225d2fa5b92e21.npy",
+        "dst": "/zero/maps/test/adm/15225d2fa5b92e21.npy",
+        "rel_dst": "test/adm/15225d2fa5b92e21.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1545dc15737fec84.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1545dc15737fec84.png",
+        "src": "/zero/maps/test/fake/1545dc15737fec84.npy",
+        "dst": "/zero/maps/test/adm/1545dc15737fec84.npy",
+        "rel_dst": "test/adm/1545dc15737fec84.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/15631248a8c01722.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/15631248a8c01722.png",
+        "src": "/zero/maps/test/fake/15631248a8c01722.npy",
+        "dst": "/zero/maps/test/adm/15631248a8c01722.npy",
+        "rel_dst": "test/adm/15631248a8c01722.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/156f1d708c8c2758.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/156f1d708c8c2758.png",
+        "src": "/zero/maps/test/fake/156f1d708c8c2758.npy",
+        "dst": "/zero/maps/test/adm/156f1d708c8c2758.npy",
+        "rel_dst": "test/adm/156f1d708c8c2758.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/15bad0fa8a1575c0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/15bad0fa8a1575c0.png",
+        "src": "/zero/maps/test/fake/15bad0fa8a1575c0.npy",
+        "dst": "/zero/maps/test/adm/15bad0fa8a1575c0.npy",
+        "rel_dst": "test/adm/15bad0fa8a1575c0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/16297ad16df646a7.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/16297ad16df646a7.png",
+        "src": "/zero/maps/test/fake/16297ad16df646a7.npy",
+        "dst": "/zero/maps/test/adm/16297ad16df646a7.npy",
+        "rel_dst": "test/adm/16297ad16df646a7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1669449f2edd69c8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1669449f2edd69c8.png",
+        "src": "/zero/maps/test/fake/1669449f2edd69c8.npy",
+        "dst": "/zero/maps/test/adm/1669449f2edd69c8.npy",
+        "rel_dst": "test/adm/1669449f2edd69c8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/16a95433c743b5f1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/16a95433c743b5f1.png",
+        "src": "/zero/maps/test/fake/16a95433c743b5f1.npy",
+        "dst": "/zero/maps/test/adm/16a95433c743b5f1.npy",
+        "rel_dst": "test/adm/16a95433c743b5f1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/16fe64555a98781d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/16fe64555a98781d.png",
+        "src": "/zero/maps/test/fake/16fe64555a98781d.npy",
+        "dst": "/zero/maps/test/adm/16fe64555a98781d.npy",
+        "rel_dst": "test/adm/16fe64555a98781d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/17db71363cd60440.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/17db71363cd60440.png",
+        "src": "/zero/maps/test/fake/17db71363cd60440.npy",
+        "dst": "/zero/maps/test/adm/17db71363cd60440.npy",
+        "rel_dst": "test/adm/17db71363cd60440.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/182440f563f5a668.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/182440f563f5a668.png",
+        "src": "/zero/maps/test/fake/182440f563f5a668.npy",
+        "dst": "/zero/maps/test/adm/182440f563f5a668.npy",
+        "rel_dst": "test/adm/182440f563f5a668.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/185f197b2addf775.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/185f197b2addf775.png",
+        "src": "/zero/maps/test/fake/185f197b2addf775.npy",
+        "dst": "/zero/maps/test/adm/185f197b2addf775.npy",
+        "rel_dst": "test/adm/185f197b2addf775.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1901db96d5784f03.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1901db96d5784f03.png",
+        "src": "/zero/maps/test/fake/1901db96d5784f03.npy",
+        "dst": "/zero/maps/test/adm/1901db96d5784f03.npy",
+        "rel_dst": "test/adm/1901db96d5784f03.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/193b62e74baa19f6.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/193b62e74baa19f6.png",
+        "src": "/zero/maps/test/fake/193b62e74baa19f6.npy",
+        "dst": "/zero/maps/test/adm/193b62e74baa19f6.npy",
+        "rel_dst": "test/adm/193b62e74baa19f6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/193fb0ae025a4244.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/193fb0ae025a4244.png",
+        "src": "/zero/maps/test/fake/193fb0ae025a4244.npy",
+        "dst": "/zero/maps/test/adm/193fb0ae025a4244.npy",
+        "rel_dst": "test/adm/193fb0ae025a4244.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1958cf7fcd43bcd3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1958cf7fcd43bcd3.png",
+        "src": "/zero/maps/test/fake/1958cf7fcd43bcd3.npy",
+        "dst": "/zero/maps/test/adm/1958cf7fcd43bcd3.npy",
+        "rel_dst": "test/adm/1958cf7fcd43bcd3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/19760a51f55a9cf1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/19760a51f55a9cf1.png",
+        "src": "/zero/maps/test/fake/19760a51f55a9cf1.npy",
+        "dst": "/zero/maps/test/adm/19760a51f55a9cf1.npy",
+        "rel_dst": "test/adm/19760a51f55a9cf1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/19d2d315e5a481a0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/19d2d315e5a481a0.png",
+        "src": "/zero/maps/test/fake/19d2d315e5a481a0.npy",
+        "dst": "/zero/maps/test/adm/19d2d315e5a481a0.npy",
+        "rel_dst": "test/adm/19d2d315e5a481a0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/19e4a8b93da891ea.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/19e4a8b93da891ea.png",
+        "src": "/zero/maps/test/fake/19e4a8b93da891ea.npy",
+        "dst": "/zero/maps/test/adm/19e4a8b93da891ea.npy",
+        "rel_dst": "test/adm/19e4a8b93da891ea.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1aafb5491570ee74.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1aafb5491570ee74.png",
+        "src": "/zero/maps/test/fake/1aafb5491570ee74.npy",
+        "dst": "/zero/maps/test/adm/1aafb5491570ee74.npy",
+        "rel_dst": "test/adm/1aafb5491570ee74.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1acdbb90e23f5a8e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1acdbb90e23f5a8e.png",
+        "src": "/zero/maps/test/fake/1acdbb90e23f5a8e.npy",
+        "dst": "/zero/maps/test/adm/1acdbb90e23f5a8e.npy",
+        "rel_dst": "test/adm/1acdbb90e23f5a8e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1b1c3881715d71fd.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1b1c3881715d71fd.png",
+        "src": "/zero/maps/test/fake/1b1c3881715d71fd.npy",
+        "dst": "/zero/maps/test/adm/1b1c3881715d71fd.npy",
+        "rel_dst": "test/adm/1b1c3881715d71fd.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1b34d3e3334866ea.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1b34d3e3334866ea.png",
+        "src": "/zero/maps/test/fake/1b34d3e3334866ea.npy",
+        "dst": "/zero/maps/test/adm/1b34d3e3334866ea.npy",
+        "rel_dst": "test/adm/1b34d3e3334866ea.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1b854f41d6b0cd83.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1b854f41d6b0cd83.png",
+        "src": "/zero/maps/test/fake/1b854f41d6b0cd83.npy",
+        "dst": "/zero/maps/test/adm/1b854f41d6b0cd83.npy",
+        "rel_dst": "test/adm/1b854f41d6b0cd83.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1b9fa09ac45f856d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1b9fa09ac45f856d.png",
+        "src": "/zero/maps/test/fake/1b9fa09ac45f856d.npy",
+        "dst": "/zero/maps/test/adm/1b9fa09ac45f856d.npy",
+        "rel_dst": "test/adm/1b9fa09ac45f856d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1c159ab55d6afecf.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1c159ab55d6afecf.png",
+        "src": "/zero/maps/test/fake/1c159ab55d6afecf.npy",
+        "dst": "/zero/maps/test/adm/1c159ab55d6afecf.npy",
+        "rel_dst": "test/adm/1c159ab55d6afecf.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1c415d4bf1b474c7.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1c415d4bf1b474c7.png",
+        "src": "/zero/maps/test/fake/1c415d4bf1b474c7.npy",
+        "dst": "/zero/maps/test/adm/1c415d4bf1b474c7.npy",
+        "rel_dst": "test/adm/1c415d4bf1b474c7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1c51e8ddcd6b4f24.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1c51e8ddcd6b4f24.png",
+        "src": "/zero/maps/test/fake/1c51e8ddcd6b4f24.npy",
+        "dst": "/zero/maps/test/adm/1c51e8ddcd6b4f24.npy",
+        "rel_dst": "test/adm/1c51e8ddcd6b4f24.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1c8d9ce6530c9943.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1c8d9ce6530c9943.png",
+        "src": "/zero/maps/test/fake/1c8d9ce6530c9943.npy",
+        "dst": "/zero/maps/test/adm/1c8d9ce6530c9943.npy",
+        "rel_dst": "test/adm/1c8d9ce6530c9943.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1cb73d6578d82bf6.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1cb73d6578d82bf6.png",
+        "src": "/zero/maps/test/fake/1cb73d6578d82bf6.npy",
+        "dst": "/zero/maps/test/adm/1cb73d6578d82bf6.npy",
+        "rel_dst": "test/adm/1cb73d6578d82bf6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1d4a42c802121122.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1d4a42c802121122.png",
+        "src": "/zero/maps/test/fake/1d4a42c802121122.npy",
+        "dst": "/zero/maps/test/adm/1d4a42c802121122.npy",
+        "rel_dst": "test/adm/1d4a42c802121122.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1d8fb384c3132358.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1d8fb384c3132358.png",
+        "src": "/zero/maps/test/fake/1d8fb384c3132358.npy",
+        "dst": "/zero/maps/test/adm/1d8fb384c3132358.npy",
+        "rel_dst": "test/adm/1d8fb384c3132358.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1dcd3b84b03dbaff.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1dcd3b84b03dbaff.png",
+        "src": "/zero/maps/test/fake/1dcd3b84b03dbaff.npy",
+        "dst": "/zero/maps/test/adm/1dcd3b84b03dbaff.npy",
+        "rel_dst": "test/adm/1dcd3b84b03dbaff.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1dea6a17b5f387a5.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1dea6a17b5f387a5.png",
+        "src": "/zero/maps/test/fake/1dea6a17b5f387a5.npy",
+        "dst": "/zero/maps/test/adm/1dea6a17b5f387a5.npy",
+        "rel_dst": "test/adm/1dea6a17b5f387a5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1e4103a6616dba5e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1e4103a6616dba5e.png",
+        "src": "/zero/maps/test/fake/1e4103a6616dba5e.npy",
+        "dst": "/zero/maps/test/adm/1e4103a6616dba5e.npy",
+        "rel_dst": "test/adm/1e4103a6616dba5e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1e8eff6ad3e6df99.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1e8eff6ad3e6df99.png",
+        "src": "/zero/maps/test/fake/1e8eff6ad3e6df99.npy",
+        "dst": "/zero/maps/test/adm/1e8eff6ad3e6df99.npy",
+        "rel_dst": "test/adm/1e8eff6ad3e6df99.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1ecd8ffff9d6f3a4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1ecd8ffff9d6f3a4.png",
+        "src": "/zero/maps/test/fake/1ecd8ffff9d6f3a4.npy",
+        "dst": "/zero/maps/test/adm/1ecd8ffff9d6f3a4.npy",
+        "rel_dst": "test/adm/1ecd8ffff9d6f3a4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/1f1aa7bd89ef9700.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/1f1aa7bd89ef9700.png",
+        "src": "/zero/maps/test/fake/1f1aa7bd89ef9700.npy",
+        "dst": "/zero/maps/test/adm/1f1aa7bd89ef9700.npy",
+        "rel_dst": "test/adm/1f1aa7bd89ef9700.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/203cc62367486797.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/203cc62367486797.png",
+        "src": "/zero/maps/test/fake/203cc62367486797.npy",
+        "dst": "/zero/maps/test/adm/203cc62367486797.npy",
+        "rel_dst": "test/adm/203cc62367486797.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/206b431797f51847.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/206b431797f51847.png",
+        "src": "/zero/maps/test/fake/206b431797f51847.npy",
+        "dst": "/zero/maps/test/adm/206b431797f51847.npy",
+        "rel_dst": "test/adm/206b431797f51847.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/208b229065e5af73.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/208b229065e5af73.png",
+        "src": "/zero/maps/test/fake/208b229065e5af73.npy",
+        "dst": "/zero/maps/test/adm/208b229065e5af73.npy",
+        "rel_dst": "test/adm/208b229065e5af73.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2093ee504246c0f3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2093ee504246c0f3.png",
+        "src": "/zero/maps/test/fake/2093ee504246c0f3.npy",
+        "dst": "/zero/maps/test/adm/2093ee504246c0f3.npy",
+        "rel_dst": "test/adm/2093ee504246c0f3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/20b306b9f52f25b7.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/20b306b9f52f25b7.png",
+        "src": "/zero/maps/test/fake/20b306b9f52f25b7.npy",
+        "dst": "/zero/maps/test/adm/20b306b9f52f25b7.npy",
+        "rel_dst": "test/adm/20b306b9f52f25b7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/211c0e32a63932f2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/211c0e32a63932f2.png",
+        "src": "/zero/maps/test/fake/211c0e32a63932f2.npy",
+        "dst": "/zero/maps/test/adm/211c0e32a63932f2.npy",
+        "rel_dst": "test/adm/211c0e32a63932f2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/21230282c63d0a37.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/21230282c63d0a37.png",
+        "src": "/zero/maps/test/fake/21230282c63d0a37.npy",
+        "dst": "/zero/maps/test/adm/21230282c63d0a37.npy",
+        "rel_dst": "test/adm/21230282c63d0a37.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2123569b5d632c91.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2123569b5d632c91.png",
+        "src": "/zero/maps/test/fake/2123569b5d632c91.npy",
+        "dst": "/zero/maps/test/adm/2123569b5d632c91.npy",
+        "rel_dst": "test/adm/2123569b5d632c91.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/214dee2a2f61bed1.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/214dee2a2f61bed1.png",
+        "src": "/zero/maps/test/fake/214dee2a2f61bed1.npy",
+        "dst": "/zero/maps/test/adm/214dee2a2f61bed1.npy",
+        "rel_dst": "test/adm/214dee2a2f61bed1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/217cba1787c0ff2c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/217cba1787c0ff2c.png",
+        "src": "/zero/maps/test/fake/217cba1787c0ff2c.npy",
+        "dst": "/zero/maps/test/adm/217cba1787c0ff2c.npy",
+        "rel_dst": "test/adm/217cba1787c0ff2c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/21b96012212159c9.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/21b96012212159c9.png",
+        "src": "/zero/maps/test/fake/21b96012212159c9.npy",
+        "dst": "/zero/maps/test/adm/21b96012212159c9.npy",
+        "rel_dst": "test/adm/21b96012212159c9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/21c41f2413b395fc.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/21c41f2413b395fc.png",
+        "src": "/zero/maps/test/fake/21c41f2413b395fc.npy",
+        "dst": "/zero/maps/test/adm/21c41f2413b395fc.npy",
+        "rel_dst": "test/adm/21c41f2413b395fc.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/21f79aadbcd8c0cb.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/21f79aadbcd8c0cb.png",
+        "src": "/zero/maps/test/fake/21f79aadbcd8c0cb.npy",
+        "dst": "/zero/maps/test/adm/21f79aadbcd8c0cb.npy",
+        "rel_dst": "test/adm/21f79aadbcd8c0cb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2201c7837cefea74.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2201c7837cefea74.png",
+        "src": "/zero/maps/test/fake/2201c7837cefea74.npy",
+        "dst": "/zero/maps/test/adm/2201c7837cefea74.npy",
+        "rel_dst": "test/adm/2201c7837cefea74.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/22281ac02a9a591d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/22281ac02a9a591d.png",
+        "src": "/zero/maps/test/fake/22281ac02a9a591d.npy",
+        "dst": "/zero/maps/test/adm/22281ac02a9a591d.npy",
+        "rel_dst": "test/adm/22281ac02a9a591d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/226b8870ab43b028.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/226b8870ab43b028.png",
+        "src": "/zero/maps/test/fake/226b8870ab43b028.npy",
+        "dst": "/zero/maps/test/adm/226b8870ab43b028.npy",
+        "rel_dst": "test/adm/226b8870ab43b028.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/22852f9a03346930.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/22852f9a03346930.png",
+        "src": "/zero/maps/test/fake/22852f9a03346930.npy",
+        "dst": "/zero/maps/test/adm/22852f9a03346930.npy",
+        "rel_dst": "test/adm/22852f9a03346930.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/229d288bb6e51b0d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/229d288bb6e51b0d.png",
+        "src": "/zero/maps/test/fake/229d288bb6e51b0d.npy",
+        "dst": "/zero/maps/test/adm/229d288bb6e51b0d.npy",
+        "rel_dst": "test/adm/229d288bb6e51b0d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/22a72481c27bebdb.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/22a72481c27bebdb.png",
+        "src": "/zero/maps/test/fake/22a72481c27bebdb.npy",
+        "dst": "/zero/maps/test/adm/22a72481c27bebdb.npy",
+        "rel_dst": "test/adm/22a72481c27bebdb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/22f8faf9eff9cbc0.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/22f8faf9eff9cbc0.png",
+        "src": "/zero/maps/test/fake/22f8faf9eff9cbc0.npy",
+        "dst": "/zero/maps/test/adm/22f8faf9eff9cbc0.npy",
+        "rel_dst": "test/adm/22f8faf9eff9cbc0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/23174265fdd375ec.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/23174265fdd375ec.png",
+        "src": "/zero/maps/test/fake/23174265fdd375ec.npy",
+        "dst": "/zero/maps/test/adm/23174265fdd375ec.npy",
+        "rel_dst": "test/adm/23174265fdd375ec.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/23c7550667303dc3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/23c7550667303dc3.png",
+        "src": "/zero/maps/test/fake/23c7550667303dc3.npy",
+        "dst": "/zero/maps/test/adm/23c7550667303dc3.npy",
+        "rel_dst": "test/adm/23c7550667303dc3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/23d3c3b33f9db790.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/23d3c3b33f9db790.png",
+        "src": "/zero/maps/test/fake/23d3c3b33f9db790.npy",
+        "dst": "/zero/maps/test/adm/23d3c3b33f9db790.npy",
+        "rel_dst": "test/adm/23d3c3b33f9db790.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/240e10e265e94bf6.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/240e10e265e94bf6.png",
+        "src": "/zero/maps/test/fake/240e10e265e94bf6.npy",
+        "dst": "/zero/maps/test/adm/240e10e265e94bf6.npy",
+        "rel_dst": "test/adm/240e10e265e94bf6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/24f9a40cef59473c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/24f9a40cef59473c.png",
+        "src": "/zero/maps/test/fake/24f9a40cef59473c.npy",
+        "dst": "/zero/maps/test/adm/24f9a40cef59473c.npy",
+        "rel_dst": "test/adm/24f9a40cef59473c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/25971de0e3f0838a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/25971de0e3f0838a.png",
+        "src": "/zero/maps/test/fake/25971de0e3f0838a.npy",
+        "dst": "/zero/maps/test/adm/25971de0e3f0838a.npy",
+        "rel_dst": "test/adm/25971de0e3f0838a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/260833f850d19c3e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/260833f850d19c3e.png",
+        "src": "/zero/maps/test/fake/260833f850d19c3e.npy",
+        "dst": "/zero/maps/test/adm/260833f850d19c3e.npy",
+        "rel_dst": "test/adm/260833f850d19c3e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2681b6f40f08f3bc.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2681b6f40f08f3bc.png",
+        "src": "/zero/maps/test/fake/2681b6f40f08f3bc.npy",
+        "dst": "/zero/maps/test/adm/2681b6f40f08f3bc.npy",
+        "rel_dst": "test/adm/2681b6f40f08f3bc.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/26e03dc6cdc3bb76.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/26e03dc6cdc3bb76.png",
+        "src": "/zero/maps/test/fake/26e03dc6cdc3bb76.npy",
+        "dst": "/zero/maps/test/adm/26e03dc6cdc3bb76.npy",
+        "rel_dst": "test/adm/26e03dc6cdc3bb76.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2708fbe2cf9fe730.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2708fbe2cf9fe730.png",
+        "src": "/zero/maps/test/fake/2708fbe2cf9fe730.npy",
+        "dst": "/zero/maps/test/adm/2708fbe2cf9fe730.npy",
+        "rel_dst": "test/adm/2708fbe2cf9fe730.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2778e1873f3ffc11.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2778e1873f3ffc11.png",
+        "src": "/zero/maps/test/fake/2778e1873f3ffc11.npy",
+        "dst": "/zero/maps/test/adm/2778e1873f3ffc11.npy",
+        "rel_dst": "test/adm/2778e1873f3ffc11.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/27c428bb79678fb8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/27c428bb79678fb8.png",
+        "src": "/zero/maps/test/fake/27c428bb79678fb8.npy",
+        "dst": "/zero/maps/test/adm/27c428bb79678fb8.npy",
+        "rel_dst": "test/adm/27c428bb79678fb8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/27f2d5a87b278169.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/27f2d5a87b278169.png",
+        "src": "/zero/maps/test/fake/27f2d5a87b278169.npy",
+        "dst": "/zero/maps/test/adm/27f2d5a87b278169.npy",
+        "rel_dst": "test/adm/27f2d5a87b278169.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/284e229fc59f42aa.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/284e229fc59f42aa.png",
+        "src": "/zero/maps/test/fake/284e229fc59f42aa.npy",
+        "dst": "/zero/maps/test/adm/284e229fc59f42aa.npy",
+        "rel_dst": "test/adm/284e229fc59f42aa.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/284f7ec5c2c9031c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/284f7ec5c2c9031c.png",
+        "src": "/zero/maps/test/fake/284f7ec5c2c9031c.npy",
+        "dst": "/zero/maps/test/adm/284f7ec5c2c9031c.npy",
+        "rel_dst": "test/adm/284f7ec5c2c9031c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/285e72ec1728724d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/285e72ec1728724d.png",
+        "src": "/zero/maps/test/fake/285e72ec1728724d.npy",
+        "dst": "/zero/maps/test/adm/285e72ec1728724d.npy",
+        "rel_dst": "test/adm/285e72ec1728724d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/289ebf1245f74202.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/289ebf1245f74202.png",
+        "src": "/zero/maps/test/fake/289ebf1245f74202.npy",
+        "dst": "/zero/maps/test/adm/289ebf1245f74202.npy",
+        "rel_dst": "test/adm/289ebf1245f74202.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/28af12077c484e33.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/28af12077c484e33.png",
+        "src": "/zero/maps/test/fake/28af12077c484e33.npy",
+        "dst": "/zero/maps/test/adm/28af12077c484e33.npy",
+        "rel_dst": "test/adm/28af12077c484e33.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/28e8f0b975f5aa15.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/28e8f0b975f5aa15.png",
+        "src": "/zero/maps/test/fake/28e8f0b975f5aa15.npy",
+        "dst": "/zero/maps/test/adm/28e8f0b975f5aa15.npy",
+        "rel_dst": "test/adm/28e8f0b975f5aa15.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/28ec226ef35f4979.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/28ec226ef35f4979.png",
+        "src": "/zero/maps/test/fake/28ec226ef35f4979.npy",
+        "dst": "/zero/maps/test/adm/28ec226ef35f4979.npy",
+        "rel_dst": "test/adm/28ec226ef35f4979.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a1fe3f6ce48f679.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a1fe3f6ce48f679.png",
+        "src": "/zero/maps/test/fake/2a1fe3f6ce48f679.npy",
+        "dst": "/zero/maps/test/adm/2a1fe3f6ce48f679.npy",
+        "rel_dst": "test/adm/2a1fe3f6ce48f679.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a2db09a4ef2528b.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a2db09a4ef2528b.png",
+        "src": "/zero/maps/test/fake/2a2db09a4ef2528b.npy",
+        "dst": "/zero/maps/test/adm/2a2db09a4ef2528b.npy",
+        "rel_dst": "test/adm/2a2db09a4ef2528b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a360e0c5ceaf10c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a360e0c5ceaf10c.png",
+        "src": "/zero/maps/test/fake/2a360e0c5ceaf10c.npy",
+        "dst": "/zero/maps/test/adm/2a360e0c5ceaf10c.npy",
+        "rel_dst": "test/adm/2a360e0c5ceaf10c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a5603fb05cd1d5e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a5603fb05cd1d5e.png",
+        "src": "/zero/maps/test/fake/2a5603fb05cd1d5e.npy",
+        "dst": "/zero/maps/test/adm/2a5603fb05cd1d5e.npy",
+        "rel_dst": "test/adm/2a5603fb05cd1d5e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a57c6cb3921a75e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a57c6cb3921a75e.png",
+        "src": "/zero/maps/test/fake/2a57c6cb3921a75e.npy",
+        "dst": "/zero/maps/test/adm/2a57c6cb3921a75e.npy",
+        "rel_dst": "test/adm/2a57c6cb3921a75e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a670acd986858eb.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a670acd986858eb.png",
+        "src": "/zero/maps/test/fake/2a670acd986858eb.npy",
+        "dst": "/zero/maps/test/adm/2a670acd986858eb.npy",
+        "rel_dst": "test/adm/2a670acd986858eb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2a780face3fc8b42.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2a780face3fc8b42.png",
+        "src": "/zero/maps/test/fake/2a780face3fc8b42.npy",
+        "dst": "/zero/maps/test/adm/2a780face3fc8b42.npy",
+        "rel_dst": "test/adm/2a780face3fc8b42.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2aa54dc93beba28f.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2aa54dc93beba28f.png",
+        "src": "/zero/maps/test/fake/2aa54dc93beba28f.npy",
+        "dst": "/zero/maps/test/adm/2aa54dc93beba28f.npy",
+        "rel_dst": "test/adm/2aa54dc93beba28f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2aae45e17b3e0839.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2aae45e17b3e0839.png",
+        "src": "/zero/maps/test/fake/2aae45e17b3e0839.npy",
+        "dst": "/zero/maps/test/adm/2aae45e17b3e0839.npy",
+        "rel_dst": "test/adm/2aae45e17b3e0839.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2ab39e7014111f97.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2ab39e7014111f97.png",
+        "src": "/zero/maps/test/fake/2ab39e7014111f97.npy",
+        "dst": "/zero/maps/test/adm/2ab39e7014111f97.npy",
+        "rel_dst": "test/adm/2ab39e7014111f97.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2abafc4afd28ec2f.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2abafc4afd28ec2f.png",
+        "src": "/zero/maps/test/fake/2abafc4afd28ec2f.npy",
+        "dst": "/zero/maps/test/adm/2abafc4afd28ec2f.npy",
+        "rel_dst": "test/adm/2abafc4afd28ec2f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2aedb0e8895b3c92.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2aedb0e8895b3c92.png",
+        "src": "/zero/maps/test/fake/2aedb0e8895b3c92.npy",
+        "dst": "/zero/maps/test/adm/2aedb0e8895b3c92.npy",
+        "rel_dst": "test/adm/2aedb0e8895b3c92.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2b38a31506e0071a.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2b38a31506e0071a.png",
+        "src": "/zero/maps/test/fake/2b38a31506e0071a.npy",
+        "dst": "/zero/maps/test/adm/2b38a31506e0071a.npy",
+        "rel_dst": "test/adm/2b38a31506e0071a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2b48c034242b31c2.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2b48c034242b31c2.png",
+        "src": "/zero/maps/test/fake/2b48c034242b31c2.npy",
+        "dst": "/zero/maps/test/adm/2b48c034242b31c2.npy",
+        "rel_dst": "test/adm/2b48c034242b31c2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2b4c7d63023d34f6.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2b4c7d63023d34f6.png",
+        "src": "/zero/maps/test/fake/2b4c7d63023d34f6.npy",
+        "dst": "/zero/maps/test/adm/2b4c7d63023d34f6.npy",
+        "rel_dst": "test/adm/2b4c7d63023d34f6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2b8dc47be50321fe.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2b8dc47be50321fe.png",
+        "src": "/zero/maps/test/fake/2b8dc47be50321fe.npy",
+        "dst": "/zero/maps/test/adm/2b8dc47be50321fe.npy",
+        "rel_dst": "test/adm/2b8dc47be50321fe.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2bef9c5aedf081a9.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2bef9c5aedf081a9.png",
+        "src": "/zero/maps/test/fake/2bef9c5aedf081a9.npy",
+        "dst": "/zero/maps/test/adm/2bef9c5aedf081a9.npy",
+        "rel_dst": "test/adm/2bef9c5aedf081a9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2c1a2f0671e7d58e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2c1a2f0671e7d58e.png",
+        "src": "/zero/maps/test/fake/2c1a2f0671e7d58e.npy",
+        "dst": "/zero/maps/test/adm/2c1a2f0671e7d58e.npy",
+        "rel_dst": "test/adm/2c1a2f0671e7d58e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2c4f82727070abd3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2c4f82727070abd3.png",
+        "src": "/zero/maps/test/fake/2c4f82727070abd3.npy",
+        "dst": "/zero/maps/test/adm/2c4f82727070abd3.npy",
+        "rel_dst": "test/adm/2c4f82727070abd3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2c6add61678763d6.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2c6add61678763d6.png",
+        "src": "/zero/maps/test/fake/2c6add61678763d6.npy",
+        "dst": "/zero/maps/test/adm/2c6add61678763d6.npy",
+        "rel_dst": "test/adm/2c6add61678763d6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2c9d7d0ae1b7195b.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2c9d7d0ae1b7195b.png",
+        "src": "/zero/maps/test/fake/2c9d7d0ae1b7195b.npy",
+        "dst": "/zero/maps/test/adm/2c9d7d0ae1b7195b.npy",
+        "rel_dst": "test/adm/2c9d7d0ae1b7195b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2cb8b408b6c50ab4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2cb8b408b6c50ab4.png",
+        "src": "/zero/maps/test/fake/2cb8b408b6c50ab4.npy",
+        "dst": "/zero/maps/test/adm/2cb8b408b6c50ab4.npy",
+        "rel_dst": "test/adm/2cb8b408b6c50ab4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2d158de6ad368527.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2d158de6ad368527.png",
+        "src": "/zero/maps/test/fake/2d158de6ad368527.npy",
+        "dst": "/zero/maps/test/adm/2d158de6ad368527.npy",
+        "rel_dst": "test/adm/2d158de6ad368527.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2d34b5a980d16860.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2d34b5a980d16860.png",
+        "src": "/zero/maps/test/fake/2d34b5a980d16860.npy",
+        "dst": "/zero/maps/test/adm/2d34b5a980d16860.npy",
+        "rel_dst": "test/adm/2d34b5a980d16860.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2d50b0561941f1c8.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2d50b0561941f1c8.png",
+        "src": "/zero/maps/test/fake/2d50b0561941f1c8.npy",
+        "dst": "/zero/maps/test/adm/2d50b0561941f1c8.npy",
+        "rel_dst": "test/adm/2d50b0561941f1c8.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2ded8afaa3b78548.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2ded8afaa3b78548.png",
+        "src": "/zero/maps/test/fake/2ded8afaa3b78548.npy",
+        "dst": "/zero/maps/test/adm/2ded8afaa3b78548.npy",
+        "rel_dst": "test/adm/2ded8afaa3b78548.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2e39d3ac07eb270e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2e39d3ac07eb270e.png",
+        "src": "/zero/maps/test/fake/2e39d3ac07eb270e.npy",
+        "dst": "/zero/maps/test/adm/2e39d3ac07eb270e.npy",
+        "rel_dst": "test/adm/2e39d3ac07eb270e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2e919704e47f2c64.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2e919704e47f2c64.png",
+        "src": "/zero/maps/test/fake/2e919704e47f2c64.npy",
+        "dst": "/zero/maps/test/adm/2e919704e47f2c64.npy",
+        "rel_dst": "test/adm/2e919704e47f2c64.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2e91e92d22a1739f.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2e91e92d22a1739f.png",
+        "src": "/zero/maps/test/fake/2e91e92d22a1739f.npy",
+        "dst": "/zero/maps/test/adm/2e91e92d22a1739f.npy",
+        "rel_dst": "test/adm/2e91e92d22a1739f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2ecabb9190f67f88.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2ecabb9190f67f88.png",
+        "src": "/zero/maps/test/fake/2ecabb9190f67f88.npy",
+        "dst": "/zero/maps/test/adm/2ecabb9190f67f88.npy",
+        "rel_dst": "test/adm/2ecabb9190f67f88.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2f30bdeb9c86fd10.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2f30bdeb9c86fd10.png",
+        "src": "/zero/maps/test/fake/2f30bdeb9c86fd10.npy",
+        "dst": "/zero/maps/test/adm/2f30bdeb9c86fd10.npy",
+        "rel_dst": "test/adm/2f30bdeb9c86fd10.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2f30f3ad29a1342d.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2f30f3ad29a1342d.png",
+        "src": "/zero/maps/test/fake/2f30f3ad29a1342d.npy",
+        "dst": "/zero/maps/test/adm/2f30f3ad29a1342d.npy",
+        "rel_dst": "test/adm/2f30f3ad29a1342d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2f3c671906ac281c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2f3c671906ac281c.png",
+        "src": "/zero/maps/test/fake/2f3c671906ac281c.npy",
+        "dst": "/zero/maps/test/adm/2f3c671906ac281c.npy",
+        "rel_dst": "test/adm/2f3c671906ac281c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2f8317f338f66a96.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2f8317f338f66a96.png",
+        "src": "/zero/maps/test/fake/2f8317f338f66a96.npy",
+        "dst": "/zero/maps/test/adm/2f8317f338f66a96.npy",
+        "rel_dst": "test/adm/2f8317f338f66a96.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/2fbcd572f5174ae3.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/2fbcd572f5174ae3.png",
+        "src": "/zero/maps/test/fake/2fbcd572f5174ae3.npy",
+        "dst": "/zero/maps/test/adm/2fbcd572f5174ae3.npy",
+        "rel_dst": "test/adm/2fbcd572f5174ae3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/30082094a1fe53df.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/30082094a1fe53df.png",
+        "src": "/zero/maps/test/fake/30082094a1fe53df.npy",
+        "dst": "/zero/maps/test/adm/30082094a1fe53df.npy",
+        "rel_dst": "test/adm/30082094a1fe53df.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/30d0ce22a46c244c.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/30d0ce22a46c244c.png",
+        "src": "/zero/maps/test/fake/30d0ce22a46c244c.npy",
+        "dst": "/zero/maps/test/adm/30d0ce22a46c244c.npy",
+        "rel_dst": "test/adm/30d0ce22a46c244c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/318addd0af727c0e.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/318addd0af727c0e.png",
+        "src": "/zero/maps/test/fake/318addd0af727c0e.npy",
+        "dst": "/zero/maps/test/adm/318addd0af727c0e.npy",
+        "rel_dst": "test/adm/318addd0af727c0e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/326f4fae1e9fc546.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/326f4fae1e9fc546.png",
+        "src": "/zero/maps/test/fake/326f4fae1e9fc546.npy",
+        "dst": "/zero/maps/test/adm/326f4fae1e9fc546.npy",
+        "rel_dst": "test/adm/326f4fae1e9fc546.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/329e42c32990083f.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/329e42c32990083f.png",
+        "src": "/zero/maps/test/fake/329e42c32990083f.npy",
+        "dst": "/zero/maps/test/adm/329e42c32990083f.npy",
+        "rel_dst": "test/adm/329e42c32990083f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/33530863b89e4c52.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/33530863b89e4c52.png",
+        "src": "/zero/maps/test/fake/33530863b89e4c52.npy",
+        "dst": "/zero/maps/test/adm/33530863b89e4c52.npy",
+        "rel_dst": "test/adm/33530863b89e4c52.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/33580c4a510c1af4.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/33580c4a510c1af4.png",
+        "src": "/zero/maps/test/fake/33580c4a510c1af4.npy",
+        "dst": "/zero/maps/test/adm/33580c4a510c1af4.npy",
+        "rel_dst": "test/adm/33580c4a510c1af4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "test/fake/336a7a3c7a00faa9.npy",
+        "split": "test",
+        "source": "/zero/data/test/adm/336a7a3c7a00faa9.png",
+        "src": "/zero/maps/test/fake/336a7a3c7a00faa9.npy",
+        "dst": "/zero/maps/test/adm/336a7a3c7a00faa9.npy",
+        "rel_dst": "test/adm/336a7a3c7a00faa9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0000a16b98e22391.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0000a16b98e22391.png",
+        "src": "/zero/maps/train/fake/0000a16b98e22391.npy",
+        "dst": "/zero/maps/train/adm/0000a16b98e22391.npy",
+        "rel_dst": "train/adm/0000a16b98e22391.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0000ef5214c8a519.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0000ef5214c8a519.png",
+        "src": "/zero/maps/train/fake/0000ef5214c8a519.npy",
+        "dst": "/zero/maps/train/adm/0000ef5214c8a519.npy",
+        "rel_dst": "train/adm/0000ef5214c8a519.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0002d243ac45c3b6.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0002d243ac45c3b6.png",
+        "src": "/zero/maps/train/fake/0002d243ac45c3b6.npy",
+        "dst": "/zero/maps/train/adm/0002d243ac45c3b6.npy",
+        "rel_dst": "train/adm/0002d243ac45c3b6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00045240c014bcc1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00045240c014bcc1.png",
+        "src": "/zero/maps/train/fake/00045240c014bcc1.npy",
+        "dst": "/zero/maps/train/adm/00045240c014bcc1.npy",
+        "rel_dst": "train/adm/00045240c014bcc1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000575c7a77b6973.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000575c7a77b6973.png",
+        "src": "/zero/maps/train/fake/000575c7a77b6973.npy",
+        "dst": "/zero/maps/train/adm/000575c7a77b6973.npy",
+        "rel_dst": "train/adm/000575c7a77b6973.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00081221196b0699.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00081221196b0699.png",
+        "src": "/zero/maps/train/fake/00081221196b0699.npy",
+        "dst": "/zero/maps/train/adm/00081221196b0699.npy",
+        "rel_dst": "train/adm/00081221196b0699.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0008906489a66c20.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0008906489a66c20.png",
+        "src": "/zero/maps/train/fake/0008906489a66c20.npy",
+        "dst": "/zero/maps/train/adm/0008906489a66c20.npy",
+        "rel_dst": "train/adm/0008906489a66c20.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000c1947c0cd8a23.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000c1947c0cd8a23.png",
+        "src": "/zero/maps/train/fake/000c1947c0cd8a23.npy",
+        "dst": "/zero/maps/train/adm/000c1947c0cd8a23.npy",
+        "rel_dst": "train/adm/000c1947c0cd8a23.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000c9848ed45e6af.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000c9848ed45e6af.png",
+        "src": "/zero/maps/train/fake/000c9848ed45e6af.npy",
+        "dst": "/zero/maps/train/adm/000c9848ed45e6af.npy",
+        "rel_dst": "train/adm/000c9848ed45e6af.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000cdb3ea4ce82c6.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000cdb3ea4ce82c6.png",
+        "src": "/zero/maps/train/fake/000cdb3ea4ce82c6.npy",
+        "dst": "/zero/maps/train/adm/000cdb3ea4ce82c6.npy",
+        "rel_dst": "train/adm/000cdb3ea4ce82c6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000e26ae59751dc9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000e26ae59751dc9.png",
+        "src": "/zero/maps/train/fake/000e26ae59751dc9.npy",
+        "dst": "/zero/maps/train/adm/000e26ae59751dc9.npy",
+        "rel_dst": "train/adm/000e26ae59751dc9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000ef99cd3fa954f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000ef99cd3fa954f.png",
+        "src": "/zero/maps/train/fake/000ef99cd3fa954f.npy",
+        "dst": "/zero/maps/train/adm/000ef99cd3fa954f.npy",
+        "rel_dst": "train/adm/000ef99cd3fa954f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000f8b14971bfc69.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000f8b14971bfc69.png",
+        "src": "/zero/maps/train/fake/000f8b14971bfc69.npy",
+        "dst": "/zero/maps/train/adm/000f8b14971bfc69.npy",
+        "rel_dst": "train/adm/000f8b14971bfc69.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/000fcf5967d8bd8e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/000fcf5967d8bd8e.png",
+        "src": "/zero/maps/train/fake/000fcf5967d8bd8e.npy",
+        "dst": "/zero/maps/train/adm/000fcf5967d8bd8e.npy",
+        "rel_dst": "train/adm/000fcf5967d8bd8e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00102efcb3609a46.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00102efcb3609a46.png",
+        "src": "/zero/maps/train/fake/00102efcb3609a46.npy",
+        "dst": "/zero/maps/train/adm/00102efcb3609a46.npy",
+        "rel_dst": "train/adm/00102efcb3609a46.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/001287c3df6c6830.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/001287c3df6c6830.png",
+        "src": "/zero/maps/train/fake/001287c3df6c6830.npy",
+        "dst": "/zero/maps/train/adm/001287c3df6c6830.npy",
+        "rel_dst": "train/adm/001287c3df6c6830.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00133604bf31b63c.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00133604bf31b63c.png",
+        "src": "/zero/maps/train/fake/00133604bf31b63c.npy",
+        "dst": "/zero/maps/train/adm/00133604bf31b63c.npy",
+        "rel_dst": "train/adm/00133604bf31b63c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0014b495a277f37a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0014b495a277f37a.png",
+        "src": "/zero/maps/train/fake/0014b495a277f37a.npy",
+        "dst": "/zero/maps/train/adm/0014b495a277f37a.npy",
+        "rel_dst": "train/adm/0014b495a277f37a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0014e1a9d0e13943.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0014e1a9d0e13943.png",
+        "src": "/zero/maps/train/fake/0014e1a9d0e13943.npy",
+        "dst": "/zero/maps/train/adm/0014e1a9d0e13943.npy",
+        "rel_dst": "train/adm/0014e1a9d0e13943.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0018f76f1582ebbf.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0018f76f1582ebbf.png",
+        "src": "/zero/maps/train/fake/0018f76f1582ebbf.npy",
+        "dst": "/zero/maps/train/adm/0018f76f1582ebbf.npy",
+        "rel_dst": "train/adm/0018f76f1582ebbf.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/001b04c74820c06f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/001b04c74820c06f.png",
+        "src": "/zero/maps/train/fake/001b04c74820c06f.npy",
+        "dst": "/zero/maps/train/adm/001b04c74820c06f.npy",
+        "rel_dst": "train/adm/001b04c74820c06f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/001b5cd1a2d30db0.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/001b5cd1a2d30db0.png",
+        "src": "/zero/maps/train/fake/001b5cd1a2d30db0.npy",
+        "dst": "/zero/maps/train/adm/001b5cd1a2d30db0.npy",
+        "rel_dst": "train/adm/001b5cd1a2d30db0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0021927e7f5a7338.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0021927e7f5a7338.png",
+        "src": "/zero/maps/train/fake/0021927e7f5a7338.npy",
+        "dst": "/zero/maps/train/adm/0021927e7f5a7338.npy",
+        "rel_dst": "train/adm/0021927e7f5a7338.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0021debd6f1c575b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0021debd6f1c575b.png",
+        "src": "/zero/maps/train/fake/0021debd6f1c575b.npy",
+        "dst": "/zero/maps/train/adm/0021debd6f1c575b.npy",
+        "rel_dst": "train/adm/0021debd6f1c575b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0022033d63a53568.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0022033d63a53568.png",
+        "src": "/zero/maps/train/fake/0022033d63a53568.npy",
+        "dst": "/zero/maps/train/adm/0022033d63a53568.npy",
+        "rel_dst": "train/adm/0022033d63a53568.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002351ec3fb97334.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002351ec3fb97334.png",
+        "src": "/zero/maps/train/fake/002351ec3fb97334.npy",
+        "dst": "/zero/maps/train/adm/002351ec3fb97334.npy",
+        "rel_dst": "train/adm/002351ec3fb97334.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0023d6b053626cad.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0023d6b053626cad.png",
+        "src": "/zero/maps/train/fake/0023d6b053626cad.npy",
+        "dst": "/zero/maps/train/adm/0023d6b053626cad.npy",
+        "rel_dst": "train/adm/0023d6b053626cad.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002448baffca4020.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002448baffca4020.png",
+        "src": "/zero/maps/train/fake/002448baffca4020.npy",
+        "dst": "/zero/maps/train/adm/002448baffca4020.npy",
+        "rel_dst": "train/adm/002448baffca4020.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00251a89652b8e7c.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00251a89652b8e7c.png",
+        "src": "/zero/maps/train/fake/00251a89652b8e7c.npy",
+        "dst": "/zero/maps/train/adm/00251a89652b8e7c.npy",
+        "rel_dst": "train/adm/00251a89652b8e7c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002541b2f3996cb1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002541b2f3996cb1.png",
+        "src": "/zero/maps/train/fake/002541b2f3996cb1.npy",
+        "dst": "/zero/maps/train/adm/002541b2f3996cb1.npy",
+        "rel_dst": "train/adm/002541b2f3996cb1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0025506558fe1bc6.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0025506558fe1bc6.png",
+        "src": "/zero/maps/train/fake/0025506558fe1bc6.npy",
+        "dst": "/zero/maps/train/adm/0025506558fe1bc6.npy",
+        "rel_dst": "train/adm/0025506558fe1bc6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002570a41daa62a2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002570a41daa62a2.png",
+        "src": "/zero/maps/train/fake/002570a41daa62a2.npy",
+        "dst": "/zero/maps/train/adm/002570a41daa62a2.npy",
+        "rel_dst": "train/adm/002570a41daa62a2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0025fa891cce6568.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0025fa891cce6568.png",
+        "src": "/zero/maps/train/fake/0025fa891cce6568.npy",
+        "dst": "/zero/maps/train/adm/0025fa891cce6568.npy",
+        "rel_dst": "train/adm/0025fa891cce6568.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00266aba0cc731fa.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00266aba0cc731fa.png",
+        "src": "/zero/maps/train/fake/00266aba0cc731fa.npy",
+        "dst": "/zero/maps/train/adm/00266aba0cc731fa.npy",
+        "rel_dst": "train/adm/00266aba0cc731fa.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0029ff2394df4ec2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0029ff2394df4ec2.png",
+        "src": "/zero/maps/train/fake/0029ff2394df4ec2.npy",
+        "dst": "/zero/maps/train/adm/0029ff2394df4ec2.npy",
+        "rel_dst": "train/adm/0029ff2394df4ec2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002abd8b01345502.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002abd8b01345502.png",
+        "src": "/zero/maps/train/fake/002abd8b01345502.npy",
+        "dst": "/zero/maps/train/adm/002abd8b01345502.npy",
+        "rel_dst": "train/adm/002abd8b01345502.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002cc408dcd7c868.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002cc408dcd7c868.png",
+        "src": "/zero/maps/train/fake/002cc408dcd7c868.npy",
+        "dst": "/zero/maps/train/adm/002cc408dcd7c868.npy",
+        "rel_dst": "train/adm/002cc408dcd7c868.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/002e3f0ad1c6b6ed.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/002e3f0ad1c6b6ed.png",
+        "src": "/zero/maps/train/fake/002e3f0ad1c6b6ed.npy",
+        "dst": "/zero/maps/train/adm/002e3f0ad1c6b6ed.npy",
+        "rel_dst": "train/adm/002e3f0ad1c6b6ed.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0031eeaf4b5bb842.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0031eeaf4b5bb842.png",
+        "src": "/zero/maps/train/fake/0031eeaf4b5bb842.npy",
+        "dst": "/zero/maps/train/adm/0031eeaf4b5bb842.npy",
+        "rel_dst": "train/adm/0031eeaf4b5bb842.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0032368a9004a90a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0032368a9004a90a.png",
+        "src": "/zero/maps/train/fake/0032368a9004a90a.npy",
+        "dst": "/zero/maps/train/adm/0032368a9004a90a.npy",
+        "rel_dst": "train/adm/0032368a9004a90a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0032c2ef8514ffab.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0032c2ef8514ffab.png",
+        "src": "/zero/maps/train/fake/0032c2ef8514ffab.npy",
+        "dst": "/zero/maps/train/adm/0032c2ef8514ffab.npy",
+        "rel_dst": "train/adm/0032c2ef8514ffab.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0032f52934395cc7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0032f52934395cc7.png",
+        "src": "/zero/maps/train/fake/0032f52934395cc7.npy",
+        "dst": "/zero/maps/train/adm/0032f52934395cc7.npy",
+        "rel_dst": "train/adm/0032f52934395cc7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0033767adfbf37ac.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0033767adfbf37ac.png",
+        "src": "/zero/maps/train/fake/0033767adfbf37ac.npy",
+        "dst": "/zero/maps/train/adm/0033767adfbf37ac.npy",
+        "rel_dst": "train/adm/0033767adfbf37ac.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0033bebe75038a73.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0033bebe75038a73.png",
+        "src": "/zero/maps/train/fake/0033bebe75038a73.npy",
+        "dst": "/zero/maps/train/adm/0033bebe75038a73.npy",
+        "rel_dst": "train/adm/0033bebe75038a73.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/003508848066d46d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/003508848066d46d.png",
+        "src": "/zero/maps/train/fake/003508848066d46d.npy",
+        "dst": "/zero/maps/train/adm/003508848066d46d.npy",
+        "rel_dst": "train/adm/003508848066d46d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0038215b9c262b4f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0038215b9c262b4f.png",
+        "src": "/zero/maps/train/fake/0038215b9c262b4f.npy",
+        "dst": "/zero/maps/train/adm/0038215b9c262b4f.npy",
+        "rel_dst": "train/adm/0038215b9c262b4f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00397f1cda32fc1e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00397f1cda32fc1e.png",
+        "src": "/zero/maps/train/fake/00397f1cda32fc1e.npy",
+        "dst": "/zero/maps/train/adm/00397f1cda32fc1e.npy",
+        "rel_dst": "train/adm/00397f1cda32fc1e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/003a3e5cd7ae0f1f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/003a3e5cd7ae0f1f.png",
+        "src": "/zero/maps/train/fake/003a3e5cd7ae0f1f.npy",
+        "dst": "/zero/maps/train/adm/003a3e5cd7ae0f1f.npy",
+        "rel_dst": "train/adm/003a3e5cd7ae0f1f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/003c1ce4e496d6fd.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/003c1ce4e496d6fd.png",
+        "src": "/zero/maps/train/fake/003c1ce4e496d6fd.npy",
+        "dst": "/zero/maps/train/adm/003c1ce4e496d6fd.npy",
+        "rel_dst": "train/adm/003c1ce4e496d6fd.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/003e85632c99def6.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/003e85632c99def6.png",
+        "src": "/zero/maps/train/fake/003e85632c99def6.npy",
+        "dst": "/zero/maps/train/adm/003e85632c99def6.npy",
+        "rel_dst": "train/adm/003e85632c99def6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/003fff13c05dd1ab.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/003fff13c05dd1ab.png",
+        "src": "/zero/maps/train/fake/003fff13c05dd1ab.npy",
+        "dst": "/zero/maps/train/adm/003fff13c05dd1ab.npy",
+        "rel_dst": "train/adm/003fff13c05dd1ab.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0040b7fa724367de.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0040b7fa724367de.png",
+        "src": "/zero/maps/train/fake/0040b7fa724367de.npy",
+        "dst": "/zero/maps/train/adm/0040b7fa724367de.npy",
+        "rel_dst": "train/adm/0040b7fa724367de.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0040c2d8b8966464.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0040c2d8b8966464.png",
+        "src": "/zero/maps/train/fake/0040c2d8b8966464.npy",
+        "dst": "/zero/maps/train/adm/0040c2d8b8966464.npy",
+        "rel_dst": "train/adm/0040c2d8b8966464.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0042925df473fe4d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0042925df473fe4d.png",
+        "src": "/zero/maps/train/fake/0042925df473fe4d.npy",
+        "dst": "/zero/maps/train/adm/0042925df473fe4d.npy",
+        "rel_dst": "train/adm/0042925df473fe4d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00457ef28dcd7698.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00457ef28dcd7698.png",
+        "src": "/zero/maps/train/fake/00457ef28dcd7698.npy",
+        "dst": "/zero/maps/train/adm/00457ef28dcd7698.npy",
+        "rel_dst": "train/adm/00457ef28dcd7698.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00458c6ce87760e9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00458c6ce87760e9.png",
+        "src": "/zero/maps/train/fake/00458c6ce87760e9.npy",
+        "dst": "/zero/maps/train/adm/00458c6ce87760e9.npy",
+        "rel_dst": "train/adm/00458c6ce87760e9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0047653b6dc4b8bb.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0047653b6dc4b8bb.png",
+        "src": "/zero/maps/train/fake/0047653b6dc4b8bb.npy",
+        "dst": "/zero/maps/train/adm/0047653b6dc4b8bb.npy",
+        "rel_dst": "train/adm/0047653b6dc4b8bb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004904c49336c35e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004904c49336c35e.png",
+        "src": "/zero/maps/train/fake/004904c49336c35e.npy",
+        "dst": "/zero/maps/train/adm/004904c49336c35e.npy",
+        "rel_dst": "train/adm/004904c49336c35e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00499852cc5a0b38.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00499852cc5a0b38.png",
+        "src": "/zero/maps/train/fake/00499852cc5a0b38.npy",
+        "dst": "/zero/maps/train/adm/00499852cc5a0b38.npy",
+        "rel_dst": "train/adm/00499852cc5a0b38.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004a74ee3f53b393.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004a74ee3f53b393.png",
+        "src": "/zero/maps/train/fake/004a74ee3f53b393.npy",
+        "dst": "/zero/maps/train/adm/004a74ee3f53b393.npy",
+        "rel_dst": "train/adm/004a74ee3f53b393.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004c9c36cbeafdda.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004c9c36cbeafdda.png",
+        "src": "/zero/maps/train/fake/004c9c36cbeafdda.npy",
+        "dst": "/zero/maps/train/adm/004c9c36cbeafdda.npy",
+        "rel_dst": "train/adm/004c9c36cbeafdda.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004d44d9e3954332.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004d44d9e3954332.png",
+        "src": "/zero/maps/train/fake/004d44d9e3954332.npy",
+        "dst": "/zero/maps/train/adm/004d44d9e3954332.npy",
+        "rel_dst": "train/adm/004d44d9e3954332.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004ee37b594f7f37.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004ee37b594f7f37.png",
+        "src": "/zero/maps/train/fake/004ee37b594f7f37.npy",
+        "dst": "/zero/maps/train/adm/004ee37b594f7f37.npy",
+        "rel_dst": "train/adm/004ee37b594f7f37.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004ee55c56731bce.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004ee55c56731bce.png",
+        "src": "/zero/maps/train/fake/004ee55c56731bce.npy",
+        "dst": "/zero/maps/train/adm/004ee55c56731bce.npy",
+        "rel_dst": "train/adm/004ee55c56731bce.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/004f169503dc38df.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/004f169503dc38df.png",
+        "src": "/zero/maps/train/fake/004f169503dc38df.npy",
+        "dst": "/zero/maps/train/adm/004f169503dc38df.npy",
+        "rel_dst": "train/adm/004f169503dc38df.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0050bc442a3ccfb9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0050bc442a3ccfb9.png",
+        "src": "/zero/maps/train/fake/0050bc442a3ccfb9.npy",
+        "dst": "/zero/maps/train/adm/0050bc442a3ccfb9.npy",
+        "rel_dst": "train/adm/0050bc442a3ccfb9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0050fab7e494d097.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0050fab7e494d097.png",
+        "src": "/zero/maps/train/fake/0050fab7e494d097.npy",
+        "dst": "/zero/maps/train/adm/0050fab7e494d097.npy",
+        "rel_dst": "train/adm/0050fab7e494d097.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0053fa698299bd84.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0053fa698299bd84.png",
+        "src": "/zero/maps/train/fake/0053fa698299bd84.npy",
+        "dst": "/zero/maps/train/adm/0053fa698299bd84.npy",
+        "rel_dst": "train/adm/0053fa698299bd84.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0054140af48f19d4.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0054140af48f19d4.png",
+        "src": "/zero/maps/train/fake/0054140af48f19d4.npy",
+        "dst": "/zero/maps/train/adm/0054140af48f19d4.npy",
+        "rel_dst": "train/adm/0054140af48f19d4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005445404d0c9687.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005445404d0c9687.png",
+        "src": "/zero/maps/train/fake/005445404d0c9687.npy",
+        "dst": "/zero/maps/train/adm/005445404d0c9687.npy",
+        "rel_dst": "train/adm/005445404d0c9687.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0054d12fd7888d6c.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0054d12fd7888d6c.png",
+        "src": "/zero/maps/train/fake/0054d12fd7888d6c.npy",
+        "dst": "/zero/maps/train/adm/0054d12fd7888d6c.npy",
+        "rel_dst": "train/adm/0054d12fd7888d6c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005675e2af93b5eb.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005675e2af93b5eb.png",
+        "src": "/zero/maps/train/fake/005675e2af93b5eb.npy",
+        "dst": "/zero/maps/train/adm/005675e2af93b5eb.npy",
+        "rel_dst": "train/adm/005675e2af93b5eb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0057959ba4bc020e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0057959ba4bc020e.png",
+        "src": "/zero/maps/train/fake/0057959ba4bc020e.npy",
+        "dst": "/zero/maps/train/adm/0057959ba4bc020e.npy",
+        "rel_dst": "train/adm/0057959ba4bc020e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0057c0571ee5f1d7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0057c0571ee5f1d7.png",
+        "src": "/zero/maps/train/fake/0057c0571ee5f1d7.npy",
+        "dst": "/zero/maps/train/adm/0057c0571ee5f1d7.npy",
+        "rel_dst": "train/adm/0057c0571ee5f1d7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005808c91fa312fb.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005808c91fa312fb.png",
+        "src": "/zero/maps/train/fake/005808c91fa312fb.npy",
+        "dst": "/zero/maps/train/adm/005808c91fa312fb.npy",
+        "rel_dst": "train/adm/005808c91fa312fb.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00592ff0fb8d1e9d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00592ff0fb8d1e9d.png",
+        "src": "/zero/maps/train/fake/00592ff0fb8d1e9d.npy",
+        "dst": "/zero/maps/train/adm/00592ff0fb8d1e9d.npy",
+        "rel_dst": "train/adm/00592ff0fb8d1e9d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005d3662190a6bf1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005d3662190a6bf1.png",
+        "src": "/zero/maps/train/fake/005d3662190a6bf1.npy",
+        "dst": "/zero/maps/train/adm/005d3662190a6bf1.npy",
+        "rel_dst": "train/adm/005d3662190a6bf1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005f21b3bde51200.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005f21b3bde51200.png",
+        "src": "/zero/maps/train/fake/005f21b3bde51200.npy",
+        "dst": "/zero/maps/train/adm/005f21b3bde51200.npy",
+        "rel_dst": "train/adm/005f21b3bde51200.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/005fd0a0240ce355.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/005fd0a0240ce355.png",
+        "src": "/zero/maps/train/fake/005fd0a0240ce355.npy",
+        "dst": "/zero/maps/train/adm/005fd0a0240ce355.npy",
+        "rel_dst": "train/adm/005fd0a0240ce355.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0060489f0ed962fa.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0060489f0ed962fa.png",
+        "src": "/zero/maps/train/fake/0060489f0ed962fa.npy",
+        "dst": "/zero/maps/train/adm/0060489f0ed962fa.npy",
+        "rel_dst": "train/adm/0060489f0ed962fa.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00612d4518919195.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00612d4518919195.png",
+        "src": "/zero/maps/train/fake/00612d4518919195.npy",
+        "dst": "/zero/maps/train/adm/00612d4518919195.npy",
+        "rel_dst": "train/adm/00612d4518919195.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0061a376904bc2e5.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0061a376904bc2e5.png",
+        "src": "/zero/maps/train/fake/0061a376904bc2e5.npy",
+        "dst": "/zero/maps/train/adm/0061a376904bc2e5.npy",
+        "rel_dst": "train/adm/0061a376904bc2e5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0061ae649a7a03e2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0061ae649a7a03e2.png",
+        "src": "/zero/maps/train/fake/0061ae649a7a03e2.npy",
+        "dst": "/zero/maps/train/adm/0061ae649a7a03e2.npy",
+        "rel_dst": "train/adm/0061ae649a7a03e2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0062928897d28b85.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0062928897d28b85.png",
+        "src": "/zero/maps/train/fake/0062928897d28b85.npy",
+        "dst": "/zero/maps/train/adm/0062928897d28b85.npy",
+        "rel_dst": "train/adm/0062928897d28b85.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00675ba3702b7b51.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00675ba3702b7b51.png",
+        "src": "/zero/maps/train/fake/00675ba3702b7b51.npy",
+        "dst": "/zero/maps/train/adm/00675ba3702b7b51.npy",
+        "rel_dst": "train/adm/00675ba3702b7b51.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/006784a84a4f6a7a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/006784a84a4f6a7a.png",
+        "src": "/zero/maps/train/fake/006784a84a4f6a7a.npy",
+        "dst": "/zero/maps/train/adm/006784a84a4f6a7a.npy",
+        "rel_dst": "train/adm/006784a84a4f6a7a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00695af7253e117e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00695af7253e117e.png",
+        "src": "/zero/maps/train/fake/00695af7253e117e.npy",
+        "dst": "/zero/maps/train/adm/00695af7253e117e.npy",
+        "rel_dst": "train/adm/00695af7253e117e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/006981276c28cda2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/006981276c28cda2.png",
+        "src": "/zero/maps/train/fake/006981276c28cda2.npy",
+        "dst": "/zero/maps/train/adm/006981276c28cda2.npy",
+        "rel_dst": "train/adm/006981276c28cda2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/006b8e82ab63c25a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/006b8e82ab63c25a.png",
+        "src": "/zero/maps/train/fake/006b8e82ab63c25a.npy",
+        "dst": "/zero/maps/train/adm/006b8e82ab63c25a.npy",
+        "rel_dst": "train/adm/006b8e82ab63c25a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/006f2e284f6e2492.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/006f2e284f6e2492.png",
+        "src": "/zero/maps/train/fake/006f2e284f6e2492.npy",
+        "dst": "/zero/maps/train/adm/006f2e284f6e2492.npy",
+        "rel_dst": "train/adm/006f2e284f6e2492.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00704fb46f6f85a1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00704fb46f6f85a1.png",
+        "src": "/zero/maps/train/fake/00704fb46f6f85a1.npy",
+        "dst": "/zero/maps/train/adm/00704fb46f6f85a1.npy",
+        "rel_dst": "train/adm/00704fb46f6f85a1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00709c7f538b89aa.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00709c7f538b89aa.png",
+        "src": "/zero/maps/train/fake/00709c7f538b89aa.npy",
+        "dst": "/zero/maps/train/adm/00709c7f538b89aa.npy",
+        "rel_dst": "train/adm/00709c7f538b89aa.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0072c42305684137.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0072c42305684137.png",
+        "src": "/zero/maps/train/fake/0072c42305684137.npy",
+        "dst": "/zero/maps/train/adm/0072c42305684137.npy",
+        "rel_dst": "train/adm/0072c42305684137.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0074f4260b4866aa.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0074f4260b4866aa.png",
+        "src": "/zero/maps/train/fake/0074f4260b4866aa.npy",
+        "dst": "/zero/maps/train/adm/0074f4260b4866aa.npy",
+        "rel_dst": "train/adm/0074f4260b4866aa.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007620ea86abce25.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007620ea86abce25.png",
+        "src": "/zero/maps/train/fake/007620ea86abce25.npy",
+        "dst": "/zero/maps/train/adm/007620ea86abce25.npy",
+        "rel_dst": "train/adm/007620ea86abce25.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00778a3fa11ecd88.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00778a3fa11ecd88.png",
+        "src": "/zero/maps/train/fake/00778a3fa11ecd88.npy",
+        "dst": "/zero/maps/train/adm/00778a3fa11ecd88.npy",
+        "rel_dst": "train/adm/00778a3fa11ecd88.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0077cc4ddb9490b1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0077cc4ddb9490b1.png",
+        "src": "/zero/maps/train/fake/0077cc4ddb9490b1.npy",
+        "dst": "/zero/maps/train/adm/0077cc4ddb9490b1.npy",
+        "rel_dst": "train/adm/0077cc4ddb9490b1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0077daf6a0ecf9c9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0077daf6a0ecf9c9.png",
+        "src": "/zero/maps/train/fake/0077daf6a0ecf9c9.npy",
+        "dst": "/zero/maps/train/adm/0077daf6a0ecf9c9.npy",
+        "rel_dst": "train/adm/0077daf6a0ecf9c9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00798e0025868e8f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00798e0025868e8f.png",
+        "src": "/zero/maps/train/fake/00798e0025868e8f.npy",
+        "dst": "/zero/maps/train/adm/00798e0025868e8f.npy",
+        "rel_dst": "train/adm/00798e0025868e8f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007a6b5dfd9a5d7d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007a6b5dfd9a5d7d.png",
+        "src": "/zero/maps/train/fake/007a6b5dfd9a5d7d.npy",
+        "dst": "/zero/maps/train/adm/007a6b5dfd9a5d7d.npy",
+        "rel_dst": "train/adm/007a6b5dfd9a5d7d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007be1f687f7bac0.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007be1f687f7bac0.png",
+        "src": "/zero/maps/train/fake/007be1f687f7bac0.npy",
+        "dst": "/zero/maps/train/adm/007be1f687f7bac0.npy",
+        "rel_dst": "train/adm/007be1f687f7bac0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007df2ebd11ff93f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007df2ebd11ff93f.png",
+        "src": "/zero/maps/train/fake/007df2ebd11ff93f.npy",
+        "dst": "/zero/maps/train/adm/007df2ebd11ff93f.npy",
+        "rel_dst": "train/adm/007df2ebd11ff93f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007e432315715896.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007e432315715896.png",
+        "src": "/zero/maps/train/fake/007e432315715896.npy",
+        "dst": "/zero/maps/train/adm/007e432315715896.npy",
+        "rel_dst": "train/adm/007e432315715896.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/007f352f97e52d91.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/007f352f97e52d91.png",
+        "src": "/zero/maps/train/fake/007f352f97e52d91.npy",
+        "dst": "/zero/maps/train/adm/007f352f97e52d91.npy",
+        "rel_dst": "train/adm/007f352f97e52d91.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0080996f46bc11f2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0080996f46bc11f2.png",
+        "src": "/zero/maps/train/fake/0080996f46bc11f2.npy",
+        "dst": "/zero/maps/train/adm/0080996f46bc11f2.npy",
+        "rel_dst": "train/adm/0080996f46bc11f2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/008110c2bd001c4a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/008110c2bd001c4a.png",
+        "src": "/zero/maps/train/fake/008110c2bd001c4a.npy",
+        "dst": "/zero/maps/train/adm/008110c2bd001c4a.npy",
+        "rel_dst": "train/adm/008110c2bd001c4a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0081440446f4f267.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0081440446f4f267.png",
+        "src": "/zero/maps/train/fake/0081440446f4f267.npy",
+        "dst": "/zero/maps/train/adm/0081440446f4f267.npy",
+        "rel_dst": "train/adm/0081440446f4f267.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0084dc80bea350ae.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0084dc80bea350ae.png",
+        "src": "/zero/maps/train/fake/0084dc80bea350ae.npy",
+        "dst": "/zero/maps/train/adm/0084dc80bea350ae.npy",
+        "rel_dst": "train/adm/0084dc80bea350ae.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0084ef9142ce691d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0084ef9142ce691d.png",
+        "src": "/zero/maps/train/fake/0084ef9142ce691d.npy",
+        "dst": "/zero/maps/train/adm/0084ef9142ce691d.npy",
+        "rel_dst": "train/adm/0084ef9142ce691d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0086b57a3985ffc9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0086b57a3985ffc9.png",
+        "src": "/zero/maps/train/fake/0086b57a3985ffc9.npy",
+        "dst": "/zero/maps/train/adm/0086b57a3985ffc9.npy",
+        "rel_dst": "train/adm/0086b57a3985ffc9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0088c95aaaaa87e2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0088c95aaaaa87e2.png",
+        "src": "/zero/maps/train/fake/0088c95aaaaa87e2.npy",
+        "dst": "/zero/maps/train/adm/0088c95aaaaa87e2.npy",
+        "rel_dst": "train/adm/0088c95aaaaa87e2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0088cb6cf1f8c2ee.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0088cb6cf1f8c2ee.png",
+        "src": "/zero/maps/train/fake/0088cb6cf1f8c2ee.npy",
+        "dst": "/zero/maps/train/adm/0088cb6cf1f8c2ee.npy",
+        "rel_dst": "train/adm/0088cb6cf1f8c2ee.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/008b3cdebbfa8820.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/008b3cdebbfa8820.png",
+        "src": "/zero/maps/train/fake/008b3cdebbfa8820.npy",
+        "dst": "/zero/maps/train/adm/008b3cdebbfa8820.npy",
+        "rel_dst": "train/adm/008b3cdebbfa8820.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/008dd7407ca2d71e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/008dd7407ca2d71e.png",
+        "src": "/zero/maps/train/fake/008dd7407ca2d71e.npy",
+        "dst": "/zero/maps/train/adm/008dd7407ca2d71e.npy",
+        "rel_dst": "train/adm/008dd7407ca2d71e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/008efa8cb6cc24b0.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/008efa8cb6cc24b0.png",
+        "src": "/zero/maps/train/fake/008efa8cb6cc24b0.npy",
+        "dst": "/zero/maps/train/adm/008efa8cb6cc24b0.npy",
+        "rel_dst": "train/adm/008efa8cb6cc24b0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009061b8934179b5.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009061b8934179b5.png",
+        "src": "/zero/maps/train/fake/009061b8934179b5.npy",
+        "dst": "/zero/maps/train/adm/009061b8934179b5.npy",
+        "rel_dst": "train/adm/009061b8934179b5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0096086fdc892d98.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0096086fdc892d98.png",
+        "src": "/zero/maps/train/fake/0096086fdc892d98.npy",
+        "dst": "/zero/maps/train/adm/0096086fdc892d98.npy",
+        "rel_dst": "train/adm/0096086fdc892d98.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00961aff65ec4c7e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00961aff65ec4c7e.png",
+        "src": "/zero/maps/train/fake/00961aff65ec4c7e.npy",
+        "dst": "/zero/maps/train/adm/00961aff65ec4c7e.npy",
+        "rel_dst": "train/adm/00961aff65ec4c7e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0099d16e7cdc1107.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0099d16e7cdc1107.png",
+        "src": "/zero/maps/train/fake/0099d16e7cdc1107.npy",
+        "dst": "/zero/maps/train/adm/0099d16e7cdc1107.npy",
+        "rel_dst": "train/adm/0099d16e7cdc1107.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009a3cea269bdad7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009a3cea269bdad7.png",
+        "src": "/zero/maps/train/fake/009a3cea269bdad7.npy",
+        "dst": "/zero/maps/train/adm/009a3cea269bdad7.npy",
+        "rel_dst": "train/adm/009a3cea269bdad7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009b11224f9ec357.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009b11224f9ec357.png",
+        "src": "/zero/maps/train/fake/009b11224f9ec357.npy",
+        "dst": "/zero/maps/train/adm/009b11224f9ec357.npy",
+        "rel_dst": "train/adm/009b11224f9ec357.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009cbe76c2ae188b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009cbe76c2ae188b.png",
+        "src": "/zero/maps/train/fake/009cbe76c2ae188b.npy",
+        "dst": "/zero/maps/train/adm/009cbe76c2ae188b.npy",
+        "rel_dst": "train/adm/009cbe76c2ae188b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009d82bcfca5f677.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009d82bcfca5f677.png",
+        "src": "/zero/maps/train/fake/009d82bcfca5f677.npy",
+        "dst": "/zero/maps/train/adm/009d82bcfca5f677.npy",
+        "rel_dst": "train/adm/009d82bcfca5f677.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/009f9998aca3c7a7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/009f9998aca3c7a7.png",
+        "src": "/zero/maps/train/fake/009f9998aca3c7a7.npy",
+        "dst": "/zero/maps/train/adm/009f9998aca3c7a7.npy",
+        "rel_dst": "train/adm/009f9998aca3c7a7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a036bba6c22d1a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a036bba6c22d1a.png",
+        "src": "/zero/maps/train/fake/00a036bba6c22d1a.npy",
+        "dst": "/zero/maps/train/adm/00a036bba6c22d1a.npy",
+        "rel_dst": "train/adm/00a036bba6c22d1a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a0bfc2efbc6f39.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a0bfc2efbc6f39.png",
+        "src": "/zero/maps/train/fake/00a0bfc2efbc6f39.npy",
+        "dst": "/zero/maps/train/adm/00a0bfc2efbc6f39.npy",
+        "rel_dst": "train/adm/00a0bfc2efbc6f39.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a203541d264f30.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a203541d264f30.png",
+        "src": "/zero/maps/train/fake/00a203541d264f30.npy",
+        "dst": "/zero/maps/train/adm/00a203541d264f30.npy",
+        "rel_dst": "train/adm/00a203541d264f30.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a61497862fc408.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a61497862fc408.png",
+        "src": "/zero/maps/train/fake/00a61497862fc408.npy",
+        "dst": "/zero/maps/train/adm/00a61497862fc408.npy",
+        "rel_dst": "train/adm/00a61497862fc408.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a7aee855392d79.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a7aee855392d79.png",
+        "src": "/zero/maps/train/fake/00a7aee855392d79.npy",
+        "dst": "/zero/maps/train/adm/00a7aee855392d79.npy",
+        "rel_dst": "train/adm/00a7aee855392d79.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00a9494c4e959df7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00a9494c4e959df7.png",
+        "src": "/zero/maps/train/fake/00a9494c4e959df7.npy",
+        "dst": "/zero/maps/train/adm/00a9494c4e959df7.npy",
+        "rel_dst": "train/adm/00a9494c4e959df7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ac1b3bda949b33.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ac1b3bda949b33.png",
+        "src": "/zero/maps/train/fake/00ac1b3bda949b33.npy",
+        "dst": "/zero/maps/train/adm/00ac1b3bda949b33.npy",
+        "rel_dst": "train/adm/00ac1b3bda949b33.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ae042b1c36b318.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ae042b1c36b318.png",
+        "src": "/zero/maps/train/fake/00ae042b1c36b318.npy",
+        "dst": "/zero/maps/train/adm/00ae042b1c36b318.npy",
+        "rel_dst": "train/adm/00ae042b1c36b318.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ae32cfa1a5bf33.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ae32cfa1a5bf33.png",
+        "src": "/zero/maps/train/fake/00ae32cfa1a5bf33.npy",
+        "dst": "/zero/maps/train/adm/00ae32cfa1a5bf33.npy",
+        "rel_dst": "train/adm/00ae32cfa1a5bf33.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00af2a2ca597e518.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00af2a2ca597e518.png",
+        "src": "/zero/maps/train/fake/00af2a2ca597e518.npy",
+        "dst": "/zero/maps/train/adm/00af2a2ca597e518.npy",
+        "rel_dst": "train/adm/00af2a2ca597e518.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00afb933cae8607d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00afb933cae8607d.png",
+        "src": "/zero/maps/train/fake/00afb933cae8607d.npy",
+        "dst": "/zero/maps/train/adm/00afb933cae8607d.npy",
+        "rel_dst": "train/adm/00afb933cae8607d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b1c4ea70e9f387.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b1c4ea70e9f387.png",
+        "src": "/zero/maps/train/fake/00b1c4ea70e9f387.npy",
+        "dst": "/zero/maps/train/adm/00b1c4ea70e9f387.npy",
+        "rel_dst": "train/adm/00b1c4ea70e9f387.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b33a3fbc3a7509.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b33a3fbc3a7509.png",
+        "src": "/zero/maps/train/fake/00b33a3fbc3a7509.npy",
+        "dst": "/zero/maps/train/adm/00b33a3fbc3a7509.npy",
+        "rel_dst": "train/adm/00b33a3fbc3a7509.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b41b003d003b9e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b41b003d003b9e.png",
+        "src": "/zero/maps/train/fake/00b41b003d003b9e.npy",
+        "dst": "/zero/maps/train/adm/00b41b003d003b9e.npy",
+        "rel_dst": "train/adm/00b41b003d003b9e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b4f02fe8dce3c9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b4f02fe8dce3c9.png",
+        "src": "/zero/maps/train/fake/00b4f02fe8dce3c9.npy",
+        "dst": "/zero/maps/train/adm/00b4f02fe8dce3c9.npy",
+        "rel_dst": "train/adm/00b4f02fe8dce3c9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b500a6a7ad4a72.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b500a6a7ad4a72.png",
+        "src": "/zero/maps/train/fake/00b500a6a7ad4a72.npy",
+        "dst": "/zero/maps/train/adm/00b500a6a7ad4a72.npy",
+        "rel_dst": "train/adm/00b500a6a7ad4a72.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b556b890ce79cf.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b556b890ce79cf.png",
+        "src": "/zero/maps/train/fake/00b556b890ce79cf.npy",
+        "dst": "/zero/maps/train/adm/00b556b890ce79cf.npy",
+        "rel_dst": "train/adm/00b556b890ce79cf.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b7bdecb8d293c3.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b7bdecb8d293c3.png",
+        "src": "/zero/maps/train/fake/00b7bdecb8d293c3.npy",
+        "dst": "/zero/maps/train/adm/00b7bdecb8d293c3.npy",
+        "rel_dst": "train/adm/00b7bdecb8d293c3.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b7d5aed235ea5e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b7d5aed235ea5e.png",
+        "src": "/zero/maps/train/fake/00b7d5aed235ea5e.npy",
+        "dst": "/zero/maps/train/adm/00b7d5aed235ea5e.npy",
+        "rel_dst": "train/adm/00b7d5aed235ea5e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00b8586dd1f4e558.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00b8586dd1f4e558.png",
+        "src": "/zero/maps/train/fake/00b8586dd1f4e558.npy",
+        "dst": "/zero/maps/train/adm/00b8586dd1f4e558.npy",
+        "rel_dst": "train/adm/00b8586dd1f4e558.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00bbbab58c84986b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00bbbab58c84986b.png",
+        "src": "/zero/maps/train/fake/00bbbab58c84986b.npy",
+        "dst": "/zero/maps/train/adm/00bbbab58c84986b.npy",
+        "rel_dst": "train/adm/00bbbab58c84986b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00bdce2139dc1185.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00bdce2139dc1185.png",
+        "src": "/zero/maps/train/fake/00bdce2139dc1185.npy",
+        "dst": "/zero/maps/train/adm/00bdce2139dc1185.npy",
+        "rel_dst": "train/adm/00bdce2139dc1185.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00bde53a22a79d1d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00bde53a22a79d1d.png",
+        "src": "/zero/maps/train/fake/00bde53a22a79d1d.npy",
+        "dst": "/zero/maps/train/adm/00bde53a22a79d1d.npy",
+        "rel_dst": "train/adm/00bde53a22a79d1d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00beeb9519a48928.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00beeb9519a48928.png",
+        "src": "/zero/maps/train/fake/00beeb9519a48928.npy",
+        "dst": "/zero/maps/train/adm/00beeb9519a48928.npy",
+        "rel_dst": "train/adm/00beeb9519a48928.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c10534c2cf2b91.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c10534c2cf2b91.png",
+        "src": "/zero/maps/train/fake/00c10534c2cf2b91.npy",
+        "dst": "/zero/maps/train/adm/00c10534c2cf2b91.npy",
+        "rel_dst": "train/adm/00c10534c2cf2b91.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c284b5e991315b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c284b5e991315b.png",
+        "src": "/zero/maps/train/fake/00c284b5e991315b.npy",
+        "dst": "/zero/maps/train/adm/00c284b5e991315b.npy",
+        "rel_dst": "train/adm/00c284b5e991315b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c2b7ff4956294f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c2b7ff4956294f.png",
+        "src": "/zero/maps/train/fake/00c2b7ff4956294f.npy",
+        "dst": "/zero/maps/train/adm/00c2b7ff4956294f.npy",
+        "rel_dst": "train/adm/00c2b7ff4956294f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c57757317f8566.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c57757317f8566.png",
+        "src": "/zero/maps/train/fake/00c57757317f8566.npy",
+        "dst": "/zero/maps/train/adm/00c57757317f8566.npy",
+        "rel_dst": "train/adm/00c57757317f8566.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c7729f45744d4c.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c7729f45744d4c.png",
+        "src": "/zero/maps/train/fake/00c7729f45744d4c.npy",
+        "dst": "/zero/maps/train/adm/00c7729f45744d4c.npy",
+        "rel_dst": "train/adm/00c7729f45744d4c.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c82320d86d41f6.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c82320d86d41f6.png",
+        "src": "/zero/maps/train/fake/00c82320d86d41f6.npy",
+        "dst": "/zero/maps/train/adm/00c82320d86d41f6.npy",
+        "rel_dst": "train/adm/00c82320d86d41f6.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c8b9fedce0f9a7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c8b9fedce0f9a7.png",
+        "src": "/zero/maps/train/fake/00c8b9fedce0f9a7.npy",
+        "dst": "/zero/maps/train/adm/00c8b9fedce0f9a7.npy",
+        "rel_dst": "train/adm/00c8b9fedce0f9a7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00c9b67529c293d1.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00c9b67529c293d1.png",
+        "src": "/zero/maps/train/fake/00c9b67529c293d1.npy",
+        "dst": "/zero/maps/train/adm/00c9b67529c293d1.npy",
+        "rel_dst": "train/adm/00c9b67529c293d1.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00cabda4bd371448.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00cabda4bd371448.png",
+        "src": "/zero/maps/train/fake/00cabda4bd371448.npy",
+        "dst": "/zero/maps/train/adm/00cabda4bd371448.npy",
+        "rel_dst": "train/adm/00cabda4bd371448.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00cd3b1c5c81ed4d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00cd3b1c5c81ed4d.png",
+        "src": "/zero/maps/train/fake/00cd3b1c5c81ed4d.npy",
+        "dst": "/zero/maps/train/adm/00cd3b1c5c81ed4d.npy",
+        "rel_dst": "train/adm/00cd3b1c5c81ed4d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00cd5b1f121c75ae.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00cd5b1f121c75ae.png",
+        "src": "/zero/maps/train/fake/00cd5b1f121c75ae.npy",
+        "dst": "/zero/maps/train/adm/00cd5b1f121c75ae.npy",
+        "rel_dst": "train/adm/00cd5b1f121c75ae.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00cf175be8f46325.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00cf175be8f46325.png",
+        "src": "/zero/maps/train/fake/00cf175be8f46325.npy",
+        "dst": "/zero/maps/train/adm/00cf175be8f46325.npy",
+        "rel_dst": "train/adm/00cf175be8f46325.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00d35547ba5fbf9b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00d35547ba5fbf9b.png",
+        "src": "/zero/maps/train/fake/00d35547ba5fbf9b.npy",
+        "dst": "/zero/maps/train/adm/00d35547ba5fbf9b.npy",
+        "rel_dst": "train/adm/00d35547ba5fbf9b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00d3bf5b96069a66.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00d3bf5b96069a66.png",
+        "src": "/zero/maps/train/fake/00d3bf5b96069a66.npy",
+        "dst": "/zero/maps/train/adm/00d3bf5b96069a66.npy",
+        "rel_dst": "train/adm/00d3bf5b96069a66.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00dd5b4d8761b0b0.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00dd5b4d8761b0b0.png",
+        "src": "/zero/maps/train/fake/00dd5b4d8761b0b0.npy",
+        "dst": "/zero/maps/train/adm/00dd5b4d8761b0b0.npy",
+        "rel_dst": "train/adm/00dd5b4d8761b0b0.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00de84534014c346.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00de84534014c346.png",
+        "src": "/zero/maps/train/fake/00de84534014c346.npy",
+        "dst": "/zero/maps/train/adm/00de84534014c346.npy",
+        "rel_dst": "train/adm/00de84534014c346.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e0c5d5e315f5d5.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e0c5d5e315f5d5.png",
+        "src": "/zero/maps/train/fake/00e0c5d5e315f5d5.npy",
+        "dst": "/zero/maps/train/adm/00e0c5d5e315f5d5.npy",
+        "rel_dst": "train/adm/00e0c5d5e315f5d5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e0da5890622a45.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e0da5890622a45.png",
+        "src": "/zero/maps/train/fake/00e0da5890622a45.npy",
+        "dst": "/zero/maps/train/adm/00e0da5890622a45.npy",
+        "rel_dst": "train/adm/00e0da5890622a45.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e15a2b097268e7.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e15a2b097268e7.png",
+        "src": "/zero/maps/train/fake/00e15a2b097268e7.npy",
+        "dst": "/zero/maps/train/adm/00e15a2b097268e7.npy",
+        "rel_dst": "train/adm/00e15a2b097268e7.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e40cb90c291b22.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e40cb90c291b22.png",
+        "src": "/zero/maps/train/fake/00e40cb90c291b22.npy",
+        "dst": "/zero/maps/train/adm/00e40cb90c291b22.npy",
+        "rel_dst": "train/adm/00e40cb90c291b22.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e788889f851506.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e788889f851506.png",
+        "src": "/zero/maps/train/fake/00e788889f851506.npy",
+        "dst": "/zero/maps/train/adm/00e788889f851506.npy",
+        "rel_dst": "train/adm/00e788889f851506.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e854382fa19aa9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e854382fa19aa9.png",
+        "src": "/zero/maps/train/fake/00e854382fa19aa9.npy",
+        "dst": "/zero/maps/train/adm/00e854382fa19aa9.npy",
+        "rel_dst": "train/adm/00e854382fa19aa9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00e9dc1781560534.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00e9dc1781560534.png",
+        "src": "/zero/maps/train/fake/00e9dc1781560534.npy",
+        "dst": "/zero/maps/train/adm/00e9dc1781560534.npy",
+        "rel_dst": "train/adm/00e9dc1781560534.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ea41f9a233e2ce.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ea41f9a233e2ce.png",
+        "src": "/zero/maps/train/fake/00ea41f9a233e2ce.npy",
+        "dst": "/zero/maps/train/adm/00ea41f9a233e2ce.npy",
+        "rel_dst": "train/adm/00ea41f9a233e2ce.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00eaeed372257d87.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00eaeed372257d87.png",
+        "src": "/zero/maps/train/fake/00eaeed372257d87.npy",
+        "dst": "/zero/maps/train/adm/00eaeed372257d87.npy",
+        "rel_dst": "train/adm/00eaeed372257d87.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ebfaff5a54675a.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ebfaff5a54675a.png",
+        "src": "/zero/maps/train/fake/00ebfaff5a54675a.npy",
+        "dst": "/zero/maps/train/adm/00ebfaff5a54675a.npy",
+        "rel_dst": "train/adm/00ebfaff5a54675a.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ec49ac75dad69b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ec49ac75dad69b.png",
+        "src": "/zero/maps/train/fake/00ec49ac75dad69b.npy",
+        "dst": "/zero/maps/train/adm/00ec49ac75dad69b.npy",
+        "rel_dst": "train/adm/00ec49ac75dad69b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ed65e74dd64dbd.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ed65e74dd64dbd.png",
+        "src": "/zero/maps/train/fake/00ed65e74dd64dbd.npy",
+        "dst": "/zero/maps/train/adm/00ed65e74dd64dbd.npy",
+        "rel_dst": "train/adm/00ed65e74dd64dbd.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00ef8bc30938cf46.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00ef8bc30938cf46.png",
+        "src": "/zero/maps/train/fake/00ef8bc30938cf46.npy",
+        "dst": "/zero/maps/train/adm/00ef8bc30938cf46.npy",
+        "rel_dst": "train/adm/00ef8bc30938cf46.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f0ece60739cb1d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f0ece60739cb1d.png",
+        "src": "/zero/maps/train/fake/00f0ece60739cb1d.npy",
+        "dst": "/zero/maps/train/adm/00f0ece60739cb1d.npy",
+        "rel_dst": "train/adm/00f0ece60739cb1d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f0f2b975993d47.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f0f2b975993d47.png",
+        "src": "/zero/maps/train/fake/00f0f2b975993d47.npy",
+        "dst": "/zero/maps/train/adm/00f0f2b975993d47.npy",
+        "rel_dst": "train/adm/00f0f2b975993d47.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f24cade569298b.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f24cade569298b.png",
+        "src": "/zero/maps/train/fake/00f24cade569298b.npy",
+        "dst": "/zero/maps/train/adm/00f24cade569298b.npy",
+        "rel_dst": "train/adm/00f24cade569298b.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f673741c1e53d2.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f673741c1e53d2.png",
+        "src": "/zero/maps/train/fake/00f673741c1e53d2.npy",
+        "dst": "/zero/maps/train/adm/00f673741c1e53d2.npy",
+        "rel_dst": "train/adm/00f673741c1e53d2.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f77c59fdb4bfbe.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f77c59fdb4bfbe.png",
+        "src": "/zero/maps/train/fake/00f77c59fdb4bfbe.npy",
+        "dst": "/zero/maps/train/adm/00f77c59fdb4bfbe.npy",
+        "rel_dst": "train/adm/00f77c59fdb4bfbe.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00f8a53c3f625ef4.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00f8a53c3f625ef4.png",
+        "src": "/zero/maps/train/fake/00f8a53c3f625ef4.npy",
+        "dst": "/zero/maps/train/adm/00f8a53c3f625ef4.npy",
+        "rel_dst": "train/adm/00f8a53c3f625ef4.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00fb7b6dd4fb9807.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00fb7b6dd4fb9807.png",
+        "src": "/zero/maps/train/fake/00fb7b6dd4fb9807.npy",
+        "dst": "/zero/maps/train/adm/00fb7b6dd4fb9807.npy",
+        "rel_dst": "train/adm/00fb7b6dd4fb9807.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00fcdcd7f8dac97e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00fcdcd7f8dac97e.png",
+        "src": "/zero/maps/train/fake/00fcdcd7f8dac97e.npy",
+        "dst": "/zero/maps/train/adm/00fcdcd7f8dac97e.npy",
+        "rel_dst": "train/adm/00fcdcd7f8dac97e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00fce4cb29b4325e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00fce4cb29b4325e.png",
+        "src": "/zero/maps/train/fake/00fce4cb29b4325e.npy",
+        "dst": "/zero/maps/train/adm/00fce4cb29b4325e.npy",
+        "rel_dst": "train/adm/00fce4cb29b4325e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/00fff8791cf5b464.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/00fff8791cf5b464.png",
+        "src": "/zero/maps/train/fake/00fff8791cf5b464.npy",
+        "dst": "/zero/maps/train/adm/00fff8791cf5b464.npy",
+        "rel_dst": "train/adm/00fff8791cf5b464.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0103b1eca3a58b0d.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0103b1eca3a58b0d.png",
+        "src": "/zero/maps/train/fake/0103b1eca3a58b0d.npy",
+        "dst": "/zero/maps/train/adm/0103b1eca3a58b0d.npy",
+        "rel_dst": "train/adm/0103b1eca3a58b0d.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/01051056639fba5e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/01051056639fba5e.png",
+        "src": "/zero/maps/train/fake/01051056639fba5e.npy",
+        "dst": "/zero/maps/train/adm/01051056639fba5e.npy",
+        "rel_dst": "train/adm/01051056639fba5e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0109a4a5243b8780.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0109a4a5243b8780.png",
+        "src": "/zero/maps/train/fake/0109a4a5243b8780.npy",
+        "dst": "/zero/maps/train/adm/0109a4a5243b8780.npy",
+        "rel_dst": "train/adm/0109a4a5243b8780.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/010c56efe2a18c6e.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/010c56efe2a18c6e.png",
+        "src": "/zero/maps/train/fake/010c56efe2a18c6e.npy",
+        "dst": "/zero/maps/train/adm/010c56efe2a18c6e.npy",
+        "rel_dst": "train/adm/010c56efe2a18c6e.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/010f3a4e2e1ba044.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/010f3a4e2e1ba044.png",
+        "src": "/zero/maps/train/fake/010f3a4e2e1ba044.npy",
+        "dst": "/zero/maps/train/adm/010f3a4e2e1ba044.npy",
+        "rel_dst": "train/adm/010f3a4e2e1ba044.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0112484d630f86b5.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0112484d630f86b5.png",
+        "src": "/zero/maps/train/fake/0112484d630f86b5.npy",
+        "dst": "/zero/maps/train/adm/0112484d630f86b5.npy",
+        "rel_dst": "train/adm/0112484d630f86b5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/0116332d7f5d4c1f.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/0116332d7f5d4c1f.png",
+        "src": "/zero/maps/train/fake/0116332d7f5d4c1f.npy",
+        "dst": "/zero/maps/train/adm/0116332d7f5d4c1f.npy",
+        "rel_dst": "train/adm/0116332d7f5d4c1f.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/01170d39a73e2385.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/01170d39a73e2385.png",
+        "src": "/zero/maps/train/fake/01170d39a73e2385.npy",
+        "dst": "/zero/maps/train/adm/01170d39a73e2385.npy",
+        "rel_dst": "train/adm/01170d39a73e2385.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/01176645b23391b9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/01176645b23391b9.png",
+        "src": "/zero/maps/train/fake/01176645b23391b9.npy",
+        "dst": "/zero/maps/train/adm/01176645b23391b9.npy",
+        "rel_dst": "train/adm/01176645b23391b9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/011e9a2cab9e29bc.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/011e9a2cab9e29bc.png",
+        "src": "/zero/maps/train/fake/011e9a2cab9e29bc.npy",
+        "dst": "/zero/maps/train/adm/011e9a2cab9e29bc.npy",
+        "rel_dst": "train/adm/011e9a2cab9e29bc.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/011ef285d84d09b5.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/011ef285d84d09b5.png",
+        "src": "/zero/maps/train/fake/011ef285d84d09b5.npy",
+        "dst": "/zero/maps/train/adm/011ef285d84d09b5.npy",
+        "rel_dst": "train/adm/011ef285d84d09b5.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/01281834f70f6196.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/01281834f70f6196.png",
+        "src": "/zero/maps/train/fake/01281834f70f6196.npy",
+        "dst": "/zero/maps/train/adm/01281834f70f6196.npy",
+        "rel_dst": "train/adm/01281834f70f6196.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      },
+      {
+        "rel_src": "train/fake/012a11b30a6ae5d9.npy",
+        "split": "train",
+        "source": "/zero/data/train/adm/012a11b30a6ae5d9.png",
+        "src": "/zero/maps/train/fake/012a11b30a6ae5d9.npy",
+        "dst": "/zero/maps/train/adm/012a11b30a6ae5d9.npy",
+        "rel_dst": "train/adm/012a11b30a6ae5d9.npy",
+        "generator": "adm",
+        "problem": "đích đã tồn tại — không ghi đè"
+      }
+    ],
+    "already_ok": 5500,
+    "n_moves": 0,
+    "by_generator": {}
+  }
+}

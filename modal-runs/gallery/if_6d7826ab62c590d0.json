@@ -1,0 +1,23 @@
+{
+  "name": "if_6d7826ab62c590d0",
+  "generator": "if",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "6d7826ab62c590d014591d85f75471e509ded6c78a523db93e0823aef5e04189",
+    "map": "6abe4bf76b5d4e54800c68de90d1b08a34fc71b8c035220fcc67f9f86491baf6",
+    "png_orig": "41de1404ccc298aba8cfb65e2d2d4c4b0c296bc5ae7f3e509d59b101ae48b6b1",
+    "png_diff": "222a8fb4d3aef7f977399348b5abef110052fdab33b98b8e330e70cbdb0ee414"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/if/6d7826ab62c590d0.png"
+}

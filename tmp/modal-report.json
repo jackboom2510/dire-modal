@@ -1,0 +1,237 @@
+{
+  "label": "R1+R2",
+  "what_is_ours": [
+    "DIRE map",
+    "detector",
+    "ảnh sinh"
+  ],
+  "what_is_not": [
+    "trọng số ADM (OpenAI)",
+    "LSUN-Bedroom (dữ liệu thật)",
+    "kiến trúc U-Net/ResNet"
+  ],
+  "gen": {},
+  "dire": {
+    "n": 5900,
+    "n_new": 5869,
+    "n_reused": 2431,
+    "steps": 20,
+    "steps_mixed": [
+      20
+    ],
+    "nfe_total": 234760,
+    "seconds": 25787.41
+  },
+  "maps": {
+    "total": 5900,
+    "by_split_generator": {
+      "test/adm": 500,
+      "test/dalle2": 500,
+      "test/ddpm": 500,
+      "test/diff-projectedgan": 500,
+      "test/diff-stylegan": 500,
+      "test/fake": 200,
+      "test/iddpm": 500,
+      "test/if": 500,
+      "test/real": 500,
+      "train/adm": 500,
+      "train/fake": 200,
+      "train/iddpm": 500,
+      "train/real": 500
+    }
+  },
+  "data": {
+    "root": "F:\\DifffusionForensics",
+    "layout": "diffusionforensics",
+    "dataset": "lsun_bedroom",
+    "license": "research-only",
+    "splits": [
+      "train",
+      "val",
+      "test"
+    ],
+    "generators": [
+      "real",
+      "adm",
+      "dalle2",
+      "ddpm",
+      "diff-projectedgan",
+      "diff-stylegan",
+      "iddpm",
+      "if",
+      "ldm",
+      "midjourney",
+      "pndm",
+      "projectedgan",
+      "sdv2",
+      "stylegan",
+      "vqdiffusion"
+    ],
+    "n_real": 42000,
+    "n_fake": 170492,
+    "seed": 3407,
+    "fake_source": "author",
+    "label": "R1+R2",
+    "comparable_to_paper": true,
+    "manifest_sha256": "04ff262bd9be6304d7a852e8f11350c08cf7ea77955e0c943c008886b311d644",
+    "warnings": [
+      "images\\test\\lsun_bedroom\\real/ là THƯ MỤC ảnh (1000 file) nằm cạnh tar — bị BỎ QUA, chỉ tar được đọc. Nếu là bản giải nén dở, xoá hoặc chuyển đi để không nhầm số ảnh.",
+      "celebahq: có train nhưng không có test — không chấm được",
+      "imagenet/adm: chỉ có ở ['test', 'train'] — bảng cross-model sẽ không đầy đủ",
+      "imagenet/sdv1: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/dalle2: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/ddpm: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/diff-projectedgan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/diff-stylegan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/if: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/ldm: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/midjourney: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/projectedgan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/sdv2: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/vqdiffusion: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "dire/ (DIRE map của tác giả) bị BỎ QUA. Đường from-scratch không được đọc nó (G0). Nếu muốn chấm lại R0, thêm --allow-published.",
+      "recons/ (reconstruction của tác giả) bị bỏ qua — chỉ dùng cho việc đối chiếu số học DDIM, không dùng để train",
+      "[dự phòng] 50 ảnh không dùng được (xem stats['rejects'])"
+    ],
+    "created": "2026-11-17T03:17:09Z",
+    "out_root": "data\\dire-zero-norm",
+    "out_reason": "ổ chính đủ chỗ (còn 33.7 GB, cần ≤ 26.1 GB)",
+    "note": "nếu fake_source='author', ảnh giả KHÔNG phải của mình ⇒ nhãn tối đa là R1+R2; không được nói R3"
+  },
+  "train": {
+    "best_epoch": 4,
+    "threshold_from_val": 0.5,
+    "latest": "gen-if"
+  },
+  "train_by_generator": {
+    "gen-adm": {
+      "acc": 0.828,
+      "acc_ci95": [
+        0.8,
+        0.848
+      ],
+      "ap": 0.9026923821841895,
+      "auc": 0.890626,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 7
+    },
+    "gen-dalle2": {
+      "acc": 0.5,
+      "acc_ci95": [
+        0.471,
+        0.53
+      ],
+      "ap": 0.437686359487805,
+      "auc": 0.431392,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 4
+    },
+    "gen-ddpm": {
+      "acc": 0.5,
+      "acc_ci95": [
+        0.471,
+        0.53
+      ],
+      "ap": 0.34623579724755,
+      "auc": 0.20608,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 4
+    },
+    "gen-diff-projectedgan": {
+      "acc": 0.5,
+      "acc_ci95": [
+        0.471,
+        0.53
+      ],
+      "ap": 0.4713425579099139,
+      "auc": 0.452088,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 4
+    },
+    "gen-diff-stylegan": {
+      "acc": 0.5,
+      "acc_ci95": [
+        0.471,
+        0.53
+      ],
+      "ap": 0.4346204581488468,
+      "auc": 0.400948,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 4
+    },
+    "gen-fake": {
+      "acc": 0.8071428571428572,
+      "acc_ci95": [
+        0.7914285714285715,
+        0.8485714285714285
+      ],
+      "ap": 0.8054675409619221,
+      "auc": 0.87986,
+      "n": 700,
+      "n_real": 500,
+      "n_fake": 200,
+      "best_epoch": 5
+    },
+    "gen-iddpm": {
+      "acc": 0.918,
+      "acc_ci95": [
+        0.905,
+        0.937
+      ],
+      "ap": 0.9768227383357456,
+      "auc": 0.97762,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 17
+    },
+    "gen-if": {
+      "acc": 0.5,
+      "acc_ci95": [
+        0.471,
+        0.53
+      ],
+      "ap": 0.374107268517831,
+      "auc": 0.29788,
+      "n": 1000,
+      "n_real": 500,
+      "n_fake": 500,
+      "best_epoch": 4
+    }
+  },
+  "eval_by_generator": {
+    "gen-adm": {
+      "acc": 0.781,
+      "ap": 0.9112802242056176,
+      "auc": 0.890242,
+      "acc_ci95": [
+        0.47,
+        0.529
+      ],
+      "n": 1000,
+      "gate": "passed"
+    }
+  },
+  "bench": {
+    "sec_per_step": 0.0917,
+    "source": "modal bench",
+    "gpu": "NVIDIA A10",
+    "batch": 1,
+    "note": "số ĐO tại chỗ, không phải giả định; mọi ước lượng tiền dùng số này"
+  },
+  "warnings": [
+    "ACC trên ~200 ảnh test có CI ±5 điểm — không dùng để so với Table 2",
+    "detector khởi tạo ngẫu nhiên, không ImageNet như bài báo",
+    "một checkpoint ADM duy nhất ⇒ chỉ đo in-distribution (ADM), không đo cross-model"
+  ]
+}

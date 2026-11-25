@@ -1,0 +1,23 @@
+{
+  "name": "dalle2_7834617d32aacfb2",
+  "generator": "dalle2",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "7834617d32aacfb225ab8863ca23281767d629e1aa8087d9db08f184c667afd8",
+    "map": "68f7417cb2c12efed254075dc784436b82fcd00e7746afb503229f7064bc1be9",
+    "png_orig": "18452630f3f41a3f077c1a39eba26b2181ce0ea4820bc2980b3927bc0ef400ea",
+    "png_diff": "15a39d9c75dc8c7451c5e155d04ab344ac74e45edd30ca21806cd3d134c4a346"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/dalle2/7834617d32aacfb2.png"
+}

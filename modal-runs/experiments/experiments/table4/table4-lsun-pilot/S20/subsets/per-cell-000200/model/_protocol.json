@@ -1,0 +1,14 @@
+{
+  "in_channels": 3,
+  "weights_sha256": "11ad3fa62ca79e40addfd354a8ec4b7c75143b3038b8d2a807fbc68deab379ca",
+  "epochs": 400,
+  "batch": 32,
+  "lr": 0.0001,
+  "crop": 224,
+  "seed": 3407,
+  "details": {
+    "table": 4,
+    "steps": 20,
+    "nfe_per_image": 40
+  }
+}

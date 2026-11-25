@@ -1,0 +1,34 @@
+{
+  "tag": "gen-adm",
+  "split": "test",
+  "generators_used": [
+    "adm"
+  ],
+  "threshold_logit": 0.0011676459107547998,
+  "threshold_prob": 0.500292,
+  "threshold_source": "val",
+  "n_val": 150,
+  "gate": "passed",
+  "metrics": {
+    "n": 1000,
+    "n_real": 500,
+    "n_fake": 500,
+    "threshold": 0.5002918839454651,
+    "acc": 0.781,
+    "acc_at_0.5": 0.5,
+    "ap": 0.9112802242056176,
+    "auc": 0.890242,
+    "confusion": {
+      "tp": 444,
+      "fp": 163,
+      "tn": 337,
+      "fn": 56
+    },
+    "acc_ci95": [
+      0.47,
+      0.529
+    ]
+  },
+  "crop": 224,
+  "honesty": "chấm trên map **tự tính** (R1) bằng detector train from scratch; không so được giá trị tuyệt đối với Table 2 của bài báo (khác init, khác số ảnh train, khác generator)."
+}

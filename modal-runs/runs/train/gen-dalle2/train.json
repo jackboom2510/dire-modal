@@ -1,0 +1,141 @@
+{
+  "label": "R1+R2",
+  "init": "scratch",
+  "epochs_run": 16,
+  "best_epoch": 11,
+  "best_val_ap": 0.99624,
+  "threshold_from_val": 0.003916537505574524,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.97222,
+  "test": {
+    "n": 300,
+    "n_real": 197,
+    "n_fake": 103,
+    "threshold": 0.003916537505574524,
+    "acc": 0.97,
+    "acc_at_0.5": 0.9366666666666666,
+    "ap": 0.9883156106670734,
+    "auc": 0.9910305061357252,
+    "confusion": {
+      "tp": 98,
+      "fp": 4,
+      "tn": 193,
+      "fn": 5
+    },
+    "acc_ci95": [
+      0.95,
+      0.9866666666666667
+    ],
+    "acc_ci95_threshold": 0.003916537505574524,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 1020,
+    "n_val": 180,
+    "n_test": 300,
+    "seed": 3407,
+    "mode": "hash",
+    "val_single_class": false
+  },
+  "split_mode": "hash",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.7042,
+      "val_ap": 0.6685
+    },
+    {
+      "epoch": 2,
+      "loss": 0.6934,
+      "val_ap": 0.74973
+    },
+    {
+      "epoch": 3,
+      "loss": 0.67666,
+      "val_ap": 0.7854
+    },
+    {
+      "epoch": 4,
+      "loss": 0.63164,
+      "val_ap": 0.88485
+    },
+    {
+      "epoch": 5,
+      "loss": 0.63574,
+      "val_ap": 0.93556
+    },
+    {
+      "epoch": 6,
+      "loss": 0.6141,
+      "val_ap": 0.93885
+    },
+    {
+      "epoch": 7,
+      "loss": 0.61301,
+      "val_ap": 0.96875
+    },
+    {
+      "epoch": 8,
+      "loss": 0.5983,
+      "val_ap": 0.97441
+    },
+    {
+      "epoch": 9,
+      "loss": 0.6023,
+      "val_ap": 0.97939
+    },
+    {
+      "epoch": 10,
+      "loss": 0.59598,
+      "val_ap": 0.99433
+    },
+    {
+      "epoch": 11,
+      "loss": 0.596,
+      "val_ap": 0.99624
+    },
+    {
+      "epoch": 12,
+      "loss": 0.5998,
+      "val_ap": 0.97338
+    },
+    {
+      "epoch": 13,
+      "loss": 0.59736,
+      "val_ap": 0.99167
+    },
+    {
+      "epoch": 14,
+      "loss": 0.59309,
+      "val_ap": 0.99443
+    },
+    {
+      "epoch": 15,
+      "loss": 0.59141,
+      "val_ap": 0.99441
+    },
+    {
+      "epoch": 16,
+      "loss": 0.58798,
+      "val_ap": 0.99493
+    }
+  ],
+  "seconds": 85.05,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator). Tập train/val/test CHIA LẠI THEO HASH vì dữ liệu không có split train cho generator này — càng không so được với Table 2.",
+  "generators_used": [
+    "dalle2"
+  ],
+  "generator_filter": "dalle2",
+  "n_real": 1000,
+  "n_fake": 500,
+  "imbalance_ratio": 2.0,
+  "note_scope": "một generator (dalle2) ⇒ so được với đúng một dòng của Table 2"
+}

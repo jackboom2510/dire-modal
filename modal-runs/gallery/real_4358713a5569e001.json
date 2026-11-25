@@ -1,0 +1,23 @@
+{
+  "name": "real_4358713a5569e001",
+  "generator": "real",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "4358713a5569e00193e4355ed550e9be61662f4d399f3f17ed83be760dd19c84",
+    "map": "db8bcb03a032f5ab7f2f81c37c2f08a7a5514c4b686b8de5523d6ee14178f9f4",
+    "png_orig": "64de9f8e972158dae1726d4023d1e52fe19385bb59fad28040bc56ce5101fafe",
+    "png_diff": "d4773c5570fc5e0ad9cb6c95e706570a2a827696f47c3e960ecae4434fb0afd2"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/real/4358713a5569e001.png"
+}

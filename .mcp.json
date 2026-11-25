@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "mcp-modal": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-modal@latest"
+      ],
+      "env": {}
+    }
+  }
+}

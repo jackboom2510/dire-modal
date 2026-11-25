@@ -1,0 +1,105 @@
+{
+  "label": "R1+R2+R3",
+  "init": "scratch",
+  "epochs_run": 10,
+  "best_epoch": 5,
+  "best_val_ap": 0.83573,
+  "threshold_from_val": 0.004046939546242356,
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.82857,
+  "test": {
+    "n": 700,
+    "n_real": 500,
+    "n_fake": 200,
+    "threshold": 0.004046939546242356,
+    "acc": 0.8071428571428572,
+    "acc_at_0.5": 0.82,
+    "ap": 0.8054675409619221,
+    "auc": 0.87986,
+    "confusion": {
+      "tp": 152,
+      "fp": 87,
+      "tn": 413,
+      "fn": 48
+    },
+    "acc_ci95": [
+      0.7914285714285715,
+      0.8485714285714285
+    ]
+  },
+  "split": {
+    "n_train": 595,
+    "n_val": 105,
+    "n_test": 700,
+    "seed": 3407
+  },
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.70851,
+      "val_ap": 0.4545
+    },
+    {
+      "epoch": 2,
+      "loss": 0.68666,
+      "val_ap": 0.53184
+    },
+    {
+      "epoch": 3,
+      "loss": 0.67442,
+      "val_ap": 0.57951
+    },
+    {
+      "epoch": 4,
+      "loss": 0.66376,
+      "val_ap": 0.70835
+    },
+    {
+      "epoch": 5,
+      "loss": 0.65613,
+      "val_ap": 0.83573
+    },
+    {
+      "epoch": 6,
+      "loss": 0.65533,
+      "val_ap": 0.77391
+    },
+    {
+      "epoch": 7,
+      "loss": 0.65163,
+      "val_ap": 0.80558
+    },
+    {
+      "epoch": 8,
+      "loss": 0.65133,
+      "val_ap": 0.80731
+    },
+    {
+      "epoch": 9,
+      "loss": 0.65023,
+      "val_ap": 0.81021
+    },
+    {
+      "epoch": 10,
+      "loss": 0.65204,
+      "val_ap": 0.81797
+    }
+  ],
+  "seconds": 33.49,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator).",
+  "generators_used": [
+    "fake"
+  ],
+  "generator_filter": "fake",
+  "n_real": 1000,
+  "n_fake": 400,
+  "imbalance_ratio": 2.5,
+  "note_scope": "một generator (fake) ⇒ so được với đúng một dòng của Table 2"
+}

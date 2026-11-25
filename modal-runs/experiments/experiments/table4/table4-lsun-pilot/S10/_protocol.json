@@ -1,0 +1,29 @@
+{
+  "steps": 10,
+  "adm_ckpt_sha256": "a37c32fffd316cd494cf3f35b339936debdc1576dad13fe57c42399a5dbc78b1",
+  "imagenet_weights_sha256": "11ad3fa62ca79e40addfd354a8ec4b7c75143b3038b8d2a807fbc68deab379ca",
+  "manifest_sha256": "bb3e4f4ce76c4bcb4ae69e21845f767b5b021a5d060273c6f3ef93b9cb184ecf",
+  "train_generators": [
+    "adm"
+  ],
+  "test_generators": [
+    "adm",
+    "ddpm",
+    "iddpm",
+    "pndm",
+    "sdv2"
+  ],
+  "test_generator_scope_note": "LSUN-Bedroom test data in this run uses sdv2; sdv1 is not present in that dataset tree.",
+  "epochs": 400,
+  "batch": 32,
+  "lr": 0.0001,
+  "crop": 224,
+  "seed": 3407,
+  "init": "ImageNet",
+  "input_source": "materialized_experiment_inputs",
+  "subset": {
+    "subset_id": "lsun-pilot",
+    "seed": 3407,
+    "algorithm": "sha256-ranked-cell-v1"
+  }
+}

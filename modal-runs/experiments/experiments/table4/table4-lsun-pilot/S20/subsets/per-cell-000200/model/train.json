@@ -1,0 +1,134 @@
+{
+  "label": "R1+R2",
+  "init": "imagenet",
+  "epochs_run": 15,
+  "best_epoch": 10,
+  "best_val_ap": 0.99477,
+  "threshold_from_val": 0.3624289035797119,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.9675,
+  "test": {
+    "n": 400,
+    "n_real": 200,
+    "n_fake": 200,
+    "threshold": 0.3624289035797119,
+    "acc": 0.955,
+    "acc_at_0.5": 0.96,
+    "ap": 0.9956845625949571,
+    "auc": 0.99565,
+    "confusion": {
+      "tp": 198,
+      "fp": 16,
+      "tn": 184,
+      "fn": 2
+    },
+    "acc_ci95": [
+      0.9325,
+      0.975
+    ],
+    "acc_ci95_threshold": 0.3624289035797119,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 400,
+    "n_val": 400,
+    "n_test": 400,
+    "seed": 3407,
+    "mode": "author",
+    "val_single_class": false
+  },
+  "split_mode": "author",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.71355,
+      "val_ap": 0.81883
+    },
+    {
+      "epoch": 2,
+      "loss": 0.66776,
+      "val_ap": 0.94718
+    },
+    {
+      "epoch": 3,
+      "loss": 0.61936,
+      "val_ap": 0.98179
+    },
+    {
+      "epoch": 4,
+      "loss": 0.59299,
+      "val_ap": 0.99118
+    },
+    {
+      "epoch": 5,
+      "loss": 0.58012,
+      "val_ap": 0.99285
+    },
+    {
+      "epoch": 6,
+      "loss": 0.55781,
+      "val_ap": 0.99364
+    },
+    {
+      "epoch": 7,
+      "loss": 0.53489,
+      "val_ap": 0.99048
+    },
+    {
+      "epoch": 8,
+      "loss": 0.52566,
+      "val_ap": 0.99391
+    },
+    {
+      "epoch": 9,
+      "loss": 0.52077,
+      "val_ap": 0.99455
+    },
+    {
+      "epoch": 10,
+      "loss": 0.5211,
+      "val_ap": 0.99477
+    },
+    {
+      "epoch": 11,
+      "loss": 0.5195,
+      "val_ap": 0.99393
+    },
+    {
+      "epoch": 12,
+      "loss": 0.51894,
+      "val_ap": 0.99411
+    },
+    {
+      "epoch": 13,
+      "loss": 0.52027,
+      "val_ap": 0.9944
+    },
+    {
+      "epoch": 14,
+      "loss": 0.51952,
+      "val_ap": 0.99375
+    },
+    {
+      "epoch": 15,
+      "loss": 0.52,
+      "val_ap": 0.99347
+    }
+  ],
+  "seconds": 44.07,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator).",
+  "paper_protocol": true,
+  "init_weights": "/zero/ckpt/resnet50_imagenet.pth",
+  "init_channels": 3,
+  "table": 4,
+  "steps": 20,
+  "nfe_per_image": 40
+}

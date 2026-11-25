@@ -1,0 +1,158 @@
+{
+  "label": "R1+R2",
+  "init": "scratch",
+  "epochs_run": 19,
+  "best_epoch": 14,
+  "best_val_ap": 0.98747,
+  "threshold_from_val": 0.14987455308437347,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.9565,
+  "test": {
+    "n": 2000,
+    "n_real": 1000,
+    "n_fake": 1000,
+    "threshold": 0.14987455308437347,
+    "acc": 0.8895,
+    "acc_at_0.5": 0.881,
+    "ap": 0.960665484283119,
+    "auc": 0.949154,
+    "confusion": {
+      "tp": 824,
+      "fp": 45,
+      "tn": 955,
+      "fn": 176
+    },
+    "acc_ci95": [
+      0.875,
+      0.903
+    ],
+    "acc_ci95_threshold": 0.14987455308437347,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 2000,
+    "n_val": 2000,
+    "n_test": 2000,
+    "seed": 3407,
+    "mode": "author",
+    "val_single_class": false
+  },
+  "split_mode": "author",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.66308,
+      "val_ap": 0.77732
+    },
+    {
+      "epoch": 2,
+      "loss": 0.6293,
+      "val_ap": 0.82024
+    },
+    {
+      "epoch": 3,
+      "loss": 0.5901,
+      "val_ap": 0.89914
+    },
+    {
+      "epoch": 4,
+      "loss": 0.55758,
+      "val_ap": 0.9451
+    },
+    {
+      "epoch": 5,
+      "loss": 0.54575,
+      "val_ap": 0.80828
+    },
+    {
+      "epoch": 6,
+      "loss": 0.54138,
+      "val_ap": 0.98014
+    },
+    {
+      "epoch": 7,
+      "loss": 0.53498,
+      "val_ap": 0.98449
+    },
+    {
+      "epoch": 8,
+      "loss": 0.53143,
+      "val_ap": 0.98558
+    },
+    {
+      "epoch": 9,
+      "loss": 0.53103,
+      "val_ap": 0.98644
+    },
+    {
+      "epoch": 10,
+      "loss": 0.52775,
+      "val_ap": 0.98641
+    },
+    {
+      "epoch": 11,
+      "loss": 0.52752,
+      "val_ap": 0.98722
+    },
+    {
+      "epoch": 12,
+      "loss": 0.52512,
+      "val_ap": 0.98723
+    },
+    {
+      "epoch": 13,
+      "loss": 0.52422,
+      "val_ap": 0.98717
+    },
+    {
+      "epoch": 14,
+      "loss": 0.52571,
+      "val_ap": 0.98747
+    },
+    {
+      "epoch": 15,
+      "loss": 0.52611,
+      "val_ap": 0.98729
+    },
+    {
+      "epoch": 16,
+      "loss": 0.52783,
+      "val_ap": 0.98735
+    },
+    {
+      "epoch": 17,
+      "loss": 0.52574,
+      "val_ap": 0.98732
+    },
+    {
+      "epoch": 18,
+      "loss": 0.52796,
+      "val_ap": 0.98715
+    },
+    {
+      "epoch": 19,
+      "loss": 0.52897,
+      "val_ap": 0.98713
+    }
+  ],
+  "seconds": 2036.59,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator).",
+  "run_id": "rebuild-2026-10-14",
+  "maps_root": "/zero/rebuild/maps/rebuild-2026-10-14",
+  "generators_used": [
+    "pndm"
+  ],
+  "generator_filter": "pndm",
+  "n_real": 3000,
+  "n_fake": 3000,
+  "imbalance_ratio": 1.0,
+  "note_scope": "một generator (pndm) ⇒ so được với đúng một dòng của Table 2"
+}

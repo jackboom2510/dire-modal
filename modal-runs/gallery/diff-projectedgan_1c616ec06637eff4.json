@@ -1,0 +1,23 @@
+{
+  "name": "diff-projectedgan_1c616ec06637eff4",
+  "generator": "diff-projectedgan",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "1c616ec06637eff4ec5b69cec42d54b9e36433dc0f831c81c8bb2adec33aaa11",
+    "map": "42a01ab9d8fc9a96522ebaa45304eccda45000826816fbf2cf53cb949a4991b8",
+    "png_orig": "3b1999890a85805aaef5b4cce290c86f51b922960ebe94884240affac589c74b",
+    "png_diff": "2c55b3d19f6d70aa91465bb54a308b6a2a60fc8b084434ce85b42a3a523fe436"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/diff-projectedgan/1c616ec06637eff4.png"
+}

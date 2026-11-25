@@ -1,0 +1,23 @@
+{
+  "name": "diff-stylegan_1277194a84a2afa8",
+  "generator": "diff-stylegan",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "1277194a84a2afa8e262639b8d7c0384a9385f57e77fa3c1c06daf804a80655c",
+    "map": "8a75726c41dd08d8b9a77ba7cc00513cf1e31e4e07f8d3649a07d9692639edbd",
+    "png_orig": "f968de7426aba3e6b8aa2e0c6c02f8e3f61168072b175efce99d86198bd105e4",
+    "png_diff": "7c9e10194d9b39f3e64745f3c5b27aa5836be15bcc67a978d44870c5ef809993"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/diff-stylegan/1277194a84a2afa8.png"
+}

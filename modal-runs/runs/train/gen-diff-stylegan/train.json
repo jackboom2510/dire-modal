@@ -1,0 +1,91 @@
+{
+  "label": "R1+R2",
+  "init": "scratch",
+  "epochs_run": 6,
+  "best_epoch": 1,
+  "best_val_ap": 0.49837,
+  "threshold_from_val": 0.0751144178211689,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.7,
+  "test": {
+    "n": 300,
+    "n_real": 197,
+    "n_fake": 103,
+    "threshold": 0.0751144178211689,
+    "acc": 0.6533333333333333,
+    "acc_at_0.5": 0.6566666666666666,
+    "ap": 0.4147002267560707,
+    "auc": 0.5976541323739589,
+    "confusion": {
+      "tp": 25,
+      "fp": 26,
+      "tn": 171,
+      "fn": 78
+    },
+    "acc_ci95": [
+      0.6,
+      0.7033333333333334
+    ],
+    "acc_ci95_threshold": 0.0751144178211689,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 1020,
+    "n_val": 180,
+    "n_test": 300,
+    "seed": 3407,
+    "mode": "hash",
+    "val_single_class": false
+  },
+  "split_mode": "hash",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.70369,
+      "val_ap": 0.49837
+    },
+    {
+      "epoch": 2,
+      "loss": 0.69359,
+      "val_ap": 0.47019
+    },
+    {
+      "epoch": 3,
+      "loss": 0.69343,
+      "val_ap": 0.47162
+    },
+    {
+      "epoch": 4,
+      "loss": 0.69341,
+      "val_ap": 0.47117
+    },
+    {
+      "epoch": 5,
+      "loss": 0.69343,
+      "val_ap": 0.47327
+    },
+    {
+      "epoch": 6,
+      "loss": 0.69342,
+      "val_ap": 0.47606
+    }
+  ],
+  "seconds": 33.01,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator). Tập train/val/test CHIA LẠI THEO HASH vì dữ liệu không có split train cho generator này — càng không so được với Table 2.",
+  "generators_used": [
+    "diff-stylegan"
+  ],
+  "generator_filter": "diff-stylegan",
+  "n_real": 1000,
+  "n_fake": 500,
+  "imbalance_ratio": 2.0,
+  "note_scope": "một generator (diff-stylegan) ⇒ so được với đúng một dòng của Table 2"
+}

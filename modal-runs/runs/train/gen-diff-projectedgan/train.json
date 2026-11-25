@@ -1,0 +1,131 @@
+{
+  "label": "R1+R2",
+  "init": "scratch",
+  "epochs_run": 14,
+  "best_epoch": 9,
+  "best_val_ap": 0.55849,
+  "threshold_from_val": 0.0017368722474202514,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.65,
+  "test": {
+    "n": 300,
+    "n_real": 207,
+    "n_fake": 93,
+    "threshold": 0.0017368722474202514,
+    "acc": 0.5433333333333333,
+    "acc_at_0.5": 0.69,
+    "ap": 0.34185842844066155,
+    "auc": 0.5069866500441536,
+    "confusion": {
+      "tp": 31,
+      "fp": 75,
+      "tn": 132,
+      "fn": 62
+    },
+    "acc_ci95": [
+      0.4866666666666667,
+      0.6
+    ],
+    "acc_ci95_threshold": 0.0017368722474202514,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 1020,
+    "n_val": 180,
+    "n_test": 300,
+    "seed": 3407,
+    "mode": "hash",
+    "val_single_class": false
+  },
+  "split_mode": "hash",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.7048,
+      "val_ap": 0.35947
+    },
+    {
+      "epoch": 2,
+      "loss": 0.69371,
+      "val_ap": 0.51187
+    },
+    {
+      "epoch": 3,
+      "loss": 0.69346,
+      "val_ap": 0.48972
+    },
+    {
+      "epoch": 4,
+      "loss": 0.69341,
+      "val_ap": 0.51736
+    },
+    {
+      "epoch": 5,
+      "loss": 0.69338,
+      "val_ap": 0.51768
+    },
+    {
+      "epoch": 6,
+      "loss": 0.69338,
+      "val_ap": 0.50984
+    },
+    {
+      "epoch": 7,
+      "loss": 0.69337,
+      "val_ap": 0.52366
+    },
+    {
+      "epoch": 8,
+      "loss": 0.69338,
+      "val_ap": 0.52705
+    },
+    {
+      "epoch": 9,
+      "loss": 0.69337,
+      "val_ap": 0.55849
+    },
+    {
+      "epoch": 10,
+      "loss": 0.69338,
+      "val_ap": 0.54652
+    },
+    {
+      "epoch": 11,
+      "loss": 0.69338,
+      "val_ap": 0.53524
+    },
+    {
+      "epoch": 12,
+      "loss": 0.69338,
+      "val_ap": 0.52735
+    },
+    {
+      "epoch": 13,
+      "loss": 0.69338,
+      "val_ap": 0.49944
+    },
+    {
+      "epoch": 14,
+      "loss": 0.69337,
+      "val_ap": 0.54109
+    }
+  ],
+  "seconds": 73.51,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator). Tập train/val/test CHIA LẠI THEO HASH vì dữ liệu không có split train cho generator này — càng không so được với Table 2.",
+  "generators_used": [
+    "diff-projectedgan"
+  ],
+  "generator_filter": "diff-projectedgan",
+  "n_real": 1000,
+  "n_fake": 500,
+  "imbalance_ratio": 2.0,
+  "note_scope": "một generator (diff-projectedgan) ⇒ so được với đúng một dòng của Table 2"
+}

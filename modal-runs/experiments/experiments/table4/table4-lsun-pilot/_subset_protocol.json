@@ -1,0 +1,7 @@
+{
+  "subset_id": "lsun-pilot",
+  "seed": 3407,
+  "algorithm": "sha256-ranked-cell-v1",
+  "base_manifest_sha256": "bb3e4f4ce76c4bcb4ae69e21845f767b5b021a5d060273c6f3ef93b9cb184ecf",
+  "nested_stages": "per-cell cap may increase; selection seed/algorithm stay fixed"
+}

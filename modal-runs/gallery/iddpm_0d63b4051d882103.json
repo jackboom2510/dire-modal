@@ -1,0 +1,23 @@
+{
+  "name": "iddpm_0d63b4051d882103",
+  "generator": "iddpm",
+  "split": "test",
+  "label": "R1+R2",
+  "map_source": "test/*.npy · ::dire --steps 20",
+  "sha256": {
+    "orig": "0d63b4051d8821038c8c073f08d477d8679c3520627d1fde4418ffa6458c9b33",
+    "map": "ffc89bec8f42a3b763045322b50dab7f23b77bb2dc3e9d402f3ea16703b3f876",
+    "png_orig": "0979a54c6a6a57480316d247071d8541728574076cd5d78998d261c361565319",
+    "png_diff": "4b247e642221d1901e1fad1da5fc349af20944792b2d314db88259a665289146"
+  },
+  "S": 20,
+  "display": {
+    "png_is_display_only": true,
+    "scale": "[0, 2.0] → uint8, gamma 0.5",
+    "channels": 3,
+    "channel_order": "RGB",
+    "note": "PNG giữ nguyên từng kênh của |x − x̂|; không trộn thành ảnh xám",
+    "authoritative": ".npy"
+  },
+  "source_image": "/zero/data/test/iddpm/0d63b4051d882103.png"
+}

@@ -1,0 +1,7 @@
+{
+  "sec_per_step": 0.0866,
+  "source": "modal bench",
+  "gpu": "NVIDIA A10",
+  "batch": 1,
+  "note": "số ĐO tại chỗ, không phải giả định; mọi ước lượng tiền dùng số này"
+}

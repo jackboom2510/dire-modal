@@ -1,0 +1,256 @@
+{
+  "run_id": "rebuild-2026-10-14",
+  "maps_root": "/zero/rebuild/maps/rebuild-2026-10-14",
+  "run_root": "/zero/runs/rebuild/rebuild-2026-10-14",
+  "label": "R1+R2",
+  "what_is_ours": [
+    "DIRE map",
+    "detector",
+    "ảnh sinh"
+  ],
+  "what_is_not": [
+    "trọng số ADM (OpenAI)",
+    "LSUN-Bedroom (dữ liệu thật)",
+    "kiến trúc U-Net/ResNet"
+  ],
+  "gen": {},
+  "dire": {
+    "n": 23868,
+    "steps": 20,
+    "steps_mixed": [
+      20
+    ],
+    "nfe_total": 652480,
+    "seconds": 72733.1,
+    "n_distinct_maps": 23868,
+    "n_new_cumulative": 16312,
+    "n_reused_cumulative": 22556,
+    "n_runs": 6,
+    "n_note": "n_distinct_maps = số `.npy` phân biệt; n_new/n_reused cộng dồn mọi lượt chạy nên tổng của chúng lớn hơn n_distinct_maps là bình thường"
+  },
+  "maps": {
+    "total": 23868,
+    "by_split_generator": {
+      "test/adm": 1000,
+      "test/dalle2": 500,
+      "test/ddpm": 768,
+      "test/diff-projectedgan": 1000,
+      "test/diff-stylegan": 1000,
+      "test/iddpm": 1000,
+      "test/if": 1000,
+      "test/ldm": 1000,
+      "test/midjourney": 100,
+      "test/ours_adm": 100,
+      "test/pndm": 1000,
+      "test/projectedgan": 1000,
+      "test/real": 1000,
+      "test/sdv2": 1000,
+      "test/stylegan": 1000,
+      "test/vqdiffusion": 1000,
+      "train/adm": 1000,
+      "train/iddpm": 1000,
+      "train/ours_adm": 400,
+      "train/pndm": 1000,
+      "train/real": 1000,
+      "train/stylegan": 1000,
+      "val/adm": 1000,
+      "val/iddpm": 1000,
+      "val/pndm": 1000,
+      "val/real": 1000,
+      "val/stylegan": 1000
+    }
+  },
+  "data": {
+    "root": "F:\\DifffusionForensics",
+    "layout": "diffusionforensics",
+    "dataset": "lsun_bedroom",
+    "license": "research-only",
+    "splits": [
+      "train",
+      "val",
+      "test"
+    ],
+    "generators": [
+      "real",
+      "adm",
+      "dalle2",
+      "ddpm",
+      "diff-projectedgan",
+      "diff-stylegan",
+      "iddpm",
+      "if",
+      "ldm",
+      "midjourney",
+      "pndm",
+      "projectedgan",
+      "sdv2",
+      "stylegan",
+      "vqdiffusion"
+    ],
+    "n_real": 42000,
+    "n_fake": 170492,
+    "seed": 3407,
+    "fake_source": "author",
+    "label": "R1+R2",
+    "comparable_to_paper": true,
+    "manifest_sha256": "04ff262bd9be6304d7a852e8f11350c08cf7ea77955e0c943c008886b311d644",
+    "warnings": [
+      "images\\test\\lsun_bedroom\\real/ là THƯ MỤC ảnh (1000 file) nằm cạnh tar — bị BỎ QUA, chỉ tar được đọc. Nếu là bản giải nén dở, xoá hoặc chuyển đi để không nhầm số ảnh.",
+      "celebahq: có train nhưng không có test — không chấm được",
+      "imagenet/adm: chỉ có ở ['test', 'train'] — bảng cross-model sẽ không đầy đủ",
+      "imagenet/sdv1: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/dalle2: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/ddpm: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/diff-projectedgan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/diff-stylegan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/if: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/ldm: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/midjourney: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/projectedgan: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/sdv2: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "lsun_bedroom/vqdiffusion: chỉ có ở ['test'] — bảng cross-model sẽ không đầy đủ",
+      "dire/ (DIRE map của tác giả) bị BỎ QUA. Đường from-scratch không được đọc nó (G0). Nếu muốn chấm lại R0, thêm --allow-published.",
+      "recons/ (reconstruction của tác giả) bị bỏ qua — chỉ dùng cho việc đối chiếu số học DDIM, không dùng để train",
+      "[dự phòng] 50 ảnh không dùng được (xem stats['rejects'])"
+    ],
+    "created": "2026-11-17T03:17:09Z",
+    "out_root": "data\\dire-zero-norm",
+    "out_reason": "ổ chính đủ chỗ (còn 33.7 GB, cần ≤ 26.1 GB)",
+    "note": "nếu fake_source='author', ảnh giả KHÔNG phải của mình ⇒ nhãn tối đa là R1+R2; không được nói R3"
+  },
+  "train": {
+    "best_epoch": 19,
+    "threshold_from_val": 0.014693984761834145,
+    "latest": "gen-stylegan"
+  },
+  "train_by_generator": {
+    "gen-adm": {
+      "acc": 0.8955,
+      "acc_at_0.5": 0.8905,
+      "acc_ci95": [
+        0.8805,
+        0.908
+      ],
+      "ap": 0.9554435757133746,
+      "auc": 0.936817,
+      "n": 2000,
+      "n_real": 1000,
+      "n_fake": 1000,
+      "best_epoch": 11
+    },
+    "gen-iddpm": {
+      "acc": 0.937,
+      "acc_at_0.5": 0.937,
+      "acc_ci95": [
+        0.926,
+        0.947
+      ],
+      "ap": 0.9853502392812898,
+      "auc": 0.985434,
+      "n": 2000,
+      "n_real": 1000,
+      "n_fake": 1000,
+      "best_epoch": 11
+    },
+    "gen-pndm": {
+      "acc": 0.8895,
+      "acc_at_0.5": 0.881,
+      "acc_ci95": [
+        0.875,
+        0.903
+      ],
+      "ap": 0.960665484283119,
+      "auc": 0.949154,
+      "n": 2000,
+      "n_real": 1000,
+      "n_fake": 1000,
+      "best_epoch": 14
+    },
+    "gen-stylegan": {
+      "acc": 0.7155,
+      "acc_at_0.5": 0.6915,
+      "acc_ci95": [
+        0.695,
+        0.7355
+      ],
+      "ap": 0.8018874378808147,
+      "auc": 0.7906945,
+      "n": 2000,
+      "n_real": 1000,
+      "n_fake": 1000,
+      "best_epoch": 19
+    }
+  },
+  "skipped": {},
+  "eval_by_generator": {
+    "gen-adm": {
+      "acc": 0.8955,
+      "ap": 0.9559935181045017,
+      "auc": 0.9393055,
+      "acc_ci95": [
+        0.8805,
+        0.908
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "f19d5b595efdc91a8b207b1a7854c0bc203f4aeeca6e0471616c3a950aff2b96",
+      "split": "test",
+      "threshold": 0.527114
+    },
+    "gen-iddpm": {
+      "acc": 0.937,
+      "ap": 0.9852695000699065,
+      "auc": 0.9852575,
+      "acc_ci95": [
+        0.926,
+        0.947
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "91715793efbecf4d04b9650af5a2d54770da0514ce96af9e85a68f7f3de619d0",
+      "split": "test",
+      "threshold": 0.598792
+    },
+    "gen-pndm": {
+      "acc": 0.8895,
+      "ap": 0.9604421908460516,
+      "auc": 0.949176,
+      "acc_ci95": [
+        0.875,
+        0.903
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "819994e4864ca6df87777ad017d3a22ca0435385cc910dd5a3d1d03d1dc8cfe6",
+      "split": "test",
+      "threshold": 0.537399
+    },
+    "gen-stylegan": {
+      "acc": 0.7155,
+      "ap": 0.8019221181731271,
+      "auc": 0.790696,
+      "acc_ci95": [
+        0.695,
+        0.7355
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "8a30fa6cca241a8cbe68c163af6ac15ea950c48ccd93fdd8ab83b27de415c308",
+      "split": "test",
+      "threshold": 0.503673
+    }
+  },
+  "bench": {
+    "sec_per_step": 0.0926,
+    "source": "modal bench",
+    "gpu": "NVIDIA A10",
+    "batch": 1,
+    "note": "số ĐO tại chỗ, không phải giả định; mọi ước lượng tiền dùng số này"
+  },
+  "warnings": [
+    "n nhỏ nhất trong bảng = 2000 ⇒ nửa độ rộng CI 95 % ≈ ±1.7 điểm ACC",
+    "gen-adm: `eval.json` chấm bằng detector f19d5b595efd… nhưng `detector.pth` hiện tại là b69fcf262f4b… — điểm đó là của mô hình CŨ; chạy lại `::evaluate`",
+    "gen-iddpm: `eval.json` chấm bằng detector 91715793efbe… nhưng `detector.pth` hiện tại là 888034cf672e… — điểm đó là của mô hình CŨ; chạy lại `::evaluate`",
+    "detector khởi tạo ngẫu nhiên (`init=scratch`), không ImageNet như bài báo"
+  ]
+}

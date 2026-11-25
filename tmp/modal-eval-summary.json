@@ -1,0 +1,16 @@
+{
+  "by_tag": {
+    "gen-adm": {
+      "acc": 0.781,
+      "ap": 0.9112802242056176,
+      "auc": 0.890242,
+      "acc_ci95": [
+        0.47,
+        0.529
+      ],
+      "n": 1000,
+      "gate": "passed"
+    }
+  },
+  "note": "metric chấm trên map tự tính (R1); xem runs/eval/<tag>/eval.json"
+}

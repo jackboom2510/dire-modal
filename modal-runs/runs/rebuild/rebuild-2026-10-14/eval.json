@@ -1,0 +1,61 @@
+{
+  "by_tag": {
+    "gen-adm": {
+      "acc": 0.8955,
+      "ap": 0.9559935181045017,
+      "auc": 0.9393055,
+      "acc_ci95": [
+        0.8805,
+        0.908
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "f19d5b595efdc91a8b207b1a7854c0bc203f4aeeca6e0471616c3a950aff2b96",
+      "split": "test",
+      "threshold": 0.527114
+    },
+    "gen-iddpm": {
+      "acc": 0.937,
+      "ap": 0.9852695000699065,
+      "auc": 0.9852575,
+      "acc_ci95": [
+        0.926,
+        0.947
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "91715793efbecf4d04b9650af5a2d54770da0514ce96af9e85a68f7f3de619d0",
+      "split": "test",
+      "threshold": 0.598792
+    },
+    "gen-pndm": {
+      "acc": 0.8895,
+      "ap": 0.9604421908460516,
+      "auc": 0.949176,
+      "acc_ci95": [
+        0.875,
+        0.903
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "819994e4864ca6df87777ad017d3a22ca0435385cc910dd5a3d1d03d1dc8cfe6",
+      "split": "test",
+      "threshold": 0.537399
+    },
+    "gen-stylegan": {
+      "acc": 0.7155,
+      "ap": 0.8019221181731271,
+      "auc": 0.790696,
+      "acc_ci95": [
+        0.695,
+        0.7355
+      ],
+      "n": 2000,
+      "gate": "passed",
+      "detector_sha256": "8a30fa6cca241a8cbe68c163af6ac15ea950c48ccd93fdd8ab83b27de415c308",
+      "split": "test",
+      "threshold": 0.503673
+    }
+  },
+  "note": "metric chấm trên map tự tính (R1); xem runs/eval/<tag>/eval.json"
+}

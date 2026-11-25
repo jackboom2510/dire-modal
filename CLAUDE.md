@@ -41,6 +41,7 @@ nhiêu credit". **Không train ResNet50**: nạp `lsun_adm.pth` của tác giả
 
 ## Quy ước riêng của repo
 
+- Slide học thuật về DIRE: dùng skill repo `.claude/skills/dire-academic-slides/SKILL.md`; skill yêu cầu đọc `docs/slide-agent-brief.md` trước khi lập dàn ý hoặc tạo/chỉnh slide.
 - Tài liệu và comment: **tiếng Việt**, giải thích **vì sao** (nhất là vì sao
   cách làm hiển nhiên lại sai).
 - Policy nằm ở `src/dire_modal/tiers.yaml`. `configs/tiers.yaml` chỉ là bảng

@@ -1,0 +1,119 @@
+{
+  "label": "R1+R2",
+  "init": "imagenet",
+  "epochs_run": 12,
+  "best_epoch": 7,
+  "best_val_ap": 0.99824,
+  "threshold_from_val": 0.6433416903018951,
+  "threshold_space": "logit",
+  "threshold_source": "val",
+  "val_acc_at_threshold": 0.9925,
+  "test": {
+    "n": 400,
+    "n_real": 200,
+    "n_fake": 200,
+    "threshold": 0.6433416903018951,
+    "acc": 0.985,
+    "acc_at_0.5": 0.975,
+    "ap": 0.9985608145331707,
+    "auc": 0.998575,
+    "confusion": {
+      "tp": 197,
+      "fp": 3,
+      "tn": 197,
+      "fn": 3
+    },
+    "acc_ci95": [
+      0.97,
+      0.995
+    ],
+    "acc_ci95_threshold": 0.6433416903018951,
+    "acc_ci95_covers_point": true
+  },
+  "split": {
+    "n_train": 400,
+    "n_val": 400,
+    "n_test": 400,
+    "seed": 3407,
+    "mode": "author",
+    "val_single_class": false
+  },
+  "split_mode": "author",
+  "hparams": {
+    "lr": 0.0001,
+    "batch": 32,
+    "crop": 224,
+    "seed": 3407,
+    "patience": 5
+  },
+  "history": [
+    {
+      "epoch": 1,
+      "loss": 0.7082,
+      "val_ap": 0.90731
+    },
+    {
+      "epoch": 2,
+      "loss": 0.64331,
+      "val_ap": 0.97015
+    },
+    {
+      "epoch": 3,
+      "loss": 0.60017,
+      "val_ap": 0.99317
+    },
+    {
+      "epoch": 4,
+      "loss": 0.57138,
+      "val_ap": 0.99681
+    },
+    {
+      "epoch": 5,
+      "loss": 0.54837,
+      "val_ap": 0.99752
+    },
+    {
+      "epoch": 6,
+      "loss": 0.52843,
+      "val_ap": 0.99793
+    },
+    {
+      "epoch": 7,
+      "loss": 0.5175,
+      "val_ap": 0.99824
+    },
+    {
+      "epoch": 8,
+      "loss": 0.51202,
+      "val_ap": 0.99793
+    },
+    {
+      "epoch": 9,
+      "loss": 0.5089,
+      "val_ap": 0.998
+    },
+    {
+      "epoch": 10,
+      "loss": 0.509,
+      "val_ap": 0.99803
+    },
+    {
+      "epoch": 11,
+      "loss": 0.509,
+      "val_ap": 0.99815
+    },
+    {
+      "epoch": 12,
+      "loss": 0.50841,
+      "val_ap": 0.99805
+    }
+  ],
+  "seconds": 33.77,
+  "honesty": "test chấm đúng một lần sau khi đã chốt mô hình và ngưỡng trên val; con số này KHÔNG so được với Table 2 của bài báo (khác init, khác seed, khác generator).",
+  "paper_protocol": true,
+  "init_weights": "/zero/ckpt/resnet50_imagenet.pth",
+  "init_channels": 3,
+  "table": 4,
+  "steps": 5,
+  "nfe_per_image": 10
+}

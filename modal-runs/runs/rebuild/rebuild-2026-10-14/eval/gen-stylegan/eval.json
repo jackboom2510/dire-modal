@@ -1,0 +1,40 @@
+{
+  "tag": "gen-stylegan",
+  "run_id": "rebuild-2026-10-14",
+  "maps_root": "/zero/rebuild/maps/rebuild-2026-10-14",
+  "split": "test",
+  "detector_sha256": "8a30fa6cca241a8cbe68c163af6ac15ea950c48ccd93fdd8ab83b27de415c308",
+  "generators_used": [
+    "stylegan"
+  ],
+  "threshold_raw": 0.014693984761834145,
+  "threshold_space": "logit",
+  "threshold_prob": 0.503673,
+  "threshold_source": "val",
+  "n_val": 2000,
+  "gate": "passed",
+  "metrics": {
+    "n": 2000,
+    "n_real": 1000,
+    "n_fake": 1000,
+    "threshold": 0.5036734342575073,
+    "acc": 0.7155,
+    "acc_at_0.5": 0.5,
+    "ap": 0.8019221181731271,
+    "auc": 0.790696,
+    "confusion": {
+      "tp": 658,
+      "fp": 227,
+      "tn": 773,
+      "fn": 342
+    },
+    "acc_ci95": [
+      0.695,
+      0.7355
+    ],
+    "acc_ci95_threshold": 0.5036734342575073,
+    "acc_ci95_covers_point": true
+  },
+  "crop": 224,
+  "honesty": "chấm trên map **tự tính** (R1) bằng detector train from scratch; không so được giá trị tuyệt đối với Table 2 của bài báo (khác init, khác số ảnh train, khác generator)."
+}
