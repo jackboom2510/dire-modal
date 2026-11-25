@@ -196,6 +196,11 @@ Ghi chú đầy đủ: [`docs/from-zero-clean-room.md`](docs/from-zero-clean-roo
 
 | Tài liệu | Nội dung |
 |---|---|
+| [`docs/README.md`](docs/README.md) | Chỉ mục tài liệu đánh mã và route agent tới đúng nhóm; không cần đọc toàn bộ `docs/` |
+| [`docs/history/00-index.md`](docs/history/00-index.md) | Quy ước lịch sử run; phân biệt inventory, map unique, split counts và Modal live history |
+| [`docs/history/01-modal-dataset-runs.md`](docs/history/01-modal-dataset-runs.md) | Snapshot repo về kích thước/phạm vi dataset trong các run đã lưu, kèm caveat về checkpoint/timestamp |
+| [`docs/history/90-run-record-template.md`](docs/history/90-run-record-template.md) | Template thống nhất để ghi campaign/run mới có provenance và sample counts theo stage |
+| [`docs/agent-docs-and-skills.md`](docs/agent-docs-and-skills.md) | Khảo sát AGENTS.md, SKILL.md và các repo skills phổ biến; khuyến nghị tổ chức tài liệu cho agent |
 | [`docs/runbook-free.md`](docs/runbook-free.md) | Runbook 10 bước: 0 ₫ → model + demo, kèm cổng kiểm tra từng bước |
 | [`docs/scratch-reproduction.md`](docs/scratch-reproduction.md) | Tái lập **từ đầu** (R1+R2+R3): 9 cổng vàng, kịch bản tải dữ liệu, chi phí theo GPU-giờ, hạn chế |
 | [`docs/dataset-own.md`](docs/dataset-own.md) | Dùng **dataset riêng trên ổ** (`DiffusionForensics`): đọc tar.gz, nhãn theo generator, chặn rò rỉ, `dire/` bị từ chối, nhãn `R1+R2` vs `R1+R2+R3` |
