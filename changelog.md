@@ -1,5 +1,13 @@
 # Agent changelog
 
+## 2026-10-14 — Tạo notebook audit cây DIRE trên Kaggle chỉ đọc
+
+- **Branch:** `arena/33250b71-dire-modal` (đang active khi ghi).
+- Theo lựa chọn của người dùng, thêm `platforms/kaggle/dire-tree-audit.ipynb` để đếm file/suffix/kích thước theo split-domain và phát hiện các cặp thư mục lồng cùng tên như `real/real`, không đọc nội dung, không theo symlink, không sửa `/kaggle/input`, không giải nén/copy/train; report ghi ở `/kaggle/working`.
+- Thêm `tests/test_kaggle_dire_tree_audit.py` với fixture nested folders, kiểm tra count/report, tính bất biến input, xử lý symlink và root không tồn tại.
+- **Kiểm chứng:** test audit — 3 passed; code cells notebook parse; pyflakes và `git diff --check` sạch.
+- **Chưa làm:** chưa chạy notebook trên Kaggle; chưa có quan sát trực tiếp ngoài cây thư mục do người dùng cung cấp; không sửa/upload phiên bản dataset mới. Notebook này là audit tổng quát; preflight archive CelebA-HQ hiện hữu vẫn không thay thế audit này.
+
 > Nhật ký riêng cho các thay đổi do coding agent thực hiện trong repo này. **Không phải** changelog phát hành sản phẩm, lịch sử Modal cloud, hay nơi thay thế Git history. Chỉ ghi thay đổi đã làm trong workspace; không suy ra hay ghi công việc của người dùng/người khác.
 
 ## Quy ước ghi
