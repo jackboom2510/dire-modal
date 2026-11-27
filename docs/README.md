@@ -71,6 +71,7 @@ Mã số giúp agent tham chiếu ổn định trong kế hoạch/ghi chú. Các
 | EXP-005 | [`plans/research/figures-plan.md`](plans/research/figures-plan.md) | Tình trạng, nguồn và kế hoạch hình. |
 | EXP-006 | [`scratch-reproduction.md`](scratch-reproduction.md), [`from-zero-clean-room.md`](from-zero-clean-room.md) | Tái hiện từ đầu hoặc kiểm chứng clean-room. |
 | EXP-007 | [`slide-agent-brief.md`](slide-agent-brief.md) | Tạo deck; đây là brief bằng chứng/claim, không phải run ledger. |
+| EXP-008 | [`kaggle-celebahq-progress.md`](kaggle-celebahq-progress.md) | Checkpoint tiến độ/next gate cho handoff Kaggle CelebA-HQ; không phải kết quả train hay run ledger. |
 
 ### 40 — Chạy, dữ liệu và vận hành
 

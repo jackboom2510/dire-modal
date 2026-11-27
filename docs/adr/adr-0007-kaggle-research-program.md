@@ -78,6 +78,8 @@ Người dùng chọn giữ nguyên input Kaggle read-only, không tạo bản s
 
 `src/dire_modal/kaggle_celebahq_tree.py` cung cấp bước index path read-only cho tám nhóm CelebA-HQ cần thiết; `platforms/kaggle/celebahq-path-index.ipynb` nhúng adapter và xuất JSON list/count sang `/kaggle/working/celebahq-path-index.json`. Đây chưa phải data loader pixel-level hay integration với training loop; notebook chưa chạy trên Kaggle thật.
 
+Người dùng đã chạy path-index trên Kaggle và báo 72.600 record, counts khớp inventory nhóm CelebA-HQ. Họ chọn bước tiếp theo là hash SHA-256 và giải mã đầy đủ đúng 72.600 file, giữ input read-only và không dùng GPU. `src/dire_modal/kaggle_celebahq_integrity.py` cùng Stage 2 trong notebook ghi checkpoint SQLite/JSONL ngoài input; fingerprint resume dựa path tương đối, size và mtime của cùng một immutable mount. SHA xác định bytes đang mount, không chứng minh archive/member provenance. Đây là code chuẩn bị; chưa chạy hash/decode trên Kaggle, chưa có kết quả file-integrity thực tế.
+
 ## Chi phí
 
 Không phát sinh chi phí compute khi ghi quyết định này. Chi phí dữ liệu/train chỉ được lập sau khi hoàn tất các quyết định mở và preflight tài nguyên.
