@@ -1,5 +1,13 @@
 # Agent changelog
 
+## 2026-10-14 — Tích hợp CelebA-HQ path index vào notebook Kaggle
+
+- **Branch:** `arena/f2985266-dire-modal` (đang active khi ghi).
+- Thêm `platforms/kaggle/celebahq-path-index.ipynb`, nhúng adapter đã test, dùng Kaggle root người dùng gửi, chỉ index tám nhóm CelebA-HQ và xuất counts + inferred locators sang `/kaggle/working/celebahq-path-index.json`.
+- Notebook ghi rõ không sửa/copy input, không đọc/giải mã ảnh, không hash, không assign validation split và không train. Module và notebook source được test đồng bộ.
+- **Kiểm chứng:** adapter, notebook, tree audit và docs index — 16 passed; pyflakes, py_compile, notebook cell parse và `git diff --check` sạch.
+- **Chưa làm:** chưa chạy notebook này trên Kaggle; chưa xác minh archive-member provenance, không tạo validation split, không train.
+
 ## 2026-10-14 — Thêm path adapter read-only cho CelebA-HQ đã giải nén
 
 - **Branch:** `arena/77ed3f4e-dire-modal` (đang active khi ghi).
