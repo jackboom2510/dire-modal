@@ -49,6 +49,7 @@ def create_celebahq_validation_split(
     integrity_summary_path: str | Path,
     output_dir: str | Path,
     *,
+    integrity_manifest_path: str | Path | None = None,
     salt: str = VALIDATION_SALT,
     expected_train_counts: dict[tuple[str, int], int] | None = None,
     expected_total_records: int | None = EXPECTED_TOTAL_RECORDS,
@@ -56,9 +57,11 @@ def create_celebahq_validation_split(
     """Select exactly 10% of each training label using the locked hash-rank rule.
 
     The integrity summary and its JSONL manifest must describe the same complete,
-    failure-free Stage 2 run. Only ``train/real`` and ``train/sdv2`` are split;
-    all test records are excluded. Content duplicates crossing train/validation
-    are reported for review and do not silently alter the deterministic picks.
+    failure-free Stage 2 run. ``integrity_manifest_path`` can override the path
+    embedded in the summary, allowing artifacts mounted read-only from a separate
+    Kaggle Dataset. Only ``train/real`` and ``train/sdv2`` are split; all test
+    records are excluded. Content duplicates crossing train/validation are
+    reported for review and do not silently alter the deterministic picks.
     """
     summary_path = Path(integrity_summary_path).expanduser().resolve()
     if not summary_path.is_file():
@@ -82,8 +85,8 @@ def create_celebahq_validation_split(
             f"expected {expected_total_records} integrity records, got {record_count}"
         )
 
-    manifest_value = summary.get("file_manifest_jsonl")
-    if not isinstance(manifest_value, str) or not manifest_value:
+    manifest_value = integrity_manifest_path or summary.get("file_manifest_jsonl")
+    if not isinstance(manifest_value, (str, Path)) or not str(manifest_value):
         raise ValueError("integrity summary does not name file_manifest_jsonl")
     manifest_path = Path(manifest_value).expanduser().resolve()
     if not manifest_path.is_file():

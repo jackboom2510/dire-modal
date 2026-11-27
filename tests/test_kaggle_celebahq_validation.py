@@ -130,6 +130,28 @@ def test_split_reports_exact_duplicate_bytes_across_partition(tmp_path: Path) ->
     assert audit["shared_sha256_count_by_label"] == {"0": 1, "1": 1}
 
 
+def test_split_accepts_manifest_mounted_separately_from_summary(tmp_path: Path) -> None:
+    summary_path, work = _write_stage2_bundle(tmp_path)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    original_manifest = Path(summary["file_manifest_jsonl"])
+    mounted_input = tmp_path / "artifact-dataset"
+    mounted_input.mkdir()
+    mounted_manifest = mounted_input / original_manifest.name
+    mounted_manifest.write_bytes(original_manifest.read_bytes())
+    summary["file_manifest_jsonl"] = "/stale/previous/runtime/manifest.jsonl"
+    summary_path.write_text(json.dumps(summary), encoding="utf-8")
+
+    result = create_celebahq_validation_split(
+        summary_path,
+        work,
+        integrity_manifest_path=mounted_manifest,
+        expected_train_counts=_small_expected_counts(),
+        expected_total_records=21,
+    )
+    assert result["source"]["integrity_manifest"] == str(mounted_manifest.resolve())
+    assert result["counts_by_label"]["0"]["validation"] == 1
+
+
 def test_split_refuses_nonpassing_integrity_run(tmp_path: Path) -> None:
     summary_path, work = _write_stage2_bundle(tmp_path, status="fail")
     with pytest.raises(ValueError, match="status is not pass"):
