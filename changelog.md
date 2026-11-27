@@ -1,5 +1,23 @@
 # Agent changelog
 
+## 2026-10-14 — Duyệt protocol v2 content-disjoint để xử lý overlap validation
+
+- **Branch:** `arena/022ccec0-dire-modal` (active; base `f68450babe828886e93a0ccd6a89e650ca66cb51`).
+- Theo lựa chọn của người dùng, sửa Stage 3: globally exclude mọi repeated-SHA records khỏi validation candidates, giữ nguyên chúng trong training, và lấy tiếp theo thứ tự rank đến đủ exact-count mỗi label. Ghi schema/protocol output v2 để bảo toàn artifact v1.
+- V1 candidate do người dùng chạy có 6 SHA overlap real; không train với v1. V2 đã qua 31 local tests, pyflakes, py_compile, notebook parse và `git diff --check`; Kaggle rerun riêng vẫn cần thiết, không rerun Stage 2.
+
+## 2026-10-14 — Ghi nhận 6 exact-duplicate pairs giữa validation và training
+
+- **Branch:** `arena/022ccec0-dire-modal` (active; base `f68450babe828886e93a0ccd6a89e650ca66cb51`).
+- Người dùng cung cấp sáu cặp real có SHA-256 trùng, mỗi cặp một ảnh validation và một ảnh train; không có overlap ở SDv2. Paths/hashes được ghi vào EXP-008.
+- Candidate hiện vẫn `review_required`; chưa train. Chờ người dùng chốt: hash-aware deterministic reselect giữ đủ records/validation count nhưng đổi 6 validation IDs, hay giữ IDs và loại 6 training duplicates.
+
+## 2026-10-14 — Ghi nhận Stage 3 candidate và dừng ở overlap review
+
+- **Branch:** `arena/022ccec0-dire-modal` (active; base `f68450babe828886e93a0ccd6a89e650ca66cb51`).
+- Người dùng báo Stage 3 candidate tạo class 0: 2.800/28.000 validation, class 1: 4.000/40.000 validation; ID-list SHA-256 `1f550e2992e136873caf6df26cc46de3492794ebc5b8badc6eece9575f7047d6`.
+- `content_overlap_audit` là `review_required`; artifact path và gate tiếp theo được ghi trong EXP-008. Chưa train; agent chưa đọc artifact trực tiếp.
+
 ## 2026-10-14 — Tách Stage 3 thành notebook độc lập, đọc artifact input read-only
 
 - **Branch:** `arena/eb2fe5cf-dire-modal` (active; base `e81ac48242a2b87697398f082b39bd16c8409f2a`).

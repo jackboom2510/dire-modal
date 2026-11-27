@@ -60,8 +60,9 @@ def create_celebahq_validation_split(
     failure-free Stage 2 run. ``integrity_manifest_path`` can override the path
     embedded in the summary, allowing artifacts mounted read-only from a separate
     Kaggle Dataset. Only ``train/real`` and ``train/sdv2`` are split; all test
-    records are excluded. Content duplicates crossing train/validation are
-    reported for review and do not silently alter the deterministic picks.
+    records are excluded. All train rows sharing a SHA-256 with any other train
+    row are ineligible for validation, globally across both labels; validation
+    fills the exact per-label quota from the next unique-content rank candidates.
     """
     summary_path = Path(integrity_summary_path).expanduser().resolve()
     if not summary_path.is_file():
@@ -144,8 +145,11 @@ def create_celebahq_validation_split(
         if len(locators) != len(set(locators)):
             raise ValueError(f"duplicate inferred member locator within label {label}")
 
+    all_train_records = [record for class_records in classes.values() for record in class_records]
+    global_sha_counts = Counter(record["sha256"] for record in all_train_records)
     validation_records: list[dict[str, Any]] = []
     class_counts: dict[str, dict[str, int]] = {}
+    candidate_audit_by_label: dict[str, dict[str, int]] = {}
     validation_path_ids: set[str] = set()
     for label in sorted(classes):
         ranked = sorted(
@@ -156,8 +160,19 @@ def create_celebahq_validation_split(
             ),
         )
         selected_count = _round_half_up_ratio(len(ranked), 1, 10)
-        chosen = ranked[:selected_count]
-        for rank, row in enumerate(chosen, start=1):
+        eligible = [
+            (rank_position, row)
+            for rank_position, row in enumerate(ranked, start=1)
+            if global_sha_counts[row["sha256"]] == 1
+        ]
+        excluded_duplicate_candidates = len(ranked) - len(eligible)
+        if len(eligible) < selected_count:
+            raise ValueError(
+                f"not enough content-unique candidates for label {label}: "
+                f"need {selected_count}, have {len(eligible)}"
+            )
+        chosen = eligible[:selected_count]
+        for validation_rank, (rank_position, row) in enumerate(chosen, start=1):
             path_id = row["path_from_dire_root"]
             validation_path_ids.add(path_id)
             validation_records.append(
@@ -168,7 +183,8 @@ def create_celebahq_validation_split(
                     "member_locator_inferred": row["member_locator_inferred"],
                     "locator_inferred": True,
                     "sha256": row["sha256"],
-                    "validation_rank": rank,
+                    "validation_rank": validation_rank,
+                    "rank_position_before_duplicate_filter": rank_position,
                     "selection_sha256": _rank_digest(salt, row["member_locator_inferred"]),
                 }
             )
@@ -176,6 +192,11 @@ def create_celebahq_validation_split(
             "total": len(ranked),
             "validation": selected_count,
             "training": len(ranked) - selected_count,
+        }
+        candidate_audit_by_label[str(label)] = {
+            "total_records": len(ranked),
+            "content_unique_candidates": len(eligible),
+            "excluded_duplicate_hash_candidates": excluded_duplicate_candidates,
         }
 
     validation_records.sort(key=lambda row: (row["label"], row["validation_rank"]))
@@ -190,7 +211,6 @@ def create_celebahq_validation_split(
         ],
         key=lambda item: (item["label"], item["member_locator_inferred"], item["path_from_dire_root"]),
     )
-    all_train_records = [record for class_records in classes.values() for record in class_records]
     validation_hashes_all = {
         row["sha256"] for row in all_train_records
         if row["path_from_dire_root"] in validation_path_ids
@@ -227,16 +247,17 @@ def create_celebahq_validation_split(
     output_path.mkdir(parents=True, exist_ok=True)
     validation_ids_digest = _canonical_list_sha256(validation_id_list)
     artifact = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "candidate_created",
         "protocol": {
-            "name": "celebahq-exact-count-hash-rank-v1",
+            "name": "celebahq-content-disjoint-exact-count-hash-rank-v2",
             "salt": salt,
             "hash": "SHA-256",
             "preimage": "UTF-8(salt) + 0x00 + UTF-8(member_locator_inferred)",
             "sort": "ascending lowercase hex digest, then member_locator_inferred",
+            "candidate_rule": "candidate SHA-256 frequency must equal 1 across all train labels; repeated-content groups remain wholly in training",
             "fraction": {"numerator": 1, "denominator": 10},
-            "rounding": "half-up",
+            "rounding": "half-up of total records per label before duplicate filtering",
         },
         "source": {
             "root": summary["root"],
@@ -248,16 +269,21 @@ def create_celebahq_validation_split(
             "archive_member_paths_verified": False,
         },
         "counts_by_label": class_counts,
+        "candidate_audit_by_label": candidate_audit_by_label,
+        "duplicate_sha256_groups_all_train_labels": sum(
+            1 for frequency in global_sha_counts.values() if frequency > 1
+        ),
         "validation_id_list_sha256": validation_ids_digest,
         "content_overlap_audit": content_overlap,
         "validation_records": validation_records,
         "notes": [
             "Only train/real and train/sdv2 records are partitioned; all test records remain untouched.",
+            "Repeated SHA-256 groups across either training label are excluded from validation candidates and remain entirely in training.",
             "Locators are inferred from the extracted tree and have not been verified against original tar member paths.",
             "Candidate split creation does not authorize training; review content_overlap_audit and complete the compute preflight first.",
         ],
     }
-    destination = output_path / f"celebahq-validation-split-v1-{summary['source_fingerprint'][:12]}.json"
+    destination = output_path / f"celebahq-validation-split-v2-{summary['source_fingerprint'][:12]}.json"
     temporary = destination.with_suffix(destination.suffix + ".tmp")
     temporary.write_text(json.dumps(artifact, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     os.replace(temporary, destination)
