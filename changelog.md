@@ -1,5 +1,12 @@
 # Agent changelog
 
+## 2026-10-14 — Chuẩn bị deterministic validation stage sau integrity pass do người dùng báo
+
+- **Branch:** `arena/3ff8bd36-dire-modal` (active; base `1a3e0a856142d17e133b78fa58c572739c782797`).
+- Người dùng báo Stage 2 trên Kaggle pass cho 72.600/72.600 file, 0 SHA failures và 0 decode failures; summary/JSONL/SQLite paths được ghi vào `docs/kaggle-celebahq-progress.md`. Agent chưa đọc trực tiếp artifacts Kaggle.
+- Thêm `src/dire_modal/kaggle_celebahq_validation.py` và Stage 3 vào notebook: exact 10%/class theo salt/rank rule đã duyệt, chỉ train real/SDv2; xuất candidate JSON ngoài input và báo hash trùng nội dung qua ranh giới train/validation để review. Chưa tạo split trên Kaggle.
+- **Kiểm chứng cục bộ:** 28 test scoped passed; pyflakes, py_compile, notebook JSON/code-cell parse và `git diff --check` sạch. Không có Kaggle access/run, không có train/GPU workload.
+
 ## 2026-10-14 — Lưu checkpoint tiến độ và chốt validation protocol
 
 - **Branch:** `arena/c4857c07-dire-modal` (đang active).
