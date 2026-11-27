@@ -11,7 +11,7 @@ snapshot_date: 2026-10-14
 
 ## Trạng thái hiện tại
 
-- **Branch:** `arena/3ff8bd36-dire-modal` — active, từ base `1a3e0a856142d17e133b78fa58c572739c782797`.
+- **Branch:** `arena/eb2fe5cf-dire-modal` — active, từ base `e81ac48242a2b87697398f082b39bd16c8409f2a`.
 - **Scope đã chọn:** research-extension CelebA-HQ-SDv2; chỉ dùng `dire/train/celebahq/{real,sdv2}` và test CelebA-HQ (real, bốn họ holdout, SDv2 control). Không trộn LSUN-Bedroom/ImageNet.
 - **Dataset trên Kaggle:** input read-only tại `/kaggle/input/datasets/j4cknguyn/diffusionforensics/dire`; người dùng chọn giữ nguyên, không copy/re-upload/flatten.
 - **Đã chạy trên Kaggle theo report người dùng:** audit cây toàn bộ DIRE, path-index CelebA-HQ, Stage 2 SHA-256/full-decode (`pass`, 72.600/72.600; không có SHA/decode failures). Agent chưa truy cập trực tiếp Kaggle hay artifact.
@@ -71,12 +71,12 @@ Người dùng báo:
 - `src/dire_modal/kaggle_celebahq_integrity.py` hash file theo chunk, sau đó dùng Pillow `load()` để full-decode từng ảnh; ghi SQLite checkpoint, JSONL per-file manifest và summary dưới `/kaggle/working`.
 - Có thể resume khi cùng cây dữ liệu bất biến và fingerprint metadata (relative path, size, mtime) khớp. Hash và decode là hai lượt đọc riêng. Tổng `stat` bytes của các file CelebA-HQ trong audit là **5.775.377.067 byte cho một lượt**; lượng I/O thực tế của hai lượt và thời gian chưa đo.
 - Hash xác định bytes hiện đang mount; không xác nhận archive provenance, source-image identity hay train/test independence.
-- Stage 3 mới: `src/dire_modal/kaggle_celebahq_validation.py`, được embed trong `platforms/kaggle/celebahq-path-index.ipynb`; chỉ đọc summary/JSONL đã pass, chọn 10% train mỗi label theo protocol chốt, ghi candidate JSON dưới `/kaggle/working`. Đồng thời report SHA-256 giao nhau giữa train/validation; nếu có exact-byte duplicates thì `review_required`, không tự ý đổi rank selection.
-- Test cục bộ cho integrity, validation split, notebook/tree adapters và docs: **28 passed**; pyflakes, py_compile, notebook JSON/code-cell parse và `git diff --check` sạch. Các test không truy cập Kaggle, không chứng minh Stage 3 đã chạy trên data thực.
+- Stage 3: `src/dire_modal/kaggle_celebahq_validation.py`, được embed trong notebook tích hợp và notebook standalone `platforms/kaggle/celebahq-validation-split.ipynb`. Có thể đọc summary/JSONL trực tiếp từ Kaggle Dataset input read-only (manifest path override), không cần rerun Stage 1/2 hay copy vào `/kaggle/working`. Chọn 10% train mỗi label, ghi candidate JSON dưới `/kaggle/working`, và report exact-byte overlaps; nếu có duplicates thì `review_required`, không tự ý đổi rank selection.
+- Test cục bộ cho integrity, validation split, notebook/tree adapters và docs: **30 passed**; pyflakes, py_compile, notebook JSON/code-cell parse và `git diff --check` sạch. Các test không truy cập Kaggle, không chứng minh Stage 3 đã chạy trên data thực.
 
 ## Next gates
 
-1. Trong Kaggle runtime chứa output Stage 2, chạy cell Stage 3 mới nhất ở cuối `platforms/kaggle/celebahq-path-index.ipynb`. Nếu runtime mới, phải bảo đảm `/kaggle/working` còn các file integrity đã export; dùng summary và JSONL paths ở phần trên. Không chạy lại Stage 2 trừ khi artifacts không còn/không khớp.
+1. Upload Stage 2 summary JSON + JSONL manifest đã lưu local thành Kaggle Dataset input tên/slug `dire-celebahq-stage2-artifacts-v1` (SQLite là tùy chọn), rồi attach qua Kaggle Input panel cho `platforms/kaggle/celebahq-validation-split.ipynb`. Notebook đã cấu hình slug này và thử mount path thông dụng; nếu Kaggle hiển thị path khác thì sửa `ARTIFACT_DIR`. Chạy riêng notebook này; không cần mount/copy lại ảnh DIRE và không rerun Stage 1/2. Manifest được đọc trực tiếp từ input read-only.
 2. Gửi lại output Stage 3: counts theo label, `validation_id_list_sha256`, content-overlap status và đường dẫn artifact. Dừng nếu integrity bundle không được xác nhận hoặc overlap audit là `review_required`; không tự điều chỉnh IDs.
 3. Chỉ sau candidate split và review mới preflight dung lượng/GPU/khả năng lưu-resume; sau đó mới chốt seed, budget, checkpoint selection và xin phép compute.
 4. Giữ bốn generator family CelebA-HQ (`dalle2`, `if`, `midjourney`, `stargan`) làm holdout riêng; không tune trên test. `sdv2` test là seen-generator control.
