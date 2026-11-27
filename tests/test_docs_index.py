@@ -13,6 +13,7 @@ DOCS = [
     ROOT / "docs/plans/research/full-paper-reproduction-plan.md",
     ROOT / "docs/plans/research/figures-plan.md",
     ROOT / "docs/plans/research/incremental-paper-subsets.md",
+    ROOT / "docs/kaggle-celebahq-progress.md",
     ROOT / "docs/plans/demos/demo-hf-spaces-plan.md",
     ROOT / "docs/plans/demos/demo-modal-plan.md",
     ROOT / "docs/plans/demos/demo-web-plan.md",
@@ -66,6 +67,8 @@ def test_document_catalog_has_stable_ids_and_history_routes():
     assert "plans/README.md" in index
     assert "plans/research/full-paper-reproduction-plan.md" in index
     assert "plans/research/incremental-paper-subsets.md" in index
+    assert "EXP-008" in index
+    assert "kaggle-celebahq-progress.md" in index
     assert "plans/demos/demo-web-plan.md" in index
 
 

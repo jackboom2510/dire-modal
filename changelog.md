@@ -1,5 +1,19 @@
 # Agent changelog
 
+## 2026-10-14 — Lưu checkpoint tiến độ và chốt validation protocol
+
+- **Branch:** `arena/c4857c07-dire-modal` (đang active).
+- Thêm `docs/kaggle-celebahq-progress.md` (EXP-008) ghi trạng thái dữ liệu Kaggle, phân loại số liệu do người dùng cung cấp, quyết định/gate và deterministic validation protocol sau khi người dùng chấp thuận salt `dire-celebahq-val-v1` cùng exact-count SHA-256 rank rule.
+- Chưa tạo validation split; chờ integrity stage trên Kaggle qua gate trước. Route checkpoint trong `docs/README.md`; bổ sung kiểm tra link/catalog.
+- **Kiểm chứng:** 22 test (integrity adapter/notebook, path adapter/audit và docs index) passed; pyflakes, py_compile và `git diff --check` sạch. Không có thao tác hay compute nào trên Kaggle.
+
+## 2026-10-14 — Thêm SHA-256/decode integrity stage cho CelebA-HQ
+
+- **Branch:** `arena/c4857c07-dire-modal` (đang active khi ghi).
+- Theo lựa chọn của người dùng, thêm `src/dire_modal/kaggle_celebahq_integrity.py` và Stage 2 vào `platforms/kaggle/celebahq-path-index.ipynb`: hash SHA-256 và full-decode từng ảnh, ghi checkpoint SQLite + JSONL/summary bên ngoài input, hỗ trợ tiếp tục cùng một tree fingerprint.
+- Stage không sửa/copy input, không dùng GPU; hash bytes đang mount không xác nhận archive provenance. Hash và Pillow decode là hai lượt đọc riêng; thời gian thực chưa đo.
+- **Kiểm chứng:** integrity module/notebook, tree adapter/audit và docs index — 22 passed; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Chưa chạy trên Kaggle.
+
 ## 2026-10-14 — Tích hợp CelebA-HQ path index vào notebook Kaggle
 
 - **Branch:** `arena/f2985266-dire-modal` (đang active khi ghi).
