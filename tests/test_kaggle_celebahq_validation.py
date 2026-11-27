@@ -28,9 +28,11 @@ def _write_stage2_bundle(
     rows: list[dict[str, object]] = []
     for generator, label in (("real", 0), ("sdv2", 1)):
         for index in range(10):
-            row_hash = "0" * 64 if duplicate_content else hashlib.sha256(
-                f"{generator}-{index}".encode()
-            ).hexdigest()
+            row_hash = (
+                hashlib.sha256(b"duplicate-real-pair").hexdigest()
+                if duplicate_content and generator == "real" and index < 2
+                else hashlib.sha256(f"{generator}-{index}".encode()).hexdigest()
+            )
             rows.append(
                 {
                     "path_from_dire_root": f"train/celebahq/{generator}/{generator}/{index}.png",
@@ -117,7 +119,7 @@ def test_exact_count_split_is_deterministic_per_label_and_excludes_test(tmp_path
     assert len(artifact["validation_records"]) == 2
 
 
-def test_split_reports_exact_duplicate_bytes_across_partition(tmp_path: Path) -> None:
+def test_hash_aware_split_keeps_duplicate_group_in_training_and_fills_quota(tmp_path: Path) -> None:
     summary_path, work = _write_stage2_bundle(tmp_path, duplicate_content=True)
     result = create_celebahq_validation_split(
         summary_path,
@@ -126,8 +128,48 @@ def test_split_reports_exact_duplicate_bytes_across_partition(tmp_path: Path) ->
         expected_total_records=21,
     )
     audit = result["content_overlap_audit"]
-    assert audit["status"] == "review_required"
-    assert audit["shared_sha256_count_by_label"] == {"0": 1, "1": 1}
+    assert result["protocol"]["name"] == "celebahq-content-disjoint-exact-count-hash-rank-v2"
+    assert result["counts_by_label"]["0"] == {
+        "total": 10, "validation": 1, "training": 9
+    }
+    assert result["candidate_audit_by_label"] == {
+        "0": {
+            "total_records": 10,
+            "content_unique_candidates": 8,
+            "excluded_duplicate_hash_candidates": 2,
+        },
+        "1": {
+            "total_records": 10,
+            "content_unique_candidates": 10,
+            "excluded_duplicate_hash_candidates": 0,
+        },
+    }
+    assert result["validation_records"][0]["sha256"] != hashlib.sha256(
+        b"duplicate-real-pair"
+    ).hexdigest()
+    assert audit["status"] == "pass"
+    assert audit["shared_sha256_count_all_labels"] == 0
+    assert len(result["validation_records"]) == 2
+
+
+def test_hash_aware_candidates_exclude_cross_label_duplicate_content(tmp_path: Path) -> None:
+    summary_path, work = _write_stage2_bundle(tmp_path)
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    manifest_path = Path(summary["file_manifest_jsonl"])
+    lines = manifest_path.read_text(encoding="utf-8").splitlines()
+    rows = [json.loads(line) for line in lines]
+    rows[11]["sha256"] = rows[1]["sha256"]  # real and SDv2 exact-byte collision
+    manifest_path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+    result = create_celebahq_validation_split(
+        summary_path,
+        work,
+        expected_train_counts=_small_expected_counts(),
+        expected_total_records=21,
+    )
+    assert result["candidate_audit_by_label"]["0"]["excluded_duplicate_hash_candidates"] == 1
+    assert result["candidate_audit_by_label"]["1"]["excluded_duplicate_hash_candidates"] == 1
+    assert result["content_overlap_audit"]["status"] == "pass"
 
 
 def test_split_accepts_manifest_mounted_separately_from_summary(tmp_path: Path) -> None:
