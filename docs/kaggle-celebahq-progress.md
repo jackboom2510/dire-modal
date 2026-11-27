@@ -11,11 +11,12 @@ snapshot_date: 2026-10-14
 
 ## Trạng thái hiện tại
 
-- **Branch:** `arena/022ccec0-dire-modal` — active, từ base `f68450babe828886e93a0ccd6a89e650ca66cb51`.
+- **Branch:** `arena/cf863117-dire-modal` — active, từ base `024ffab52ef353abfebefc6c467519a569f38d13`.
 - **Scope đã chọn:** research-extension CelebA-HQ-SDv2; chỉ dùng `dire/train/celebahq/{real,sdv2}` và test CelebA-HQ (real, bốn họ holdout, SDv2 control). Không trộn LSUN-Bedroom/ImageNet.
 - **Dataset trên Kaggle:** input read-only tại `/kaggle/input/datasets/j4cknguyn/diffusionforensics/dire`; người dùng chọn giữ nguyên, không copy/re-upload/flatten.
 - **Đã chạy trên Kaggle theo report người dùng:** audit cây toàn bộ DIRE, path-index CelebA-HQ, Stage 2 SHA-256/full-decode (`pass`, 72.600/72.600; không có SHA/decode failures). Agent chưa truy cập trực tiếp Kaggle hay artifact.
-- **Stage 3 theo report người dùng:** v1 candidate tạo đúng counts nhưng `content_overlap_audit=review_required` với sáu real duplicate pairs. Người dùng đã duyệt protocol v2 hash-aware để tạo lại validation list; v2 code mới test cục bộ, Kaggle chưa rerun. Chưa chạy smoke train, train hoặc benchmark.
+- **Stage 3 v2 theo report người dùng:** candidate tạo đúng counts 2.800 real / 4.000 SDv2, audit unique-content candidates ghi 50 real + 0 SDv2 bị loại khỏi validation pool; `content_overlap_audit=pass`.
+- **Stage 4 preflight:** helper và notebook cell vừa được triển khai local; chưa chạy trên Kaggle. Chưa chạy smoke train, train hoặc benchmark.
 
 ## Bằng chứng do người dùng cung cấp
 
@@ -59,7 +60,7 @@ Người dùng báo:
 ### Stage 3 candidate — kết quả do người dùng cung cấp
 
 - Người dùng báo `candidate_created`; class 0: 28.000 tổng, 2.800 validation, 25.200 train; class 1: 40.000 tổng, 4.000 validation, 36.000 train.
-- v1 `validation_id_list_sha256`: `1f550e2992e136873caf6df26cc46de3492794ebc5b8badc6eece9575f7047d6` (**sẽ được supersede nếu chạy protocol v2**).
+- v1 `validation_id_list_sha256`: `1f550e2992e136873caf6df26cc46de3492794ebc5b8badc6eece9575f7047d6` (**đã được v2 supersede**).
 - `content_overlap_audit.status`: `review_required`; người dùng sau đó báo **6 SHA trùng**, tất cả label 0 (`real`), label 1 không có overlap. Mỗi digest ghép một path validation với một path training:
 
 | SHA-256 | Validation path | Training path |
@@ -73,7 +74,18 @@ Người dùng báo:
 
 - Artifact: `/kaggle/working/celebahq-validation-split-v1-81dcda99aeb9.json`.
 
-Chi tiết cặp/hash là do người dùng dán từ console, chưa được agent đọc trực tiếp file artifact. Sáu cặp xác nhận exact-byte duplication và gây overlap train/validation. Chưa chấp nhận split để train; cần chốt cách xử lý mà không âm thầm đổi ID hoặc bỏ samples.
+Chi tiết cặp/hash là do người dùng dán từ console, chưa được agent đọc trực tiếp file artifact. Sáu cặp xác nhận exact-byte duplication và gây overlap train/validation. Candidate v1 không dùng cho train.
+
+### Stage 3 v2 — kết quả do người dùng cung cấp
+
+- Inputs: summary và JSONL từ `/kaggle/input/datasets/j4cknguyn/dire-celeba-hq-stage-2-artifacts-v1/`.
+- Counts: label 0 = 28.000 total, 2.800 validation, 25.200 training; label 1 = 40.000 total, 4.000 validation, 36.000 training.
+- Candidate audit: label 0 có 27.950 content-unique validation candidates và loại 50 duplicate-hash records khỏi validation candidates; label 1 có 40.000 unique candidates, loại 0.
+- `validation_id_list_sha256`: `c635c38a5888ef4e0196423dd8f342f412dc15ea633c17d835330c740d7dc9fd`.
+- `content_overlap_audit.status`: `pass`.
+- Output: `/kaggle/working/celebahq-validation-split-v2-81dcda99aeb9.json`.
+
+Đây là console output người dùng cung cấp, chưa được agent đọc file artifact trên Kaggle. Theo report, v2 đạt exact counts và không còn SHA trùng qua train/validation; v1 ID-list hash đã superseded.
 
 ## Quyết định người dùng đã chọn
 
@@ -83,7 +95,7 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 - Stage 2 SHA-256 + full image decode cho 72.600 file được người dùng báo pass, không lỗi, không resume. Implementation được thiết kế read-only/no-GPU; console excerpt không bao gồm các cờ `input_modified`/`gpu_work_started`.
 - Người dùng đã **chốt** validation protocol: salt `dire-celebahq-val-v1`; SHA-256 trên salt + NUL + `member_locator_inferred`, sort digest tăng dần (tie-break locator), lấy `round-half-up(0,10 × N)` mỗi class.
 - Người dùng đã duyệt protocol revision v2: loại khỏi validation candidate pool mọi train record có SHA-256 xuất hiện hơn một lần trên toàn bộ hai label; vẫn xếp các ứng viên còn lại theo salt/hash rank đã chốt, chọn đủ 10% dựa trên tổng records mỗi label. Duplicate groups giữ nguyên trong training. V2 giữ counts nhưng thay validation IDs; đây là protocol khác v1 và phải ghi version riêng.
-- V1 Kaggle candidate có overlap nên không dùng để train. Chờ người dùng chạy lại standalone Stage 3 notebook v2 và xác nhận audit pass; không train trước kết quả đó.
+- V1 Kaggle candidate có overlap nên không dùng để train. Người dùng đã chạy lại standalone Stage 3 v2 và báo audit pass; v2 là split candidate hiện hành. Chưa train; bước tiếp theo là preflight Kaggle và chốt budget/seed.
 - Chưa khóa seed/training budget; chưa train hoặc benchmark.
 
 ## Stage integrity và validation implementation
@@ -92,13 +104,14 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 - Có thể resume khi cùng cây dữ liệu bất biến và fingerprint metadata (relative path, size, mtime) khớp. Hash và decode là hai lượt đọc riêng. Tổng `stat` bytes của các file CelebA-HQ trong audit là **5.775.377.067 byte cho một lượt**; lượng I/O thực tế của hai lượt và thời gian chưa đo.
 - Hash xác định bytes hiện đang mount; không xác nhận archive provenance, source-image identity hay train/test independence.
 - Stage 3 v2: `src/dire_modal/kaggle_celebahq_validation.py`, embed trong notebook tích hợp và standalone `platforms/kaggle/celebahq-validation-split.ipynb`. Đọc summary/JSONL read-only từ Kaggle Dataset, không rerun Stage 1/2; trước khi chọn 10% mỗi label, bỏ toàn bộ validation candidates có SHA-256 lặp trong combined train pool. Duplicate records còn lại được giữ trong training; count mục tiêu vẫn tính trên tổng class records. Xuất artifact v2 riêng, không ghi đè v1.
-- Test cục bộ sau revision v2: **31 passed**; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Không test nào truy cập Kaggle.
+- Stage 4 preflight mới: `src/dire_modal/kaggle_celebahq_preflight.py`, embed thành 2 cell cuối của standalone notebook. Kiểm tra input paths, Stage 3 v2 status/counts, disk free, write/delete probe cho artifact/checkpoint directories, GPU metadata qua `nvidia-smi` và ghi report. Không đọc ảnh/khởi tạo CUDA workload/train hoặc ghi vào `/kaggle/input`; dung lượng chỉ được đo, chưa thể xác định đủ hay không cho tới khi budget/checkpoint sizes được chốt.
+- Test cục bộ sau Stage 4 preflight: **35 passed**; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Không test nào truy cập Kaggle.
 
 ## Next gates
 
-1. Chạy lại riêng Stage 3 notebook v2 trên cùng summary + JSONL input; không chạy lại Stage 1/2 và không dùng candidate v1 cũ.
-2. Gửi output v2: counts, `candidate_audit_by_label`, `validation_id_list_sha256`, `content_overlap_audit.status`, và path artifact. Chỉ khi counts còn 2.800/4.000 và audit `pass` mới chấp nhận validation split.
-3. Sau đó mới preflight dung lượng/GPU/khả năng lưu-resume; chốt seed, budget, checkpoint selection và xin phép compute.
+1. Cập nhật standalone Kaggle notebook mới nhất và gắn cả DIRE input Dataset + Stage 2 artifact Dataset. Chạy 2 code cell cuối (Stage 4 preflight) trong cùng runtime đã tạo v2 split; nếu runtime mới/mất split file thì chạy Stage 3 v2 trước rồi Stage 4. Stage 4 chỉ truy vấn GPU metadata; để nhận tên/memory GPU cần accelerator được bật, nhưng cell không chạy workload.
+2. Gửi `celebahq-training-preflight.json` summary: status, disk free bytes, input/split checks, write probes, GPU query. `needs_attention` nghĩa là xử lý lỗi input/write/GPU trước. `pass` chỉ xác nhận checks hiện tại; chưa kết luận disk đủ cho budget chưa chốt.
+3. Dựa trên preflight mới chốt seed, train budget/steps, checkpoint selection và resume/export plan; xin phép trước compute.
 4. Giữ bốn generator family CelebA-HQ (`dalle2`, `if`, `midjourney`, `stargan`) làm holdout riêng; không tune trên test. `sdv2` test là seen-generator control.
 
 ## Protocol validation đã chốt
@@ -107,4 +120,4 @@ Người dùng chấp thuận salt `dire-celebahq-val-v1` và exact-count rank r
 
 Sau khi Stage 3 v1 phát hiện sáu duplicate groups cắt qua train/validation, người dùng **đã duyệt revision v2**: tính tần suất SHA-256 trên combined train pool của cả hai label; mọi record có digest xuất hiện >1 lần không đủ điều kiện validation. Sắp xếp các eligible records theo cùng salt/hash/locator rank và lấy đủ `round-half-up(10% × N)` mỗi label, với N là tổng records của label trước lọc. Repeated groups giữ trong training. Đây đổi validation IDs so với v1 nhưng giữ exact 2.800/4.000 counts và loại exact-byte overlap giữa hai partition; protocol ID là `celebahq-content-disjoint-exact-count-hash-rank-v2`.
 
-**V1 candidate không được dùng cho train** vì overlap audit `review_required`. V2 code mới test cục bộ; cần rerun riêng Stage 3 và xác nhận artifact v2 có audit `pass`. Locator vẫn suy ra từ cây thư mục (`locator_inferred=true`) và chưa xác minh với tar member gốc.
+**V1 candidate không được dùng cho train** vì overlap audit `review_required`. V2 candidate được người dùng báo đã chạy với audit `pass` và đúng realized counts; artifact chưa được agent đọc trực tiếp. Locator vẫn suy ra từ cây thư mục (`locator_inferred=true`) và chưa xác minh với tar member gốc.

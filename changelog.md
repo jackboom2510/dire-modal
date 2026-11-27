@@ -1,5 +1,17 @@
 # Agent changelog
 
+## 2026-10-14 — Triển khai Kaggle resource preflight trước training
+
+- **Branch:** `arena/cf863117-dire-modal` (active; base `024ffab52ef353abfebefc6c467519a569f38d13`).
+- Thêm `src/dire_modal/kaggle_celebahq_preflight.py` và Stage 4 vào standalone Stage 3 notebook: kiểm tra mount paths/split v2, disk usage, writable artifact/checkpoint paths và `nvidia-smi` metadata query-only. Báo cáo dưới `/kaggle/working`; không đọc ảnh, không ghi input, không CUDA workload/train.
+- **Kiểm chứng cục bộ:** 35 scoped tests passed; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Chưa chạy trên Kaggle; preflight status không quyết định budget sufficiency khi checkpoint/train budget chưa chốt.
+
+## 2026-10-14 — Ghi nhận Stage 3 v2 pass theo report người dùng
+
+- **Branch:** `arena/cf863117-dire-modal` (active; base `024ffab52ef353abfebefc6c467519a569f38d13`).
+- Người dùng báo v2 candidate giữ counts 2.800/4.000, loại 50 real và 0 SDv2 records có repeated SHA khỏi validation candidates, `content_overlap_audit=pass`.
+- Ghi `validation_id_list_sha256` mới và output path vào EXP-008; v1 candidate overlap bị supersede. Agent chưa đọc artifact trực tiếp; chưa train.
+
 ## 2026-10-14 — Duyệt protocol v2 content-disjoint để xử lý overlap validation
 
 - **Branch:** `arena/022ccec0-dire-modal` (active; base `f68450babe828886e93a0ccd6a89e650ca66cb51`).

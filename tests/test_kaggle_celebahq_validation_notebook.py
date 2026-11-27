@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "src/dire_modal/kaggle_celebahq_validation.py"
 NOTEBOOK = ROOT / "platforms/kaggle/celebahq-path-index.ipynb"
 STANDALONE_NOTEBOOK = ROOT / "platforms/kaggle/celebahq-validation-split.ipynb"
+PREFLIGHT_MODULE = ROOT / "src/dire_modal/kaggle_celebahq_preflight.py"
 
 
 def test_notebook_embeds_validation_module_and_all_code_cells_parse() -> None:
@@ -31,7 +32,10 @@ def test_standalone_stage_three_notebook_uses_attached_artifacts_only() -> None:
         if cell.get("cell_type") == "code"
     ]
     assert MODULE.read_text(encoding="utf-8") in code
-    runner = code[-1]
+    runner = next(
+        cell for cell in code
+        if "validation_result = create_celebahq_validation_split(" in cell
+    )
     assert "/kaggle/input/datasets/j4cknguyn/dire-celeba-hq-stage-2-artifacts-v1" in runner
     assert "ARTIFACT_DIR" in runner
     assert "integrity_manifest_path=_integrity_manifest_path" in runner
@@ -40,6 +44,20 @@ def test_standalone_stage_three_notebook_uses_attached_artifacts_only() -> None:
     for index, cell in enumerate(notebook["cells"]):
         if cell.get("cell_type") == "code":
             ast.parse("".join(cell.get("source", [])), filename=f"{STANDALONE_NOTEBOOK}:cell-{index}")
+
+
+def test_standalone_notebook_embeds_no_workload_preflight() -> None:
+    notebook = json.loads(STANDALONE_NOTEBOOK.read_text(encoding="utf-8"))
+    code = [
+        "".join(cell.get("source", []))
+        for cell in notebook["cells"]
+        if cell.get("cell_type") == "code"
+    ]
+    assert PREFLIGHT_MODULE.read_text(encoding="utf-8") in code
+    runner = next(cell for cell in code if "preflight_result = run_celebahq_training_preflight(" in cell)
+    assert "diffusionforensics/dire" in runner
+    assert "nvidia-smi" not in runner  # the helper makes a metadata-only query
+    assert "gpu_workload_started" in PREFLIGHT_MODULE.read_text(encoding="utf-8")
 
 
 def test_stage_three_runner_uses_reported_summary_fallback() -> None:
