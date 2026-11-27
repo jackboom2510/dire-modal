@@ -32,8 +32,7 @@ def test_standalone_stage_three_notebook_uses_attached_artifacts_only() -> None:
     ]
     assert MODULE.read_text(encoding="utf-8") in code
     runner = code[-1]
-    assert "dire-celebahq-stage2-artifacts-v1" in runner
-    assert "/kaggle/input/datasets/j4cknguyn" in runner
+    assert "/kaggle/input/datasets/j4cknguyn/dire-celeba-hq-stage-2-artifacts-v1" in runner
     assert "ARTIFACT_DIR" in runner
     assert "integrity_manifest_path=_integrity_manifest_path" in runner
     assert "output_dir=Path(\"/kaggle/working\")" in runner

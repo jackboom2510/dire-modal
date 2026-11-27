@@ -5,7 +5,7 @@
 - **Branch:** `arena/eb2fe5cf-dire-modal` (active; base `e81ac48242a2b87697398f082b39bd16c8409f2a`).
 - Thêm `platforms/kaggle/celebahq-validation-split.ipynb` để tiếp tục từ Stage 2 artifact đã upload, không quét lại ảnh/hash/decode. Chỉ cần summary + JSONL manifest; SQLite resume checkpoint không bắt buộc cho Stage 3.
 - Thêm `integrity_manifest_path` override để summary/manifest có thể đọc trực tiếp từ Kaggle Dataset mount read-only; output candidate vẫn ghi riêng `/kaggle/working`.
-- Cấu hình notebook cho slug `dire-celebahq-stage2-artifacts-v1`, nhận cả mount path dạng trực tiếp và dạng nested phổ biến; không thể tự attach Dataset trong Kaggle UI từ repo.
+- Cấu hình notebook theo mount path người dùng cung cấp: `/kaggle/input/datasets/j4cknguyn/dire-celeba-hq-stage-2-artifacts-v1`.
 - Cập nhật EXP-008, test detached-manifest path và notebook standalone.
 - **Kiểm chứng cục bộ:** 30 scoped tests passed; pyflakes, py_compile, `git diff --check` và JSON/code-cell parse của cả hai notebook sạch. Không có Kaggle access/run.
 

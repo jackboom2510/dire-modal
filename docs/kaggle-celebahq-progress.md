@@ -76,7 +76,7 @@ Người dùng báo:
 
 ## Next gates
 
-1. Upload Stage 2 summary JSON + JSONL manifest đã lưu local thành Kaggle Dataset input tên/slug `dire-celebahq-stage2-artifacts-v1` (SQLite là tùy chọn), rồi attach qua Kaggle Input panel cho `platforms/kaggle/celebahq-validation-split.ipynb`. Notebook đã cấu hình slug này và thử mount path thông dụng; nếu Kaggle hiển thị path khác thì sửa `ARTIFACT_DIR`. Chạy riêng notebook này; không cần mount/copy lại ảnh DIRE và không rerun Stage 1/2. Manifest được đọc trực tiếp từ input read-only.
+1. Dataset artifact đã được người dùng gắn tại `/kaggle/input/datasets/j4cknguyn/dire-celeba-hq-stage-2-artifacts-v1`. Notebook Stage 3 được cấu hình sẵn theo path này; nếu mount path thay đổi thì cập nhật `ARTIFACT_DIR`. Cần có Stage 2 summary JSON + JSONL manifest (SQLite là tùy chọn). Chạy riêng notebook này; không cần mount/copy lại ảnh DIRE và không rerun Stage 1/2. Manifest được đọc trực tiếp từ input read-only.
 2. Gửi lại output Stage 3: counts theo label, `validation_id_list_sha256`, content-overlap status và đường dẫn artifact. Dừng nếu integrity bundle không được xác nhận hoặc overlap audit là `review_required`; không tự điều chỉnh IDs.
 3. Chỉ sau candidate split và review mới preflight dung lượng/GPU/khả năng lưu-resume; sau đó mới chốt seed, budget, checkpoint selection và xin phép compute.
 4. Giữ bốn generator family CelebA-HQ (`dalle2`, `if`, `midjourney`, `stargan`) làm holdout riêng; không tune trên test. `sdv2` test là seen-generator control.
