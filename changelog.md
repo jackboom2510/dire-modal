@@ -1,5 +1,30 @@
 # Agent changelog
 
+## 2026-10-14 — Xác định được ImageNet init trong code tác giả vendored
+
+- `vendor/utils/config.py` đặt `arch="resnet50"`, `pretrained=True`; `vendor/utils/utils.py::get_network` gọi `resnet(pretrained=True)`, rồi thay FC thành một logit và init lại head.
+- `vendor/networks/resnet.py` trỏ pretrained ImageNet ResNet-50 tới `https://download.pytorch.org/models/resnet50-19c8e357.pth`. Nguồn logic đã rõ; SHA-256 của bytes và việc file/cache hiện có trên Kaggle vẫn chưa kiểm chứng. Không tải hoặc chạy model.
+
+## 2026-10-14 — Ghi nhận Stage 4 preflight pass theo report người dùng
+
+- **Branch:** `arena/8f5bd2ba-dire-modal` (active; base `1b1b3d6287b6389908ea69e5aa57d6886e0b57ad`).
+- Người dùng báo toàn bộ checks pass; GPU có 2×Tesla T4, `/kaggle/working` còn `20.924.903.424` bytes. Không workload GPU/training được chạy.
+- Cập nhật EXP-008; thêm `kaggle_celebahq_data.py` nối Stage 3 v2 ID với extracted tree bằng metadata-only index, lazy decode, class/test-family partitions và strict guards.
+- Fixture-only verification: 17 focused loader/tree/split tests passed; 26 tests with preflight/integrity suite. Không truy cập ảnh Kaggle, không GPU workload/training. Footprint và step budgets trong EXP-008 là tính toán/đề xuất, chưa benchmark.
+- Kế tiếp: người dùng chạy path-only binding check trên Kaggle tree và review budget; cần explicit go-ahead trước bất kỳ GPU smoke/training nào.
+
+## 2026-10-14 — Bổ sung GPU metadata fallback cho Stage 4
+
+- **Branch:** `arena/cf863117-dire-modal` (active; base `024ffab52ef353abfebefc6c467519a569f38d13`).
+- Sau khi Kaggle report thiếu `nvidia-smi`, bổ sung fallback query-only qua PyTorch device properties và memory info; không allocate tensors/model workload. Cập nhật preflight notebook, tests và EXP-008.
+- **Kiểm chứng cục bộ:** 37 scoped tests passed; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Chưa chạy trên Kaggle; cần upload notebook mới và rerun Stage 4 để biết GPU có được cấp hay không.
+
+## 2026-10-14 — Ghi nhận Kaggle preflight needs_attention vì GPU query
+
+- **Branch:** `arena/8f5bd2ba-dire-modal` (active; base `1b1b3d6287b6389908ea69e5aa57d6886e0b57ad`).
+- Người dùng báo mọi input/split/write probes pass; `/kaggle/working` free `20.934.410.240` bytes. `nvidia-smi` không tồn tại nên GPU query unavailable và preflight status `needs_attention`.
+- Report path `/kaggle/working/celebahq-training-preflight.json`; không image read, input write, GPU workload hay training. Ghi lại trong EXP-008; bước kế là bật/kiểm tra GPU accelerator và chỉ rerun Stage 4.
+
 ## 2026-10-14 — Triển khai Kaggle resource preflight trước training
 
 - **Branch:** `arena/cf863117-dire-modal` (active; base `024ffab52ef353abfebefc6c467519a569f38d13`).
