@@ -70,6 +70,14 @@ ADR chỉ khóa ranh giới chương trình, không khóa protocol chi tiết. C
 | Chỉ tiếp tục subset reproduction, không có track mở rộng | Không trả lời các câu hỏi mới về miền ImageNet, generator mới và kiến trúc transformer mà người dùng muốn khảo sát. |
 | Giả định Kaggle notebook hiện tại đã đủ cho training toàn diện | Notebook chỉ kiểm smoke path; giới hạn phiên, quota và persistence cần được giải quyết/test riêng. |
 
+## Addendum — 2026-10-14: cây DIRE giải nén trên Kaggle
+
+Người dùng chạy audit cấu trúc read-only trên Kaggle cho toàn bộ cây DIRE và gửi report: 422.594 file có suffix ảnh, tổng kích thước theo `stat` 40.877.686.851 byte; không có xác minh nội dung ảnh, hash hay provenance. Cây có các tầng generator lặp như `train/celebahq/real/real/<file>`; các nhánh domain như `test/lsun_bedroom/lsun_bedroom` vẫn phải được giữ nguyên cho tới khi đối chiếu semantics riêng.
+
+Người dùng chọn giữ nguyên input Kaggle read-only, không tạo bản sao/phiên Dataset đã flatten, và thích nghi reader. Với cây đã giải nén, locator cho split/validation được chọn là member-style path suy ra bằng cách bỏ thư mục generator ngoài và giữ tên generator làm prefix (ví dụ `real/real/x.png` → `real/x.png`). Đây là locator **suy luận từ layout hiện có**, không phải đường dẫn tar member đã xác minh; implementation phải gắn cờ `locator_inferred=true` và không tuyên bố provenance/archive identity. Chỉ track CelebA-HQ được adapter hóa cho research-extension; không trộn LSUN/ImageNet. Chưa chốt hash salt/rounding rule/realized validation counts, chưa đọc/giải mã ảnh, chưa train hoặc benchmark.
+
+`src/dire_modal/kaggle_celebahq_tree.py` cung cấp bước index path read-only cho tám nhóm CelebA-HQ cần thiết; hàm này chưa phải data loader pixel-level hay integration với training loop.
+
 ## Chi phí
 
 Không phát sinh chi phí compute khi ghi quyết định này. Chi phí dữ liệu/train chỉ được lập sau khi hoàn tất các quyết định mở và preflight tài nguyên.

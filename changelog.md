@@ -1,5 +1,14 @@
 # Agent changelog
 
+## 2026-10-14 — Thêm path adapter read-only cho CelebA-HQ đã giải nén
+
+- **Branch:** `arena/77ed3f4e-dire-modal` (đang active khi ghi).
+- Theo lựa chọn của người dùng, thêm `src/dire_modal/kaggle_celebahq_tree.py` để index các ảnh trong 8 nhóm CelebA-HQ của cây DIRE đã giải nén, nhận dạng `generator/generator/<file>` hoặc flat layout, từ chối cấu trúc mơ hồ/thiếu nhóm, không sửa input và không đọc/giải mã ảnh.
+- Adapter phát ra locator dạng member suy luận (ví dụ `real/<file>`), đánh dấu `locator_inferred=True`; đây chưa phải xác nhận provenance hay tar-member identity. Không tạo validation split, không tích hợp train loop và không chạy compute.
+- Ghi lựa chọn giữ Dataset read-only/không copy và giới hạn locator trong addendum ADR-0007.
+- Thêm 5 test adapter; adapter + tree audit — 8 passed. Pyflakes, py_compile và `git diff --check` sạch.
+- **Chưa làm:** chưa chạy adapter trên Kaggle thật, chưa giải mã/đọc nội dung ảnh, chưa chốt salt/rounding/count validation hoặc train budget.
+
 ## 2026-10-14 — Tạo notebook audit cây DIRE trên Kaggle chỉ đọc
 
 - **Branch:** `arena/33250b71-dire-modal` (đang active khi ghi).
