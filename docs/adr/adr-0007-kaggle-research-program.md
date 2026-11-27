@@ -76,7 +76,7 @@ Người dùng chạy audit cấu trúc read-only trên Kaggle cho toàn bộ c�
 
 Người dùng chọn giữ nguyên input Kaggle read-only, không tạo bản sao/phiên Dataset đã flatten, và thích nghi reader. Với cây đã giải nén, locator cho split/validation được chọn là member-style path suy ra bằng cách bỏ thư mục generator ngoài và giữ tên generator làm prefix (ví dụ `real/real/x.png` → `real/x.png`). Đây là locator **suy luận từ layout hiện có**, không phải đường dẫn tar member đã xác minh; implementation phải gắn cờ `locator_inferred=true` và không tuyên bố provenance/archive identity. Chỉ track CelebA-HQ được adapter hóa cho research-extension; không trộn LSUN/ImageNet. Chưa chốt hash salt/rounding rule/realized validation counts, chưa đọc/giải mã ảnh, chưa train hoặc benchmark.
 
-`src/dire_modal/kaggle_celebahq_tree.py` cung cấp bước index path read-only cho tám nhóm CelebA-HQ cần thiết; hàm này chưa phải data loader pixel-level hay integration với training loop.
+`src/dire_modal/kaggle_celebahq_tree.py` cung cấp bước index path read-only cho tám nhóm CelebA-HQ cần thiết; `platforms/kaggle/celebahq-path-index.ipynb` nhúng adapter và xuất JSON list/count sang `/kaggle/working/celebahq-path-index.json`. Đây chưa phải data loader pixel-level hay integration với training loop; notebook chưa chạy trên Kaggle thật.
 
 ## Chi phí
 
