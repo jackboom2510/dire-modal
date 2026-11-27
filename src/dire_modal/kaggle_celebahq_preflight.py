@@ -1,8 +1,9 @@
 """Read-only Kaggle resource preflight for the CelebA-HQ training gate.
 
 This performs metadata/path checks, tiny write/delete probes outside the mounted
-inputs, and an ``nvidia-smi`` information query. It does not open images, create
-a GPU context, run a GPU workload, or start training.
+inputs, and a metadata-only GPU query via ``nvidia-smi`` with a PyTorch device
+property fallback. It does not open images, allocate tensors, run a GPU workload,
+or start training.
 """
 
 from __future__ import annotations
@@ -49,6 +50,61 @@ def _probe_writable(directory: Path) -> dict[str, Any]:
         return {"status": "fail", "path": str(directory), "error": f"{type(exc).__name__}: {exc}"}
 
 
+def _torch_gpu_fallback(nvidia_smi_error: dict[str, Any]) -> dict[str, Any]:
+    """Query CUDA device metadata through PyTorch without allocating tensors."""
+    try:
+        import torch
+    except Exception as exc:  # PyTorch may be absent or fail to import on CPU-only images.
+        return {
+            "status": "unavailable",
+            "fallback": "torch.cuda metadata",
+            "nvidia_smi": nvidia_smi_error,
+            "error": f"{type(exc).__name__}: {exc}",
+            "devices": [],
+        }
+    try:
+        if not torch.cuda.is_available():
+            return {
+                "status": "no_gpu_visible",
+                "fallback": "torch.cuda metadata",
+                "nvidia_smi": nvidia_smi_error,
+                "devices": [],
+                "note": "No CUDA tensor/model was allocated; device discovery found no visible GPU.",
+            }
+        devices = []
+        for index in range(torch.cuda.device_count()):
+            properties = torch.cuda.get_device_properties(index)
+            try:
+                free_bytes, total_bytes = torch.cuda.mem_get_info(index)
+            except Exception:
+                free_bytes = total_bytes = None
+            devices.append(
+                {
+                    "index": index,
+                    "name": properties.name,
+                    "uuid": getattr(properties, "uuid", None),
+                    "memory_total_bytes": total_bytes or getattr(properties, "total_memory", None),
+                    "memory_free_bytes": free_bytes,
+                    "cuda_runtime_version": getattr(torch.version, "cuda", None),
+                }
+            )
+        return {
+            "status": "pass" if devices else "no_gpu_visible",
+            "fallback": "torch.cuda metadata",
+            "nvidia_smi": nvidia_smi_error,
+            "devices": devices,
+            "note": "Metadata query only; no tensor/model allocation or GPU computation was started.",
+        }
+    except Exception as exc:
+        return {
+            "status": "unavailable",
+            "fallback": "torch.cuda metadata",
+            "nvidia_smi": nvidia_smi_error,
+            "error": f"{type(exc).__name__}: {exc}",
+            "devices": [],
+        }
+
+
 def _query_gpu(nvidia_smi: str = "nvidia-smi", timeout_seconds: int = 10) -> dict[str, Any]:
     command = [
         nvidia_smi,
@@ -58,20 +114,11 @@ def _query_gpu(nvidia_smi: str = "nvidia-smi", timeout_seconds: int = 10) -> dic
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=timeout_seconds, check=False)
     except (FileNotFoundError, subprocess.TimeoutExpired, OSError) as exc:
-        return {
-            "status": "unavailable",
-            "command": command,
-            "error": f"{type(exc).__name__}: {exc}",
-            "devices": [],
-        }
+        error = {"command": command, "error": f"{type(exc).__name__}: {exc}"}
+        return _torch_gpu_fallback(error)
     if result.returncode != 0:
-        return {
-            "status": "unavailable",
-            "command": command,
-            "returncode": result.returncode,
-            "stderr": result.stderr.strip()[:1000],
-            "devices": [],
-        }
+        error = {"command": command, "returncode": result.returncode, "stderr": result.stderr.strip()[:1000]}
+        return _torch_gpu_fallback(error)
 
     devices = []
     for row in csv.reader(result.stdout.splitlines(), skipinitialspace=True):
@@ -79,13 +126,12 @@ def _query_gpu(nvidia_smi: str = "nvidia-smi", timeout_seconds: int = 10) -> dic
         if not values or not any(values):
             continue
         if len(values) != 5:
-            return {
-                "status": "unavailable",
+            error = {
                 "command": command,
                 "error": f"unexpected nvidia-smi row with {len(values)} fields",
                 "raw_output": result.stdout[:2000],
-                "devices": [],
             }
+            return _torch_gpu_fallback(error)
         devices.append(
             {
                 "name": values[0],
@@ -99,7 +145,7 @@ def _query_gpu(nvidia_smi: str = "nvidia-smi", timeout_seconds: int = 10) -> dic
         "status": "pass" if devices else "no_gpu_visible",
         "command": command,
         "devices": devices,
-        "note": "Metadata query only; no CUDA context or GPU workload was started.",
+        "note": "Metadata query only; no GPU workload was started.",
     }
 
 

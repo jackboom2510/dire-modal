@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -12,6 +13,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from dire_modal.kaggle_celebahq_preflight import (  # noqa: E402
     EXPECTED_SPLIT_COUNTS,
     EXPECTED_SPLIT_PROTOCOL,
+    _query_gpu,
     run_celebahq_training_preflight,
 )
 
@@ -121,3 +123,44 @@ def test_preflight_rejects_outputs_under_input(tmp_path: Path) -> None:
             checkpoint_dir=fixture["work"] / "checkpoints",
             nvidia_smi="missing",
         )
+
+
+def test_gpu_query_uses_torch_metadata_fallback_without_workload(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeCuda:
+        @staticmethod
+        def is_available() -> bool:
+            return True
+
+        @staticmethod
+        def device_count() -> int:
+            return 1
+
+        @staticmethod
+        def get_device_properties(index: int) -> SimpleNamespace:
+            assert index == 0
+            return SimpleNamespace(name="Fallback GPU", total_memory=24 * 1024**3, uuid="GPU-fallback")
+
+        @staticmethod
+        def mem_get_info(index: int) -> tuple[int, int]:
+            assert index == 0
+            return 20 * 1024**3, 24 * 1024**3
+
+    fake_torch = SimpleNamespace(cuda=FakeCuda(), version=SimpleNamespace(cuda="12.4"))
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    result = _query_gpu(nvidia_smi=str(Path("/missing/nvidia-smi")))
+
+    assert result["status"] == "pass"
+    assert result["fallback"] == "torch.cuda metadata"
+    assert result["devices"][0]["name"] == "Fallback GPU"
+    assert "no tensor/model allocation" in result["note"]
+
+
+def test_gpu_query_fallback_reports_no_visible_device(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_torch = SimpleNamespace(
+        cuda=SimpleNamespace(is_available=lambda: False),
+        version=SimpleNamespace(cuda=None),
+    )
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    result = _query_gpu(nvidia_smi=str(Path("/missing/nvidia-smi")))
+    assert result["status"] == "no_gpu_visible"
+    assert result["fallback"] == "torch.cuda metadata"

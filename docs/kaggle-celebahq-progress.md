@@ -11,12 +11,13 @@ snapshot_date: 2026-10-14
 
 ## Trạng thái hiện tại
 
-- **Branch:** `arena/cf863117-dire-modal` — active, từ base `024ffab52ef353abfebefc6c467519a569f38d13`.
+- **Branch:** `arena/8f5bd2ba-dire-modal` — active, từ base `1b1b3d6287b6389908ea69e5aa57d6886e0b57ad`.
 - **Scope đã chọn:** research-extension CelebA-HQ-SDv2; chỉ dùng `dire/train/celebahq/{real,sdv2}` và test CelebA-HQ (real, bốn họ holdout, SDv2 control). Không trộn LSUN-Bedroom/ImageNet.
 - **Dataset trên Kaggle:** input read-only tại `/kaggle/input/datasets/j4cknguyn/diffusionforensics/dire`; người dùng chọn giữ nguyên, không copy/re-upload/flatten.
 - **Đã chạy trên Kaggle theo report người dùng:** audit cây toàn bộ DIRE, path-index CelebA-HQ, Stage 2 SHA-256/full-decode (`pass`, 72.600/72.600; không có SHA/decode failures). Agent chưa truy cập trực tiếp Kaggle hay artifact.
 - **Stage 3 v2 theo report người dùng:** candidate tạo đúng counts 2.800 real / 4.000 SDv2, audit unique-content candidates ghi 50 real + 0 SDv2 bị loại khỏi validation pool; `content_overlap_audit=pass`.
-- **Stage 4 preflight:** helper và notebook cell vừa được triển khai local; chưa chạy trên Kaggle. Chưa chạy smoke train, train hoặc benchmark.
+- **Stage 4 preflight mới nhất theo report người dùng:** `pass`; tất cả input/split/write probes pass, GPU query thấy 2×Tesla T4 (15.360 MiB mỗi GPU). Không có image read, input write, GPU workload hoặc training.
+- **Còn trước training:** loader/split binding đã được triển khai và test bằng fixture metadata cục bộ; chưa chạy trên cây Kaggle thực. Cần xác nhận trên mount bằng metadata/path-only check, chốt seed/budget/checkpoint policy và xin phép trước compute. Chưa smoke train, train hay benchmark.
 
 ## Bằng chứng do người dùng cung cấp
 
@@ -87,6 +88,26 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 
 Đây là console output người dùng cung cấp, chưa được agent đọc file artifact trên Kaggle. Theo report, v2 đạt exact counts và không còn SHA trùng qua train/validation; v1 ID-list hash đã superseded.
 
+### Stage 4 resource preflight — kết quả do người dùng cung cấp
+
+- Toàn bộ input checks pass: DIRE root/train real/train SDv2, Stage 2 artifact Dataset, summary và JSONL manifest đều tìm thấy.
+- Stage 3 v2 check pass; ID-list SHA-256 `c635c38a5888ef4e0196423dd8f342f412dc15ea633c17d835330c740d7dc9fd`; counts 2.800/4.000; overlap pass.
+- `/kaggle/working`: total `20.957.446.144` bytes, used `6.258.688`, free `20.934.410.240` bytes. Artifact/checkpoint write-delete probes đều pass.
+- GPU query unavailable: `nvidia-smi` executable không tồn tại; overall status `needs_attention`.
+- Execution flags: không đọc image contents, không thử ghi input, không chạy GPU workload, không training. Report `/kaggle/working/celebahq-training-preflight.json`.
+
+Đây là report đầu do người dùng dán, chưa được agent truy cập trực tiếp. Lần đó không có `nvidia-smi`, nên GPU chưa được xác nhận; sau đó người dùng rerun Stage 4 và báo thành công như dưới đây.
+
+### Stage 4 rerun — kết quả do người dùng cung cấp
+
+- `Preflight status: pass`; toàn bộ input checks, Stage 3 v2 checks, disk query và write/delete probes pass.
+- Working filesystem: total `20.957.446.144` bytes, used `15.765.504`, free `20.924.903.424` bytes.
+- GPU: 2× Tesla T4; mỗi GPU total `15.360 MiB`, free `14.912 MiB`; driver `580.178.04`.
+- Execution flags đều false: image contents không đọc, input không ghi, không GPU workload, không training.
+- Report `/kaggle/working/celebahq-training-preflight.json`.
+
+Đây là output người dùng dán, chưa được agent đọc file report. Pass chỉ xác nhận preflight checks; không chứng minh 20.9GB đủ cho budget/checkpoint chưa chốt.
+
 ## Quyết định người dùng đã chọn
 
 - Giữ Kaggle input read-only; không tạo bản Dataset đã flatten để tránh copy/re-upload.
@@ -95,7 +116,7 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 - Stage 2 SHA-256 + full image decode cho 72.600 file được người dùng báo pass, không lỗi, không resume. Implementation được thiết kế read-only/no-GPU; console excerpt không bao gồm các cờ `input_modified`/`gpu_work_started`.
 - Người dùng đã **chốt** validation protocol: salt `dire-celebahq-val-v1`; SHA-256 trên salt + NUL + `member_locator_inferred`, sort digest tăng dần (tie-break locator), lấy `round-half-up(0,10 × N)` mỗi class.
 - Người dùng đã duyệt protocol revision v2: loại khỏi validation candidate pool mọi train record có SHA-256 xuất hiện hơn một lần trên toàn bộ hai label; vẫn xếp các ứng viên còn lại theo salt/hash rank đã chốt, chọn đủ 10% dựa trên tổng records mỗi label. Duplicate groups giữ nguyên trong training. V2 giữ counts nhưng thay validation IDs; đây là protocol khác v1 và phải ghi version riêng.
-- V1 Kaggle candidate có overlap nên không dùng để train. Người dùng đã chạy lại standalone Stage 3 v2 và báo audit pass; v2 là split candidate hiện hành. Chưa train; bước tiếp theo là preflight Kaggle và chốt budget/seed.
+- V1 Kaggle candidate có overlap nên không dùng để train. Stage 3 v2 và Stage 4 preflight pass theo report người dùng. Chưa train; seed/budget/checkpoint policy vẫn chưa khóa.
 - Chưa khóa seed/training budget; chưa train hoặc benchmark.
 
 ## Stage integrity và validation implementation
@@ -104,15 +125,25 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 - Có thể resume khi cùng cây dữ liệu bất biến và fingerprint metadata (relative path, size, mtime) khớp. Hash và decode là hai lượt đọc riêng. Tổng `stat` bytes của các file CelebA-HQ trong audit là **5.775.377.067 byte cho một lượt**; lượng I/O thực tế của hai lượt và thời gian chưa đo.
 - Hash xác định bytes hiện đang mount; không xác nhận archive provenance, source-image identity hay train/test independence.
 - Stage 3 v2: `src/dire_modal/kaggle_celebahq_validation.py`, embed trong notebook tích hợp và standalone `platforms/kaggle/celebahq-validation-split.ipynb`. Đọc summary/JSONL read-only từ Kaggle Dataset, không rerun Stage 1/2; trước khi chọn 10% mỗi label, bỏ toàn bộ validation candidates có SHA-256 lặp trong combined train pool. Duplicate records còn lại được giữ trong training; count mục tiêu vẫn tính trên tổng class records. Xuất artifact v2 riêng, không ghi đè v1.
-- Stage 4 preflight mới: `src/dire_modal/kaggle_celebahq_preflight.py`, embed thành 2 cell cuối của standalone notebook. Kiểm tra input paths, Stage 3 v2 status/counts, disk free, write/delete probe cho artifact/checkpoint directories, GPU metadata qua `nvidia-smi` và ghi report. Không đọc ảnh/khởi tạo CUDA workload/train hoặc ghi vào `/kaggle/input`; dung lượng chỉ được đo, chưa thể xác định đủ hay không cho tới khi budget/checkpoint sizes được chốt.
-- Test cục bộ sau Stage 4 preflight: **35 passed**; pyflakes, py_compile, notebook parse và `git diff --check` sạch. Không test nào truy cập Kaggle.
+- Stage 4 preflight mới: `src/dire_modal/kaggle_celebahq_preflight.py`, embed thành 2 cell cuối của standalone notebook. Kiểm tra input paths, Stage 3 v2 status/counts, disk free, write/delete probe cho artifact/checkpoint directories, GPU metadata qua `nvidia-smi` (PyTorch device-properties fallback nếu thiếu binary) và ghi report. Không đọc ảnh, cấp tensor/workload GPU, train hoặc ghi vào `/kaggle/input`; dung lượng chỉ được đo, chưa thể xác định đủ hay không cho tới khi budget/checkpoint sizes được chốt.
+- `src/dire_modal/kaggle_celebahq_data.py` nối v2 artifact với extracted tree thành lazy datasets: check protocol/status/zero-overlap/id-list SHA/root/counts/locator, path membership và Stage 2 metadata fingerprint (path/size/mtime, không đọc bytes); train = toàn bộ train pool trừ validation IDs; test datasets giữ riêng theo từng generator. Xây index chỉ đọc metadata/path; `PIL.Image.open` chỉ nằm trong explicit `__getitem__`. Không tự tạo DataLoader, cấp GPU hoặc ghi dữ liệu.
+- Kiểm chứng loader/split bằng fixture metadata-only (không mở file ảnh): scoped tests **17 passed** (data/tree/split); wider preflight/integrity suite **26 passed**. Đây xác nhận logic với fixture, **chưa xác nhận** artifact thật hoặc tree Kaggle từ agent.
+- Checkpoint footprint là ước tính giải tích, không phải file đã ghi: canonical ResNet-50 1-logit có khoảng 23.510.081 tham số; FP32 model-only ~94,0 MB; `state_dict + Adam moments` resumable ~282,1 MB. Giữ một `last_resume` + một `best_model` ~376 MB; trong lúc atomic replace của resumable, khoảng cực đại khoảng 658 MB (old + temp + best), chưa tính overhead/runtime/logs. Không lưu full optimizer checkpoint theo từng epoch lâu dài. 2 GiB output reserve/run là safety allowance đề xuất, không phải đo.
+- Tập train sau split = 61.200 mẫu. Batch hiệu dụng 64 tương đương ceil(61.200/64)=957 optimizer steps/epoch; 20-epoch cap ~19.140 steps/run, 3 seeds ~57.420. Wall-clock chưa biết do không benchmark. Free-space snapshot user-reported ~20,9 GB cao hơn output reserve 2 GiB/run, nhưng cần kiểm tra lại trước khi run và không tính đây là xác nhận cuối.
 
 ## Next gates
 
-1. Cập nhật standalone Kaggle notebook mới nhất và gắn cả DIRE input Dataset + Stage 2 artifact Dataset. Chạy 2 code cell cuối (Stage 4 preflight) trong cùng runtime đã tạo v2 split; nếu runtime mới/mất split file thì chạy Stage 3 v2 trước rồi Stage 4. Stage 4 chỉ truy vấn GPU metadata; để nhận tên/memory GPU cần accelerator được bật, nhưng cell không chạy workload.
-2. Gửi `celebahq-training-preflight.json` summary: status, disk free bytes, input/split checks, write probes, GPU query. `needs_attention` nghĩa là xử lý lỗi input/write/GPU trước. `pass` chỉ xác nhận checks hiện tại; chưa kết luận disk đủ cho budget chưa chốt.
-3. Dựa trên preflight mới chốt seed, train budget/steps, checkpoint selection và resume/export plan; xin phép trước compute.
-4. Giữ bốn generator family CelebA-HQ (`dalle2`, `if`, `midjourney`, `stargan`) làm holdout riêng; không tune trên test. `sdv2` test là seen-generator control.
+1. Chạy metadata/path-only binding check với `kaggle_celebahq_data.py` trên mount và artifact thật để xác nhận source fingerprint, validation IDs/counts và partition membership. Local fixture tests pass nhưng Kaggle runtime chưa được agent kiểm chứng; không mở/đọc nội dung ảnh.
+2. Nguồn khởi tạo đã được xác định trong bản code tác giả được vendored: `DefaultConfigs.pretrained=True`; `get_network` gọi `resnet50(pretrained=True)` để tải ImageNet weights từ `https://download.pytorch.org/models/resnet50-19c8e357.pth`, rồi thay và khởi tạo lại `fc` 1-logit. Còn cần xác nhận đúng bytes/hash và khả dụng/cache trên Kaggle (không tự tải mạng hay ghi vào input). Review đề xuất retention 2 GiB/run, seed/step cap và metric chọn checkpoint; kiểm tra free space lại trước compute.
+3. Chỉ sau khi các gates trên pass và người dùng explicit go-ahead mới chạy GPU smoke train có giới hạn; hiện chưa train/full benchmark.
+4. Báo cáo macro-AP theo từng unseen generator (`dalle2`, `if`, `midjourney`, `stargan`), AP raw prevalence, AUROC, counts/CI; giữ `sdv2` là seen-generator control và không tune test threshold.
+
+## Ước tính tài nguyên và đề xuất chưa được khóa
+
+- **Storage:** một model ResNet-50 1-logit FP32 (23.510.081 params, suy ra từ kiến trúc canonical, chưa được instantiate ở Kaggle) ≈94,0 MB. Resumable checkpoint với model + Adam m/v ≈282,1 MB; một best model-only ≈94,0 MB. Retain duy nhất `last_resume.pt` + `best_model.pt` ≈376 MB; khi ghi atomically `last_resume.tmp` còn tồn tại song song với bản cũ, đỉnh lý thuyết khoảng 658 MB. Đề xuất đặt 2 GiB/run cho checkpoint/temp/log/metadata/headroom; ba seed tuần tự và retention như trên ≈6 GiB, dưới free-space user-reported 20.924.903.424 bytes. Đây là capacity planning, chưa đo file thật; kiểm tra free space lại ngay trước compute. Không giữ optimizer checkpoint mọi epoch (20 epoch × full resume state đã ~5,64 GB/run trước temp/overhead).
+- Input được mount read-only, nên loader không tạo bản dữ liệu: chỉ metadata/path index trong RAM, decode on demand. Không có image cache/output copy được tính; nếu implementation sau này cache ảnh thì cần budget mới. 72.600 records × path metadata memory chưa được đo.
+- **Steps:** 61.200 training IDs sau v2. Batch hiệu dụng 64 tạo 957 optimizer updates/epoch; đề xuất cap 20 epochs = 19.140 updates/run, patience 5 theo validation-selected metric; 3 seeds tuần tự = tối đa 57.420 updates. Wall-clock/throughput cố ý chưa ước tính do user cấm benchmark.
+- **Đề xuất để review, chưa khóa:** seed list `3407, 3408, 3409` (3407 cho run đầu; các seed bổ sung để báo seed variability riêng), một T4 tuần tự, microbatch 32 × accumulation 2 (effective 64), FP16 autocast/GradScaler nếu được xác nhận an toàn. Loss BCE-with-logits trên mọi train sample, `pos_weight = 25.200 / 36.000 = 0,7`; không resample/loại duplicate train records. Chọn best checkpoint chỉ bằng validation AP (val có 2.800 real / 4.000 SDv2; ghi prevalence), threshold 0,5 chỉ cho ACC phụ. Cần chốt chính thức hparams, metric chọn checkpoint và nguồn ImageNet weights trước khi chạy.
 
 ## Protocol validation đã chốt
 

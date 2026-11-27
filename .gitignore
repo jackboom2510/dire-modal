@@ -14,6 +14,7 @@ manifests/*.tsv
 !manifests/*_sha256.tsv
 
 # Artifact lớn / tạm
+.kaggle-staging/
 *.log
 *.pth
 *.pt
