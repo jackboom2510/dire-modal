@@ -1,5 +1,12 @@
 # Agent changelog
 
+## 2026-10-14 — Bỏ metadata-fingerprint gate khỏi Stage 5 binding theo yêu cầu người dùng
+
+- Binding không còn tính fingerprint trên cây mount hiện tại hay yêu cầu fingerprint trong split artifact; tránh từ chối cùng bộ dữ liệu chỉ vì metadata phiên mount khác.
+- Giữ nguyên các kiểm tra protocol, content-overlap status, validation-ID-list SHA-256, root, path/locator/label membership, train/validation disjointness và counts. Báo cáo Stage 5 ghi rõ metadata fingerprint check không được thực hiện.
+- Bỏ cell audit SHA-256 bổ sung khỏi notebook binding; Stage 5 không đọc image bytes, decode ảnh, dùng GPU hay ghi vào input. Đây là quyết định bỏ kiểm tra, không phải xác nhận bytes giữa các phiên giống hệt nhau.
+- Chưa chạy Kaggle; cần publish/attach code Dataset mới và notebook đã cập nhật. Cục bộ sẽ chạy tests và kiểm tra notebook trước khi bàn giao.
+
 ## 2026-10-14 — Sửa import setup cho attached Kaggle code Dataset
 
 - Screenshot cho thấy `ModuleNotFoundError: No module named 'dire_modal'` ngay tại dòng import: Python chưa tìm package, nên call builder chưa bắt đầu quét dữ liệu.

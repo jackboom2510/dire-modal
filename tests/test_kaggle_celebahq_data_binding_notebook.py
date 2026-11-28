@@ -16,7 +16,7 @@ def test_data_binding_notebook_code_cells_parse() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    assert len(code_cells) == 3
+    assert len(code_cells) == 2
     for index, source in enumerate(code_cells):
         ast.parse(source, filename=f"{NOTEBOOK}:cell-{index}")
 
@@ -43,21 +43,20 @@ def test_data_binding_notebook_checks_locked_counts_without_iterating_images() -
     assert "training_started': False" in code
 
 
-def test_binding_notebook_has_read_only_stage2_hash_comparison_cell() -> None:
+def test_binding_notebook_discloses_metadata_fingerprint_is_skipped() -> None:
     notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
-    code_cells = [
+    code = "\n".join(
         "".join(cell["source"])
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
-    ]
-    audit = code_cells[-1]
-    assert "EXPECTED_STAGE2_FINGERPRINT" in audit
-    assert "mode=ro" in audit
-    assert "current mounted file SHA-256 vs Stage 2 SQLite SHA-256" in audit
-    assert "hash_mismatches" in audit
-    assert "mtime_ns_mismatches" in audit
-    assert "image_decode_performed': False" in audit
-    assert "gpu_workload_started': False" in audit
-    assert "metadata fingerprint guard" in audit
-    assert "Image.open" not in audit
-    assert "torch" not in audit.lower()
+    )
+    markdown = "\n".join(
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "markdown"
+    )
+    assert "metadata_fingerprint_check': 'not_performed'" in code
+    assert "source_fingerprint" not in code
+    assert "does not compare per-run metadata fingerprints" in markdown
+    assert "Image.open" not in code
+    assert "torch" not in code.lower()
