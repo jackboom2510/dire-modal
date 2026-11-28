@@ -1,5 +1,12 @@
 # Agent changelog
 
+## 2026-10-14 — Add Stage 9 training launch cell; Kaggle execution not available here
+
+- User explicitly requested beginning Stage 9 after supplying a passing two-T4 metadata report.
+- Added Stage 9 notebook cell that verifies fresh Stage 7 parallel schedule, Stage 5/6 reports, Stage 8 two-UUID metadata, code package source and fresh 6-GiB suite reserve, then calls the two-worker schedule with resume enabled. Writes a final run ledger beneath `/kaggle/working`.
+- Added fail-closed checks in runner for metadata-only GPU report and Stage 7 no-image/no-deserialization state; interrupts terminate launched peer workers. No training cell was executed from this checkout; Kaggle runtime is not accessible here.
+- Verification: **54 CelebA-HQ tests passed**; pyflakes, py_compile, notebook code-cell AST parsing, and `git diff --check` passed. User-provided Stage 8 JSON is not independently verified by agent.
+
 ## 2026-10-14 — Implement schedule for two independent T4 seed workers; no training run
 
 - Người dùng chọn lịch dùng cả hai T4: seeds 3407/3408 chạy đồng thời mỗi seed trên một UUID GPU, sau đó seed 3409 trên GPU trống. Giữ nguyên cấu hình optimizer/microbatch/accumulation của từng run; không DDP.
