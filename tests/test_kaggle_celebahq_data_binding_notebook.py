@@ -105,6 +105,11 @@ def test_training_plan_cell_is_cpu_only_and_does_not_call_trainer() -> None:
     ]
     plan_cell = code_cells[-3]
     assert "build_training_plan(" in plan_cell
+    assert "expected_execution_schedule" in plan_cell
+    assert "parallel_independent_seeds" in plan_cell
+    assert "waves': [[3407, 3408], [3409]]" in plan_cell
+    assert "attached trainer is stale" in plan_cell
+    assert "'execution_schedule': expected_execution_schedule" in plan_cell
     assert "shutil.disk_usage(working).free" in plan_cell
     assert "celebahq-training-plan.json" in plan_cell
     assert "training_started': False" in plan_cell
