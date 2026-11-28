@@ -87,18 +87,47 @@ def _counts() -> tuple[dict[int, int], dict[tuple[str, int], int]]:
     return {0: 1, 1: 1}, {("real", 0): 2, ("sdv2", 1): 2}
 
 
+def test_optimized_source_fingerprint_matches_original_stat_recipe(tmp_path: Path) -> None:
+    import hashlib as local_hashlib
+
+    root, _artifact = _tiny_fixture(tmp_path)
+    records = scan_celebahq_tree(root)
+    digest = local_hashlib.sha256()
+    for record in sorted(records, key=lambda row: row.relative_path):
+        stat = record.path.stat()
+        for value in (
+            record.relative_path,
+            record.split,
+            record.generator,
+            str(int(record.label)),
+            record.member_locator,
+            str(stat.st_size),
+            str(stat.st_mtime_ns),
+        ):
+            digest.update(value.encode("utf-8"))
+            digest.update(b"\0")
+        digest.update(b"\n")
+    digest.update(str(root).encode("utf-8"))
+
+    assert _source_fingerprint(records, root) == digest.hexdigest()
+
+
 def test_builds_disjoint_lazy_datasets_from_v2_metadata_only(tmp_path: Path) -> None:
     root, artifact = _tiny_fixture(tmp_path)
     before = {p.relative_to(root).as_posix(): p.stat().st_size for p in root.rglob("*") if p.is_file()}
     val_counts, train_counts = _counts()
+    progress: list[str] = []
 
     bundle = build_celebahq_datasets(
         root,
         artifact,
         expected_validation_counts=val_counts,
         expected_train_counts=train_counts,
+        progress_callback=progress.append,
     )
 
+    assert any("path scan complete" in message for message in progress)
+    assert any("metadata fingerprint" in message for message in progress)
     assert len(bundle.train) == 2
     assert len(bundle.validation) == 2
     assert set(bundle.test_by_generator) == {

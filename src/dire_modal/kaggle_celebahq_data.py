@@ -84,6 +84,7 @@ def build_celebahq_datasets(
     transform_eval: Callable[[Any], Any] | None = None,
     expected_validation_counts: dict[int, int] | None = None,
     expected_train_counts: dict[tuple[str, int], int] | None = None,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> CelebAHQDataBundle:
     """Validate Stage 3 v2 IDs and return lazy datasets over the mounted tree.
 
@@ -136,8 +137,14 @@ def build_celebahq_datasets(
             f"validation counts differ from expected: observed={observed_val}, expected={expected_val}"
         )
 
-    records = scan_celebahq_tree(root)
-    current_fingerprint = _source_fingerprint(records, root)
+    if progress_callback is not None:
+        progress_callback("Starting metadata-only tree scan; image contents will not be opened.")
+    records = scan_celebahq_tree(root, progress_callback=progress_callback)
+    if progress_callback is not None:
+        progress_callback(f"Tree path inventory complete: {len(records):,} image paths.")
+    current_fingerprint = _source_fingerprint(
+        records, root, progress_callback=progress_callback
+    )
     if current_fingerprint != source_fingerprint:
         raise CelebAHQSplitError(
             "mounted tree metadata fingerprint differs from the Stage 2 source; "

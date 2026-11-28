@@ -14,7 +14,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 CHUNK_SIZE = 1024 * 1024
 
@@ -23,25 +23,43 @@ def _inside(path: Path, root: Path) -> bool:
     return path == root or root in path.parents
 
 
-def _source_fingerprint(records: list[Any], root: Path) -> str:
+def _source_fingerprint(
+    records: list[Any],
+    root: Path,
+    *,
+    progress_callback: Callable[[str], None] | None = None,
+    progress_every: int = 10_000,
+) -> str:
+    """Fingerprint inventory metadata only; optionally report long scans."""
+    if progress_every < 1:
+        raise ValueError("progress_every must be positive")
     digest = hashlib.sha256()
-    for record in sorted(records, key=lambda row: row.relative_path):
-        path = Path(record.path).expanduser().resolve()
-        if not _inside(path, root):
+    ordered = sorted(records, key=lambda row: row.relative_path)
+    total = len(ordered)
+    for index, record in enumerate(ordered, start=1):
+        path = Path(record.path).expanduser()
+        if (
+            not path.is_absolute()
+            or not _inside(path, root)
+            or path.relative_to(root).as_posix() != record.relative_path
+        ):
             raise ValueError(f"indexed input path escapes DIRE root: {record.relative_path}")
-        stat = path.stat()
         for value in (
             record.relative_path,
             record.split,
             record.generator,
             str(int(record.label)),
             record.member_locator,
-            str(stat.st_size),
-            str(stat.st_mtime_ns),
+            str(record.size_bytes),
+            str(record.mtime_ns),
         ):
             digest.update(value.encode("utf-8"))
             digest.update(b"\0")
         digest.update(b"\n")
+        if progress_callback is not None and (
+            index % progress_every == 0 or index == total
+        ):
+            progress_callback(f"metadata fingerprint: {index:,}/{total:,}")
     digest.update(str(root).encode("utf-8"))
     return digest.hexdigest()
 

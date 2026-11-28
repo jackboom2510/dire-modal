@@ -1,9 +1,32 @@
 # Agent changelog
 
+## 2026-10-14 — Sửa import setup cho attached Kaggle code Dataset
+
+- Screenshot cho thấy `ModuleNotFoundError: No module named 'dire_modal'` ngay tại dòng import: Python chưa tìm package, nên call builder chưa bắt đầu quét dữ liệu.
+- Cập nhật Stage 5 notebook để dò package root ở mount-level, thêm parent vào `sys.path`, rồi import; không recurse qua image tree.
+- Không Kaggle/GPU/image access được chạy trong checkout.
+
+## 2026-10-14 — Tối ưu metadata scan sau khi cell kéo dài trên Kaggle
+
+- Phân tích code: lượt binder cũ quét tree, gọi `is_symlink`/`is_file` rồi fingerprint lại từng file qua `Path.resolve()` và `stat()`. Đây là nhiều metadata calls trên Kaggle mount; cell không có progress output nếu package cũ, nên không thể phân biệt chậm với treo. Chưa có Kaggle log để xác định latency chính xác.
+- Refactor inventory sang `os.scandir`/`DirEntry.stat` và tái dùng `size/mtime` trong fingerprint, giữ nguyên recipe/fingerprint; thêm tiến độ định kỳ. Cần upload code Dataset version mới để Kaggle dùng tối ưu này.
+- Verification: **37 tests** CelebA-HQ passed; pyflakes, py_compile, notebook parse và diff check sạch. Không truy cập Kaggle/image contents/GPU.
+
+## 2026-10-14 — Triển khai Stage 5 metadata-only binding notebook
+
+- Thêm `platforms/kaggle/celebahq-data-binding.ipynb` để bind loader với split v2/tree thật khi Accelerator=None; report chỉ ghi ở `/kaggle/working`.
+- Thêm progress callback cho tree scan/fingerprint dài, đồng bộ module trong path-index notebook, và test notebook/fixture metadata-only.
+- **Kiểm chứng cục bộ:** 36 `tests/test_kaggle_celebahq*.py` passed; pyflakes, py_compile, `git diff --check` sạch. Chưa chạy Kaggle thật, không ảnh/GPU/training.
+
+## 2026-10-14 — Ghi nhận cell đọc ImageNet checkpoint thành công theo người dùng
+
+- Người dùng xác nhận xem cell đọc `resnet50-19c8e357.pth` là pass sau khi cập nhật Kaggle Dataset version. Không có byte size/full SHA-256 output trong chat, nên chưa ghi giá trị hash cụ thể.
+- Bước kế tiếp còn lại trước training: chạy loader/split binding metadata-only trên Kaggle tree và Stage 3 v2 artifact. Không GPU workload hoặc training.
+
 ## 2026-10-14 — Xác định được ImageNet init trong code tác giả vendored
 
 - `vendor/utils/config.py` đặt `arch="resnet50"`, `pretrained=True`; `vendor/utils/utils.py::get_network` gọi `resnet(pretrained=True)`, rồi thay FC thành một logit và init lại head.
-- `vendor/networks/resnet.py` trỏ pretrained ImageNet ResNet-50 tới `https://download.pytorch.org/models/resnet50-19c8e357.pth`. Nguồn logic đã rõ; SHA-256 của bytes và việc file/cache hiện có trên Kaggle vẫn chưa kiểm chứng. Không tải hoặc chạy model.
+- `vendor/networks/resnet.py` trỏ pretrained ImageNet ResNet-50 tới `https://download.pytorch.org/models/resnet50-19c8e357.pth`. Sau đó người dùng báo cell đọc file trên Kaggle thành công; output full SHA-256/size chưa được cung cấp. Agent không tải hoặc đọc checkpoint.
 
 ## 2026-10-14 — Ghi nhận Stage 4 preflight pass theo report người dùng
 
