@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 IMAGE_SUFFIXES = {".bmp", ".jpeg", ".jpg", ".png", ".tif", ".tiff", ".webp"}
 REQUIRED_GROUPS: tuple[tuple[str, str], ...] = (
@@ -35,7 +36,7 @@ class CelebAHQTreeLayoutError(ValueError):
 
 @dataclass(frozen=True)
 class CelebAHQImage:
-    """One image path and its class metadata; no image bytes are read."""
+    """One image path and metadata; no image bytes are read."""
 
     split: str
     generator: str
@@ -45,35 +46,65 @@ class CelebAHQImage:
     member_locator: str
     locator_inferred: bool
     leaf_layout: str
+    size_bytes: int
+    mtime_ns: int
 
 
-def _iter_image_files(directory: Path):
-    """Yield regular image files in stable order without following symlinks."""
-    for current, dirnames, filenames in os.walk(directory, topdown=True, followlinks=False):
-        current_path = Path(current)
-        dirnames[:] = sorted(
-            name for name in dirnames
-            if not (current_path / name).is_symlink()
-        )
-        for filename in sorted(filenames):
-            path = current_path / filename
-            if path.is_symlink() or path.suffix.lower() not in IMAGE_SUFFIXES:
+def _iter_image_files(
+    directory: Path,
+    *,
+    progress_callback: Callable[[str], None] | None = None,
+    progress_label: str = "",
+):
+    """Yield ``(path, stat)`` using scandir metadata without following symlinks.
+
+    Keeping the ``DirEntry.stat`` result avoids later resolving and statting
+    every file a second time when building the Stage 2 metadata fingerprint.
+    """
+    yielded = 0
+    stack = [directory]
+    while stack:
+        current = stack.pop()
+        with os.scandir(current) as iterator:
+            entries = sorted(iterator, key=lambda entry: entry.name)
+        child_directories: list[Path] = []
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False):
+                child_directories.append(Path(entry.path))
                 continue
-            if path.is_file():
-                yield path
+            if Path(entry.name).suffix.lower() not in IMAGE_SUFFIXES:
+                continue
+            if not entry.is_file(follow_symlinks=False):
+                continue
+            stat = entry.stat(follow_symlinks=False)
+            yielded += 1
+            if progress_callback is not None and yielded % 5_000 == 0:
+                progress_callback(
+                    f"path scan {progress_label}: {yielded:,} image files indexed"
+                )
+            yield Path(entry.path), stat
+        # Match os.walk's stable top-down traversal order.
+        stack.extend(reversed(child_directories))
 
 
-def _direct_images(directory: Path) -> list[Path]:
-    return sorted(
-        path for path in directory.iterdir()
-        if path.is_file()
-        and not path.is_symlink()
-        and path.suffix.lower() in IMAGE_SUFFIXES
-    )
+def _direct_images(directory: Path) -> list[tuple[Path, os.stat_result]]:
+    with os.scandir(directory) as iterator:
+        entries = sorted(iterator, key=lambda entry: entry.name)
+    images: list[tuple[Path, os.stat_result]] = []
+    for entry in entries:
+        if Path(entry.name).suffix.lower() not in IMAGE_SUFFIXES:
+            continue
+        if entry.is_file(follow_symlinks=False):
+            images.append((Path(entry.path), entry.stat(follow_symlinks=False)))
+    return images
 
 
-def scan_celebahq_tree(root: str | Path) -> list[CelebAHQImage]:
-    """Index the selected CelebA-HQ train/test classes from an extracted tree.
+def scan_celebahq_tree(
+    root: str | Path,
+    *,
+    progress_callback: Callable[[str], None] | None = None,
+) -> list[CelebAHQImage]:
+    """Index selected CelebA-HQ groups from an extracted tree.
 
     ``root`` is the mounted ``dire`` directory. For each generator folder, the
     scanner prefers its repeated same-name child (``real/real``) when it holds
@@ -81,10 +112,10 @@ def scan_celebahq_tree(root: str | Path) -> list[CelebAHQImage]:
     directly and below the repeated child, it raises instead of silently
     choosing one. A flat ``real/<image>`` layout is also accepted.
 
-    ``member_locator`` approximates a full member-style locator such as
+    ``member_locator`` approximates a member-style locator such as
     ``real/0001.png`` by prefixing the generator name to the path under the
-    selected leaf. ``locator_inferred`` remains true because this dataset is
-    extracted and the original tar archives were not verified in this scan.
+    selected leaf. ``locator_inferred`` remains true because the dataset is
+    extracted and original tar member paths were not verified in this scan.
     """
     root_path = Path(root).expanduser().resolve()
     if not root_path.is_dir():
@@ -101,19 +132,27 @@ def scan_celebahq_tree(root: str | Path) -> list[CelebAHQImage]:
         direct = _direct_images(outer)
         repeated = outer / generator
         repeated_images = (
-            list(_iter_image_files(repeated))
+            list(_iter_image_files(
+                repeated,
+                progress_callback=progress_callback,
+                progress_label=f"{split}/celebahq/{generator}",
+            ))
             if repeated.is_dir() and not repeated.is_symlink()
             else []
         )
-        other_nested_images = []
+        other_nested_images: list[tuple[Path, os.stat_result]] = []
         for child in sorted(outer.iterdir()):
             if child == repeated or not child.is_dir() or child.is_symlink():
                 continue
-            other_nested_images.extend(_iter_image_files(child))
+            other_nested_images.extend(_iter_image_files(
+                child,
+                progress_callback=progress_callback,
+                progress_label=f"unexpected nested directory {child}",
+            ))
         if other_nested_images:
             raise CelebAHQTreeLayoutError(
                 f"unexpected nested image directories under {outer}: "
-                f"{[path.relative_to(outer).as_posix() for path in other_nested_images[:5]]}"
+                f"{[path.relative_to(outer).as_posix() for path, _ in other_nested_images[:5]]}"
             )
         if direct and repeated_images:
             raise CelebAHQTreeLayoutError(
@@ -131,7 +170,12 @@ def scan_celebahq_tree(root: str | Path) -> list[CelebAHQImage]:
             missing.append(f"{split}/celebahq/{generator} (no image files in expected leaf)")
             continue
 
-        for path in files:
+        if progress_callback is not None:
+            progress_callback(
+                f"path scan complete {split}/celebahq/{generator}: {len(files):,} images"
+            )
+
+        for path, stat in files:
             relative = path.relative_to(root_path).as_posix()
             member_inside_leaf = path.relative_to(leaf_root).as_posix()
             member_locator = (Path(generator) / member_inside_leaf).as_posix()
@@ -144,6 +188,8 @@ def scan_celebahq_tree(root: str | Path) -> list[CelebAHQImage]:
                 member_locator=member_locator,
                 locator_inferred=True,
                 leaf_layout=leaf_layout,
+                size_bytes=stat.st_size,
+                mtime_ns=stat.st_mtime_ns,
             ))
 
     if missing:
