@@ -11,7 +11,7 @@ snapshot_date: 2026-10-14
 
 ## Trạng thái hiện tại
 
-- **Branch:** `arena/a5bd6006-dire-modal` — active, từ base `5a3c87802f894fd0370128a0754819010ab81b1f`.
+- **Branch:** `arena/32677e5b-dire-modal` — active, từ base `a11205902480c2dfbc62687970fd0c52b60dfb11`.
 - **Scope đã chọn:** research-extension CelebA-HQ-SDv2; chỉ dùng `dire/train/celebahq/{real,sdv2}` và test CelebA-HQ (real, bốn họ holdout, SDv2 control). Không trộn LSUN-Bedroom/ImageNet.
 - **Dataset trên Kaggle:** input read-only tại `/kaggle/input/datasets/j4cknguyn/diffusionforensics/dire`; người dùng chọn giữ nguyên, không copy/re-upload/flatten.
 - **Đã chạy trên Kaggle theo report người dùng:** audit cây toàn bộ DIRE, path-index CelebA-HQ, Stage 2 SHA-256/full-decode (`pass`, 72.600/72.600; không có SHA/decode failures). Agent chưa truy cập trực tiếp Kaggle hay artifact.
@@ -23,7 +23,7 @@ snapshot_date: 2026-10-14
 - **Stage 7/8/9:** Stage 7 assert lịch đúng wave `[3407,3408]` rồi `[3409]`; Stage 8 metadata-only pass theo user report. User xác nhận checkpoint lấy từ URL chính thức torchvision và cho phép legacy conversion. Runner mới chuyển legacy `.tar` đúng một lần trên CPU sau hash/name gate, strict-load vào ResNet-50, lưu safe checkpoint và xác nhận `weights_only=True`; worker sau đó chỉ nạp bản safe.
 - **Stage 9 hoàn tất theo report người dùng:** report gốc được lưu nguyên văn tại `docs/reports/celebahq-stage9-parallel-run-report.json`. Status `complete`, cả ba worker returncode 0; seeds 3407/3408 chạy wave đầu, 3409 wave sau. Best-validation AP đều `1.0`; early-stop ở 6/7/6 epoch, best epoch 1/2/1; tổng optimizer updates 18.183 (957 mỗi epoch). Các giá trị này là output do người dùng cung cấp, chưa được agent xác minh độc lập trên Kaggle; validation AP không phải metric test.
 - Report conversion ghi đúng một legacy deserialization, safe file SHA-256 `30dbd78f09cccbf1ee4dfc3ee0d34c9b8c146c59fd5f61288f1377a0c3e3146a`; mọi run ghi `test_data_used_for_selection=false`. Report có timestamp `2026-11-28T16:52:33Z`, muộn hơn ngày hệ thống hiện tại `2026-10-14`; giữ nguyên timestamp nguồn và đánh dấu không kiểm chứng.
-- **Stage 10 evaluation:** đã thêm module metric/bootstrap và cell notebook. Chưa chạy trên Kaggle, chưa đọc test image bytes, chưa có test metrics. Còn inference trên holdout `dalle2`, `if`, `midjourney`, `stargan`, control `sdv2`; paired bootstrap CI và tổng hợp seed variability. Không ước lượng wall-clock trước khi có lượt eval đo được.
+- **Stage 10 evaluation:** người dùng cung cấp report `status=pass`; bản JSON được lưu nguyên văn tại `docs/reports/celebahq-stage10-evaluation.json` (SHA-256 `191b40ad405fbe064f9a0863d48f3f644db597d0475d003b869166290502b833`). Report tự khai inference GPU và đọc ảnh test đã chạy; không training, không ghi input mount, không dùng test để chọn checkpoint. Agent chưa truy cập Kaggle/checkpoint/prediction artifact để xác minh độc lập; các metric vẫn là kết quả do người dùng cung cấp. Macro balanced-prior AP mean theo 3 seed `0.9993401250`, population SD `0.0004547671`; mean AP per-family: DALL·E 2 `0.9989824727`, IF `0.9992378134`, Midjourney `0.9999318802`, StarGAN `0.9992083337`. Mean ACC@0.5 lần lượt `0.9211`, `0.8228`, `0.9694`, `0.7253`; threshold không được tune trên test. Diễn giải/đối chiếu Table 2 của tác giả ở `docs/reports/celebahq-stage10-vs-dire-paper.md`; không phải so sánh trực tiếp vì domain, train generator, test families và metric khác nhau. Report bootstrap có vài upper endpoints nhỉnh hơn 1 do floating-point roundoff; report nguồn giữ nguyên, không trích các endpoint đó như xác suất hợp lệ nếu chưa qualification/sửa reporting.
 
 ## Bằng chứng do người dùng cung cấp
 
@@ -140,10 +140,10 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 
 ## Next gates
 
-1. Stage 5 binding, Stage 6 checkpoint audit, Stage 7 plan, Stage 8 two-T4 metadata preflight đều pass theo các output người dùng cung cấp. Stage 9 run report đã lưu nguyên văn tại `docs/reports/celebahq-stage9-parallel-run-report.json`; cả ba seed returncode 0, status `early_stopped`, test chưa dùng để chọn checkpoint.
-2. Run người dùng báo: 3407/3408 đồng thời trên hai T4, sau đó 3409; 6/7/6 epoch, best epoch 1/2/1; best validation AP = 1.0 cả ba seed. Đây là metric validation, không phải test/generalization. Checkpoint legacy được convert một lần rồi workers dùng safe copy; conversion report nói `weights_only=True` verification pass. Report hoàn tất lúc `2026-11-28T16:52:33Z` theo artifact user-provided; timestamp này nằm sau system date `2026-10-14`, nên giữ nguyên nhưng chưa xác minh.
-3. Stage 10 evaluation cell/module đã được thêm và kiểm thử cục bộ; **chưa chạy Kaggle**, chưa đọc test images, chưa có held-out test metrics. Cần chạy evaluation trên checkpoint tốt nhất từng seed: macro balanced-prior AP trên bốn holdout, raw-prevalence AP, per-family AUROC/ACC/counts, paired stratified 95% CIs và seed variability; `sdv2` chỉ là control, không đưa vào primary macro.
-4. Sau Stage 10, review report và artifact predictions; không thay checkpoint/hyperparameters theo test metrics. Không có runtime estimate cho eval vì chưa benchmark; remaining work là Stage 10 inference/bootstrap và final report review.
+1. Stage 10 là holdout evaluation thuộc **research-extension CelebA-HQ-SDv2** theo report người dùng; nó không khép hay cung cấp kết quả cho paper-reproduction track. Không dùng metric Stage 10 để chọn/tune paper experiment.
+2. Theo ADR-0007, track kế tiếp là **paper reproduction**. Preliminary P0/D0 source/data audit được ghi tại `docs/plans/research/paper-reproduction-p0-d0-audit.md`: authors' source commit đã ghim để rà code (`1f89fff15f0e478307cdea9abdfe06a52fe7838a`), nhưng authoritative paper version/checkpoint/license và dữ liệu chưa kiểm kê; P0 partial, D0 blocked.
+3. Không có paper experiment đầu tiên được khóa hoặc chạy. Bước kế: xác nhận phiên bản paper/supplement, reconcile paper với source ở commit đã pin, điền `manifests/paper_data_matrix.tsv` từ inventory archive thật (counts, IDs, hashes, source, license, null reasons), rồi independent review. Không chạy GPU hay tạo cloud resource trước exit P0/D0.
+4. Artifact stage 10 giữ nguyên byte nguồn. Chưa independently verify Kaggle paths, checkpoint, predictions hoặc metrics. Không sửa/diễn giải report nguồn thành kết quả đã được tái lập.
 
 ## Capacity plan và số liệu Stage 9 đã quan sát
 
@@ -159,3 +159,10 @@ Người dùng chấp thuận salt `dire-celebahq-val-v1` và exact-count rank r
 Sau khi Stage 3 v1 phát hiện sáu duplicate groups cắt qua train/validation, người dùng **đã duyệt revision v2**: tính tần suất SHA-256 trên combined train pool của cả hai label; mọi record có digest xuất hiện >1 lần không đủ điều kiện validation. Sắp xếp các eligible records theo cùng salt/hash/locator rank và lấy đủ `round-half-up(10% × N)` mỗi label, với N là tổng records của label trước lọc. Repeated groups giữ trong training. Đây đổi validation IDs so với v1 nhưng giữ exact 2.800/4.000 counts và loại exact-byte overlap giữa hai partition; protocol ID là `celebahq-content-disjoint-exact-count-hash-rank-v2`.
 
 **V1 candidate không được dùng cho train** vì overlap audit `review_required`. V2 candidate được người dùng báo đã chạy với audit `pass` và đúng realized counts; artifact chưa được agent đọc trực tiếp. Locator vẫn suy ra từ cây thư mục (`locator_inferred=true`) và chưa xác minh với tar member gốc.
+
+
+## Paper-reproduction P0/D0 audit (2026-10-14)
+
+- Preliminary repository/source-only audit: `docs/plans/research/paper-reproduction-p0-d0-audit.md`; provisional topic-by-topic discrepancies: `docs/plans/research/paper-protocol-discrepancies.md`. P0 remains partial and D0 blocked; no GPU/data processing was launched and no bounded experiment has been selected.
+- Local Table 4 artifacts are pilot/subset metadata (including a 200-per-cell pilot with a missing S=50 row), not full reproduction results. No complete Table 5 or Figure 4 result ledger was found in the inspected paths.
+- The pinned authors' source defaults use batch 64 and up to 400 epochs, ACC-driven validation checkpoint/early-stop behavior, and raw-prevalence AP with strict `>0.5`; these are source observations, not yet the locked paper contract. A material known variant is that current runbooks use SD-v2 where the local paper transcription lists SD-v1. The local paper reading also flags a DDPM count inconsistency; both require primary-source/data resolution.
