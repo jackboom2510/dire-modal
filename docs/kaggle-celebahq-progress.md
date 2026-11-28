@@ -11,14 +11,15 @@ snapshot_date: 2026-10-14
 
 ## Trạng thái hiện tại
 
-- **Branch:** `arena/b7a68483-dire-modal` — active, từ base `2042ea1cff92d8bbd20ad7cc02ee755d9b3833da`.
+- **Branch:** `arena/a5bd6006-dire-modal` — active, từ base `5a3c87802f894fd0370128a0754819010ab81b1f`.
 - **Scope đã chọn:** research-extension CelebA-HQ-SDv2; chỉ dùng `dire/train/celebahq/{real,sdv2}` và test CelebA-HQ (real, bốn họ holdout, SDv2 control). Không trộn LSUN-Bedroom/ImageNet.
 - **Dataset trên Kaggle:** input read-only tại `/kaggle/input/datasets/j4cknguyn/diffusionforensics/dire`; người dùng chọn giữ nguyên, không copy/re-upload/flatten.
 - **Đã chạy trên Kaggle theo report người dùng:** audit cây toàn bộ DIRE, path-index CelebA-HQ, Stage 2 SHA-256/full-decode (`pass`, 72.600/72.600; không có SHA/decode failures). Agent chưa truy cập trực tiếp Kaggle hay artifact.
 - **Stage 3 v2 theo report người dùng:** candidate tạo đúng counts 2.800 real / 4.000 SDv2, audit unique-content candidates ghi 50 real + 0 SDv2 bị loại khỏi validation pool; `content_overlap_audit=pass`.
 - **Stage 4 preflight mới nhất theo report người dùng:** `pass`; tất cả input/split/write probes pass, GPU query thấy 2×Tesla T4 (15.360 MiB mỗi GPU). Không có image read, input write, GPU workload hoặc training.
 - **Checkpoint ImageNet theo report người dùng:** cell đọc `resnet50-19c8e357.pth` được xem là thành công; output byte size/full SHA-256 chưa được cung cấp trong chat. Chưa có GPU workload/model training.
-- **Stage 5 binding:** notebook `platforms/kaggle/celebahq-data-binding.ipynb` đã được thêm; chưa chạy trên Kaggle thật. Scanner dùng `os.scandir`/`DirEntry.stat` và hỗ trợ progress callback; cần cập nhật code Dataset Kaggle lên phiên bản mới trước khi chạy với Accelerator=None. Theo quyết định mới của người dùng, Stage 5 không tính hoặc so sánh metadata fingerprint hiện tại với fingerprint Stage 2; các kiểm tra protocol, ID-list hash, root, locator, path membership, labels và counts vẫn giữ nguyên. Chưa smoke train, train hay benchmark.
+- **Stage 5 binding:** người dùng báo `status=pass` với 72.600 đường dẫn, train 25.200/36.000, validation 2.800/4.000, các test-family counts đúng và ID-list SHA-256 khớp. Report ghi `metadata_fingerprint_check=not_performed`; không đọc ảnh, ghi input, chạy GPU hay train. Đây là output người dùng dán, chưa được agent truy cập file report trực tiếp.
+- **Stage 6 checkpoint audit:** đã thêm cell tiếp theo vào `platforms/kaggle/celebahq-data-binding.ipynb`. Cell sẽ ghi size và full SHA-256 của `resnet50-19c8e357.pth`, kiểm tra 8-hex prefix trong tên file, không load/deserialise model và không dùng GPU. Chưa chạy trên Kaggle; nếu không tìm thấy file ở cache chuẩn, cần đặt `RESNET50_WEIGHTS_PATH`.
 
 ## Bằng chứng do người dùng cung cấp
 
@@ -135,9 +136,9 @@ Chi tiết cặp/hash là do người dùng dán từ console, chưa được ag
 
 ## Next gates
 
-1. Publish/attach a new private code-Dataset version containing optimized `kaggle_celebahq_data.py`, `kaggle_celebahq_tree.py`, and `kaggle_celebahq_integrity.py` (preserve checkpoint file); upload notebook `platforms/kaggle/celebahq-data-binding.ipynb` and attach split artifact if it is not in `/kaggle/working`. Notebook auto-adds the package parent to `sys.path`; run with Accelerator=None. Mong đợi train labels 25.200/36.000, val 2.800/4.000, validation hash đã khóa và test-family counts từ inventory; không mở/đọc nội dung ảnh.
-2. Nguồn khởi tạo đã được xác định trong bản code tác giả được vendored: `DefaultConfigs.pretrained=True`; `get_network` gọi `resnet50(pretrained=True)` từ `https://download.pytorch.org/models/resnet50-19c8e357.pth`, rồi thay và khởi tạo lại `fc` 1-logit. Người dùng xem cell đọc file checkpoint là pass; cần ghi lại byte size/full SHA-256 từ output nếu muốn ledger có định danh đầy đủ. Review retention 2 GiB/run, seed/step cap và metric chọn checkpoint; kiểm tra free space lại trước compute.
-3. Chỉ sau khi các gates trên pass và người dùng explicit go-ahead mới chạy GPU smoke train có giới hạn; hiện chưa train/full benchmark.
+1. Stage 5 binding đã pass theo output người dùng. Bước kế là chạy cell Stage 6 cuối trong `platforms/kaggle/celebahq-data-binding.ipynb` (Accelerator=None); nếu checkpoint không nằm ở cache chuẩn, đặt `RESNET50_WEIGHTS_PATH` đúng file rồi chạy lại. Cell chỉ đọc file weights để ghi size/full SHA-256 và kiểm tra prefix tên file; không giải nén weights hoặc dùng GPU.
+2. Sau Stage 6, review/khóa chính thức seed list, train budget/epochs, batch/accumulation, optimizer/lr, retention, metric chọn checkpoint và nguồn ImageNet weights. Free-space cần kiểm tra lại ngay trước compute; không benchmark để ước tính thời gian.
+3. Chỉ sau khi gates trên pass và người dùng explicit go-ahead mới chạy GPU smoke train có giới hạn; hiện chưa train/full benchmark.
 4. Báo cáo macro-AP theo từng unseen generator (`dalle2`, `if`, `midjourney`, `stargan`), AP raw prevalence, AUROC, counts/CI; giữ `sdv2` là seen-generator control và không tune test threshold.
 
 ## Ước tính tài nguyên và đề xuất chưa được khóa

@@ -1,11 +1,18 @@
 # Agent changelog
 
+## 2026-10-14 — Ghi nhận Stage 5 pass và thêm Stage 6 checkpoint audit
+
+- Người dùng báo Stage 5 pass với inventory 72.600, counts/ID-list hash đã khóa; không image read, input write, GPU workload hoặc training. Đây là report người dùng dán, agent chưa đọc trực tiếp file report.
+- Thêm cell Stage 6 vào notebook để tìm `resnet50-19c8e357.pth`, tính size/full SHA-256, so 8-hex filename prefix, lưu report dưới `/kaggle/working`. Checkpoint không được deserialise; không dùng GPU/train. Cần chạy trên Kaggle; chưa có output thực tế.
+- Cục bộ: chạy lại 38 tests CelebA-HQ; chưa benchmark hoặc chạy Kaggle.
+
 ## 2026-10-14 — Bỏ metadata-fingerprint gate khỏi Stage 5 binding theo yêu cầu người dùng
 
 - Binding không còn tính fingerprint trên cây mount hiện tại hay yêu cầu fingerprint trong split artifact; tránh từ chối cùng bộ dữ liệu chỉ vì metadata phiên mount khác.
 - Giữ nguyên các kiểm tra protocol, content-overlap status, validation-ID-list SHA-256, root, path/locator/label membership, train/validation disjointness và counts. Báo cáo Stage 5 ghi rõ metadata fingerprint check không được thực hiện.
 - Bỏ cell audit SHA-256 bổ sung khỏi notebook binding; Stage 5 không đọc image bytes, decode ảnh, dùng GPU hay ghi vào input. Đây là quyết định bỏ kiểm tra, không phải xác nhận bytes giữa các phiên giống hệt nhau.
 - Chưa chạy Kaggle; cần publish/attach code Dataset mới và notebook đã cập nhật. Cục bộ sẽ chạy tests và kiểm tra notebook trước khi bàn giao.
+- Thêm kiểm tra trong setup cell: in đường dẫn loader được import và từ chối package còn chứa fingerprint gate, kèm hướng dẫn publish code Dataset mới rồi restart kernel. Điều này phát hiện lỗi do Kaggle vẫn mount package cũ, dù chỉ có một package.
 
 ## 2026-10-14 — Sửa import setup cho attached Kaggle code Dataset
 
