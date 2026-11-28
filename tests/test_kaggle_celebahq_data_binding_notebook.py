@@ -16,7 +16,7 @@ def test_data_binding_notebook_code_cells_parse() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    assert len(code_cells) == 6
+    assert len(code_cells) == 7
     for index, source in enumerate(code_cells):
         ast.parse(source, filename=f"{NOTEBOOK}:cell-{index}")
 
@@ -103,7 +103,7 @@ def test_training_plan_cell_is_cpu_only_and_does_not_call_trainer() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    plan_cell = code_cells[-3]
+    plan_cell = code_cells[-4]
     assert "build_training_plan(" in plan_cell
     assert "expected_execution_schedule" in plan_cell
     assert "parallel_independent_seeds" in plan_cell
@@ -126,7 +126,7 @@ def test_two_t4_metadata_cell_is_read_only_and_not_training() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    gpu_cell = code_cells[-2]
+    gpu_cell = code_cells[-3]
     assert "celebahq-gpu-metadata-report.json" in gpu_cell
     assert "exactly two distinct NVIDIA Tesla T4 devices" in gpu_cell
     assert "nvidia-smi" in gpu_cell
@@ -144,7 +144,7 @@ def test_stage9_cell_validates_gates_then_calls_parallel_training_runner() -> No
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    launch_cell = code_cells[-1]
+    launch_cell = code_cells[-2]
     assert "run_celebahq_parallel_seed_schedule(" in launch_cell
     assert "execution_schedule" in launch_cell
     assert "celebahq-gpu-metadata-report.json" in launch_cell
@@ -154,3 +154,24 @@ def test_stage9_cell_validates_gates_then_calls_parallel_training_runner() -> No
     assert "legacy_deserialization_count') != 1" in launch_cell
     assert "safe checkpoint conversion report" in launch_cell
     assert "Stage 9 gates pass. Launching" in launch_cell
+
+
+def test_stage10_evaluation_cell_uses_test_only_after_stage9_and_bootstraps_holdouts() -> None:
+    notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    ]
+    evaluation_cell = code_cells[-1]
+    assert "celebahq-parallel-run-report.json" in evaluation_cell
+    assert "status') != 'complete'" in evaluation_cell
+    assert "best_model_checkpoint" in evaluation_cell
+    assert "weights_only=True" in evaluation_cell
+    assert "paired_stratified_bootstrap(" in evaluation_cell
+    assert "PRIMARY_HOLDOUT_FAMILIES" in evaluation_cell
+    assert "sdv2" in evaluation_cell
+    assert "tuned_on_test': False" in evaluation_cell
+    assert "celebahq-stage10-evaluation.json" in evaluation_cell
+    assert "celebahq-stage10-predictions.csv" in evaluation_cell
+    assert "run_celebahq_seed_suite(" not in evaluation_cell
