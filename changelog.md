@@ -1,5 +1,13 @@
 # Agent changelog
 
+## 2026-10-14 — Handle trusted legacy torchvision checkpoint with one-time conversion
+
+- User confirmed the checkpoint was obtained from the official torchvision URL `https://download.pytorch.org/models/resnet50-19c8e357.pth` and explicitly authorized one legacy `weights_only=False` deserialization after source verification. Official torchvision source maps ResNet-50 to this URL; the user-reported full digest is still not independently compared against a publisher-provided full hash.
+- Stage 9 failure from user logs: both workers stopped at the legacy-tar `torch.load(weights_only=True)` error, before epoch training/model-to-CUDA; no optimizer updates. Do not use the suggested `resnet50()` + `weights_only=True` snippet as fallback; it has the same failing load call.
+- Change the trusted path to perform exactly one CPU-only `weights_only=False` conversion in the orchestrator, after exact filename/SHA checks and strict ResNet-50 key validation. Save a modern weights-only state_dict under `/kaggle/working`, verify it loads using `weights_only=True`, then all seed workers use only that safe converted file. Cache/report prevents repeat legacy deserialization on retry.
+- Update disk guard to reserve conversion-file size in addition to the 6-GiB run reserve. No Kaggle run performed by agent; Stage 9 must be retried by the user after republishing the code Dataset.
+- Local validation: **55 CelebA-HQ tests passed**; pyflakes, py_compile, notebook AST parsing, and `git diff --check` passed. No Kaggle/GPU run was made here.
+
 ## 2026-10-14 — Make Stage 7 explicitly accept only the two-T4 seed schedule
 
 - Review confirmed Stage 7 notebook itself only spread whatever `build_training_plan()` returned; its schedule dependency was implicit and could appear absent when Kaggle used an older attached code Dataset.

@@ -300,12 +300,80 @@ def _torch_and_torchvision():
     return torch, transforms, resnet50
 
 
+def _convert_trusted_legacy_checkpoint_once(
+    torch: Any,
+    resnet50: Any,
+    checkpoint_meta: Mapping[str, Any],
+    destination: Path,
+) -> dict[str, Any]:
+    """Convert the user-authorized official legacy checkpoint once to safe ZIP state_dict.
+
+    The only ``weights_only=False`` call is guarded by the exact upstream filename
+    and SHA-256 validated by ``_load_checkpoint_report``. All subsequent worker
+    and resume loads use ``weights_only=True``. A matching existing conversion
+    report avoids repeating the legacy deserialization after runtime interruption.
+    """
+    source_path = Path(checkpoint_meta["path"]).expanduser().resolve()
+    source_sha256 = str(checkpoint_meta["sha256"])
+    if source_path.name != CHECKPOINT_NAME or source_sha256 != CHECKPOINT_SHA256:
+        raise ValueError("legacy conversion is restricted to the reviewed torchvision ResNet-50 checkpoint")
+    if not source_path.is_file() or _sha256_file(source_path) != CHECKPOINT_SHA256:
+        raise ValueError("source checkpoint failed the pinned SHA-256 check before legacy deserialization")
+
+    destination = destination.expanduser().resolve()
+    _validate_output_root(destination.parent, [])
+    conversion_report_path = destination.with_suffix(destination.suffix + ".json")
+    if destination.is_file() and conversion_report_path.is_file():
+        cached = json.loads(conversion_report_path.read_text(encoding="utf-8"))
+        actual_safe_sha = _sha256_file(destination)
+        if (
+            cached.get("source_sha256") == source_sha256
+            and cached.get("safe_checkpoint_sha256") == actual_safe_sha
+            and cached.get("safe_checkpoint_path") == str(destination)
+        ):
+            cached_state = torch.load(destination, map_location="cpu", weights_only=True)
+            validation_model = resnet50(weights=None)
+            validation_model.load_state_dict(cached_state, strict=True)
+            del validation_model, cached_state
+            return {**dict(checkpoint_meta), "load_path": destination, "load_sha256": actual_safe_sha}
+
+    # User confirmed this exact file was obtained from the official torchvision
+    # model URL and explicitly authorized this single legacy-format conversion.
+    legacy_state = torch.load(source_path, map_location="cpu", weights_only=False)
+    if not isinstance(legacy_state, Mapping) or not legacy_state:
+        raise ValueError("official checkpoint did not deserialize to a non-empty state_dict")
+    validation_model = resnet50(weights=None)
+    validation_model.load_state_dict(legacy_state, strict=True)
+    del validation_model
+    _atomic_torch_save(torch, destination, legacy_state)
+
+    # Verify the newly written serialization is safe-loadable and architecture-compatible.
+    safe_state = torch.load(destination, map_location="cpu", weights_only=True)
+    validation_model = resnet50(weights=None)
+    validation_model.load_state_dict(safe_state, strict=True)
+    del validation_model, safe_state, legacy_state
+    safe_sha256 = _sha256_file(destination)
+    _atomic_json(conversion_report_path, {
+        "status": "pass",
+        "source_checkpoint_path": str(source_path),
+        "source_sha256": source_sha256,
+        "source_format": "legacy PyTorch .tar",
+        "trusted_source_url": "https://download.pytorch.org/models/resnet50-19c8e357.pth",
+        "legacy_deserialization_count": 1,
+        "legacy_weights_only": False,
+        "safe_checkpoint_path": str(destination),
+        "safe_checkpoint_sha256": safe_sha256,
+        "safe_checkpoint_verified_with_weights_only": True,
+    })
+    return {**dict(checkpoint_meta), "load_path": destination, "load_sha256": safe_sha256}
+
+
 def _make_model(torch: Any, resnet50: Any, weights_path: Path, seed: int) -> Any:
     torch.manual_seed(seed)
     model = resnet50(weights=None)
     state_dict = torch.load(weights_path, map_location="cpu", weights_only=True)
     if not isinstance(state_dict, Mapping) or not state_dict:
-        raise ValueError("ImageNet checkpoint is not a non-empty state_dict mapping")
+        raise ValueError("converted ImageNet checkpoint is not a non-empty state_dict mapping")
     model.load_state_dict(state_dict, strict=True)
     model.fc = torch.nn.Linear(2048, 1)
     torch.nn.init.normal_(model.fc.weight, mean=0.0, std=0.02)
@@ -594,9 +662,22 @@ def run_celebahq_parallel_seed_schedule(
     output = Path(output_root).expanduser().resolve()
     _validate_output_root(output, [bundle.train.root, bundle.validation.root])
     reserve = config.output_reserve_bytes * len(config.seeds)
-    if _free_bytes(output.parent) < reserve:
-        raise OSError(f"free disk is below the full-suite reserve of {reserve} bytes")
+    conversion_reserve = int(checkpoint_report.get("file_size_bytes", 0))
+    required_with_conversion = reserve + conversion_reserve
+    if _free_bytes(output.parent) < required_with_conversion:
+        raise OSError(
+            f"free disk is below the full-suite reserve plus safe checkpoint conversion "
+            f"({required_with_conversion} bytes)"
+        )
     output.mkdir(parents=True, exist_ok=True)
+    torch, _, resnet50 = _torch_and_torchvision()
+    audited_weights = _load_checkpoint_report(checkpoint_path, checkpoint_file)
+    safe_weights = _convert_trusted_legacy_checkpoint_once(
+        torch,
+        resnet50,
+        audited_weights,
+        output / "pretrained" / "resnet50-19c8e357-weights-only.pt",
+    )
     package_root = Path(__file__).resolve().parents[1]
     child_env_base = os.environ.copy()
     existing_pythonpath = child_env_base.get("PYTHONPATH", "")
@@ -618,6 +699,8 @@ def run_celebahq_parallel_seed_schedule(
                     "--dire-root", str(Path(dire_root).expanduser().resolve()),
                     "--split-artifact", str(Path(split_artifact_path).expanduser().resolve()),
                     "--checkpoint-report", str(checkpoint_path),
+                    "--safe-weights-path", str(safe_weights["load_path"]),
+                    "--safe-weights-sha256", str(safe_weights["load_sha256"]),
                     "--output-root", str(output),
                     "--config-json", json.dumps(asdict(config), separators=(",", ":")),
                     "--resume", "1" if resume else "0",
@@ -653,6 +736,8 @@ def _run_worker_cli() -> None:
     parser.add_argument("--dire-root", required=True)
     parser.add_argument("--split-artifact", required=True)
     parser.add_argument("--checkpoint-report", required=True)
+    parser.add_argument("--safe-weights-path", required=True)
+    parser.add_argument("--safe-weights-sha256", required=True)
     parser.add_argument("--output-root", required=True)
     parser.add_argument("--config-json", required=True)
     parser.add_argument("--resume", choices=("0", "1"), required=True)
@@ -674,6 +759,8 @@ def _run_worker_cli() -> None:
         bundle,
         checkpoint_report_path=args.checkpoint_report,
         output_root=args.output_root,
+        preconverted_weights_path=args.safe_weights_path,
+        preconverted_weights_sha256=args.safe_weights_sha256,
         config=config,
         resume=args.resume == "1",
         seeds_to_run=(args.worker_seed,),
@@ -692,6 +779,8 @@ def run_celebahq_seed_suite(
     progress_callback: Any | None = None,
     seeds_to_run: tuple[int, ...] | None = None,
     require_single_visible_gpu: bool = False,
+    preconverted_weights_path: str | Path | None = None,
+    preconverted_weights_sha256: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run selected configured seeds sequentially on this process's cuda:0.
 
@@ -726,6 +815,25 @@ def run_celebahq_seed_suite(
             f"({config.output_reserve_bytes} bytes per seed) at {root.parent}"
         )
     root.mkdir(parents=True, exist_ok=True)
+    if preconverted_weights_path is None:
+        audited_weights = _convert_trusted_legacy_checkpoint_once(
+            torch,
+            resnet50,
+            audited_weights,
+            root / "pretrained" / "resnet50-19c8e357-weights-only.pt",
+        )
+    else:
+        safe_path = Path(preconverted_weights_path).expanduser().resolve()
+        if not safe_path.is_file():
+            raise FileNotFoundError(f"preconverted weights-only checkpoint is missing: {safe_path}")
+        actual_safe_sha = _sha256_file(safe_path)
+        if not preconverted_weights_sha256 or actual_safe_sha != preconverted_weights_sha256:
+            raise ValueError("preconverted weights-only checkpoint SHA-256 does not match the parent report")
+        audited_weights = {
+            **audited_weights,
+            "load_path": safe_path,
+            "load_sha256": actual_safe_sha,
+        }
     plans: list[dict[str, Any]] = []
     for seed in selected_seeds:
         plans.append(_run_one_seed(
@@ -779,6 +887,8 @@ def _run_one_seed(
             "path": str(checkpoint_meta["path"]),
             "size_bytes": checkpoint_meta["size_bytes"],
             "sha256": checkpoint_meta["sha256"],
+            "weights_only_conversion_path": str(checkpoint_meta.get("load_path", checkpoint_meta["path"])),
+            "weights_only_conversion_sha256": checkpoint_meta.get("load_sha256"),
         },
         "optimizer": "Adam",
         "learning_rate_schedule": "constant",
@@ -845,7 +955,12 @@ def _run_one_seed(
                 raise FileExistsError(
                     f"run metadata exists without last_resume checkpoint; refusing overwrite: {run_json}"
                 )
-        model = _make_model(torch, resnet50, checkpoint_meta["path"], seed)
+        model = _make_model(
+            torch,
+            resnet50,
+            Path(checkpoint_meta.get("load_path", checkpoint_meta["path"])),
+            seed,
+        )
         model.to(device)
         optimizer = torch.optim.Adam(
             model.parameters(), lr=config.learning_rate, betas=config.betas,

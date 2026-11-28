@@ -149,6 +149,32 @@ def test_id_hash_uses_sorted_relative_paths_and_labels_only() -> None:
     assert canonical_id_sha256(records) == canonical_id_sha256(reordered_with_new_mount_times)
 
 
+def test_legacy_unsafe_load_is_single_guarded_conversion_and_worker_loads_stay_safe() -> None:
+    tree = ast.parse(MODULE.read_text(encoding="utf-8"), filename=str(MODULE))
+    unsafe_loads = []
+    make_model_loads = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "load":
+            continue
+        weights_only = next((kw.value for kw in node.keywords if kw.arg == "weights_only"), None)
+        if isinstance(weights_only, ast.Constant) and weights_only.value is False:
+            unsafe_loads.append(node)
+        if isinstance(weights_only, ast.Constant) and weights_only.value is True:
+            make_model_loads.append(node)
+    assert len(unsafe_loads) == 1
+    assert len(make_model_loads) >= 1
+    source = MODULE.read_text(encoding="utf-8")
+    converter_start = source.index("def _convert_trusted_legacy_checkpoint_once(")
+    converter_end = source.index("\ndef _make_model(", converter_start)
+    converter_source = source[converter_start:converter_end]
+    assert "CHECKPOINT_NAME" in converter_source
+    assert "CHECKPOINT_SHA256" in converter_source
+    assert "strict=True" in converter_source
+    assert "safe_checkpoint_verified_with_weights_only" in converter_source
+
+
 def test_training_module_parses_without_import_time_training_or_torch_import() -> None:
     tree = ast.parse(MODULE.read_text(encoding="utf-8"), filename=str(MODULE))
     top_level_imports = []
