@@ -151,4 +151,6 @@ def test_stage9_cell_validates_gates_then_calls_parallel_training_runner() -> No
     assert "free_bytes < required_bytes" in launch_cell
     assert "resume=True" in launch_cell
     assert "celebahq-parallel-run-report.json" in launch_cell
+    assert "legacy_deserialization_count') != 1" in launch_cell
+    assert "safe checkpoint conversion report" in launch_cell
     assert "Stage 9 gates pass. Launching" in launch_cell
