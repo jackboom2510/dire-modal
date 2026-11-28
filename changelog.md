@@ -1,5 +1,12 @@
 # Agent changelog
 
+## 2026-10-14 — Save Stage 9 report and add Stage 10 holdout evaluation
+
+- Store the user-supplied Stage 9 JSON verbatim at `docs/reports/celebahq-stage9-parallel-run-report.json`; status complete, three worker return codes 0, seeds early-stopped at 6/7/6 epochs. Report timestamp retained as supplied and flagged as future-dated relative to the system date.
+- Add pure-Python metrics for raw-prevalence AP, 50:50-prior weighted AP, AUROC and ACC@0.5; paired stratified percentile bootstrap CIs share real IDs across families and resample fake IDs separately. Defaults: 2,000 replicates, seed 3407. SDv2 is control, not in primary holdout macro.
+- Add Stage 10 notebook cell to verify Stage 9/best checkpoints, infer on test families, write evaluation JSON and predictions CSV under `/kaggle/working`. No test inference executed here.
+- Local validation: **61 CelebA-HQ tests passed**; pyflakes, py_compile, notebook AST parsing, and `git diff --check` passed. No Stage 10 inference was run.
+
 ## 2026-10-14 — Handle trusted legacy torchvision checkpoint with one-time conversion
 
 - User confirmed the checkpoint was obtained from the official torchvision URL `https://download.pytorch.org/models/resnet50-19c8e357.pth` and explicitly authorized one legacy `weights_only=False` deserialization after source verification. Official torchvision source maps ResNet-50 to this URL; the user-reported full digest is still not independently compared against a publisher-provided full hash.
