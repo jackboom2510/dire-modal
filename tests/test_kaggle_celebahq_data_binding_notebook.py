@@ -16,7 +16,7 @@ def test_data_binding_notebook_code_cells_parse() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    assert len(code_cells) == 2
+    assert len(code_cells) == 3
     for index, source in enumerate(code_cells):
         ast.parse(source, filename=f"{NOTEBOOK}:cell-{index}")
 
@@ -41,3 +41,23 @@ def test_data_binding_notebook_checks_locked_counts_without_iterating_images() -
     assert "cuda" not in code.lower()
     assert "Image.open" not in code
     assert "training_started': False" in code
+
+
+def test_binding_notebook_has_read_only_stage2_hash_comparison_cell() -> None:
+    notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    ]
+    audit = code_cells[-1]
+    assert "EXPECTED_STAGE2_FINGERPRINT" in audit
+    assert "mode=ro" in audit
+    assert "current mounted file SHA-256 vs Stage 2 SQLite SHA-256" in audit
+    assert "hash_mismatches" in audit
+    assert "mtime_ns_mismatches" in audit
+    assert "image_decode_performed': False" in audit
+    assert "gpu_workload_started': False" in audit
+    assert "metadata fingerprint guard" in audit
+    assert "Image.open" not in audit
+    assert "torch" not in audit.lower()
