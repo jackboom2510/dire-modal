@@ -18,6 +18,8 @@ import math
 import os
 import random
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import asdict, dataclass
@@ -201,6 +203,13 @@ def build_training_plan(
         "optimizer_steps_per_epoch": steps,
         "max_optimizer_steps_per_seed": steps * config.max_epochs,
         "max_steps_all_seeds": steps * config.max_epochs * len(config.seeds),
+        "execution_schedule": {
+            "mode": "parallel_independent_seeds",
+            "gpu_count": min(2, len(config.seeds)),
+            "waves": [list(config.seeds[i:i + 2]) for i in range(0, len(config.seeds), 2)],
+            "per_seed_gpu_visibility": 1,
+            "effective_batch_per_seed": config.microbatch_size * config.accumulation_steps,
+        },
         "weights_report_path": str(Path(weights_report_path)) if weights_report_path else None,
         "test_data_used_for_selection": False,
         "image_contents_read": False,
@@ -497,6 +506,164 @@ def _best_checkpoint_is_consistent(
     )
 
 
+def validate_two_t4_gpu_report(report: Mapping[str, Any]) -> tuple[str, str]:
+    """Return two distinct audited T4 UUIDs or fail closed."""
+    devices = report.get("devices")
+    if report.get("status") != "pass" or not isinstance(devices, list) or len(devices) != 2:
+        raise ValueError("parallel seed execution requires a passing report with exactly two visible GPUs")
+    uuids: list[str] = []
+    for device in devices:
+        if not isinstance(device, Mapping) or "T4" not in str(device.get("name", "")):
+            raise ValueError("both visible devices must be NVIDIA T4 GPUs")
+        uuid = str(device.get("uuid", "")).strip()
+        if not uuid or uuid == "None":
+            raise ValueError("GPU metadata report must include each device UUID")
+        uuids.append(uuid)
+    if len(set(uuids)) != 2:
+        raise ValueError("GPU metadata report contains duplicate/missing GPU UUIDs")
+    return uuids[0], uuids[1]
+
+
+def run_celebahq_parallel_seed_schedule(
+    *,
+    dire_root: str | Path,
+    split_artifact_path: str | Path,
+    checkpoint_report_path: str | Path,
+    plan_report_path: str | Path,
+    gpu_report_path: str | Path,
+    output_root: str | Path = "/kaggle/working/celebahq-run-v2",
+    config: CelebAHQTrainingConfig = CelebAHQTrainingConfig(),
+    resume: bool = True,
+) -> list[dict[str, Any]]:
+    """Explicitly train independent seeds in two-GPU waves (first pair, then last seed).
+
+    This function is intentionally separate from the single-device runner. It
+    requires a reviewed plan and a metadata-only report for exactly two distinct
+    T4s. Each child process masks visibility to one UUID before importing Torch,
+    so each seed keeps the approved single-GPU microbatch/accumulation semantics.
+    Calling this function starts training; it has not been invoked by this code.
+    """
+    plan_path = Path(plan_report_path).expanduser().resolve()
+    gpu_path = Path(gpu_report_path).expanduser().resolve()
+    checkpoint_path = Path(checkpoint_report_path).expanduser().resolve()
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    if plan.get("status") != "ready_for_review":
+        raise ValueError("parallel run requires a ready_for_review training plan")
+    if plan.get("training_started") is not False or plan.get("gpu_workload_started") is not False:
+        raise ValueError("training plan indicates prior execution; use the resume/review path")
+    if plan.get("inventory", {}).get("validation_id_list_sha256") != EXPECTED_VALIDATION_ID_LIST_SHA256:
+        raise ValueError("plan validation ID-list SHA-256 differs from approved split")
+    serialized_config = json.loads(json.dumps(asdict(config)))
+    if plan.get("training_config") != serialized_config:
+        raise ValueError("training plan config differs from the configured approved protocol")
+    gpu_report = json.loads(gpu_path.read_text(encoding="utf-8"))
+    gpu_uuids = validate_two_t4_gpu_report(gpu_report)
+    if len(config.seeds) != 3:
+        raise ValueError("the approved schedule requires exactly three configured seeds")
+    expected_schedule = {
+        "mode": "parallel_independent_seeds",
+        "gpu_count": 2,
+        "waves": [list(config.seeds[:2]), list(config.seeds[2:])],
+        "per_seed_gpu_visibility": 1,
+        "effective_batch_per_seed": config.microbatch_size * config.accumulation_steps,
+    }
+    if plan.get("execution_schedule") != expected_schedule:
+        raise ValueError("training plan does not contain the approved two-GPU independent-seed schedule")
+
+    from .kaggle_celebahq_data import build_celebahq_datasets
+
+    bundle = build_celebahq_datasets(dire_root, split_artifact_path)
+    inventory = validate_bundle(bundle)
+    if plan.get("inventory") != inventory:
+        raise ValueError("training plan inventory no longer matches the current Stage 5 bundle")
+    checkpoint_report = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+    checkpoint_file = Path(checkpoint_report.get("checkpoint_path", "")).expanduser().resolve()
+    if checkpoint_report.get("status") != "pass" or checkpoint_report.get("sha256") != CHECKPOINT_SHA256:
+        raise ValueError("current Stage 6 report does not pass the audited checkpoint gate")
+    if checkpoint_report.get("checkpoint_deserialized") is not False:
+        raise ValueError("Stage 6 report indicates the audited checkpoint was deserialized")
+    if not checkpoint_file.is_file() or checkpoint_file.stat().st_size != checkpoint_report.get("file_size_bytes"):
+        raise ValueError("audited ImageNet checkpoint is missing or its size changed")
+
+    output = Path(output_root).expanduser().resolve()
+    _validate_output_root(output, [bundle.train.root, bundle.validation.root])
+    reserve = config.output_reserve_bytes * len(config.seeds)
+    if _free_bytes(output.parent) < reserve:
+        raise OSError(f"free disk is below the full-suite reserve of {reserve} bytes")
+    output.mkdir(parents=True, exist_ok=True)
+    package_root = Path(__file__).resolve().parents[1]
+    child_env_base = os.environ.copy()
+    existing_pythonpath = child_env_base.get("PYTHONPATH", "")
+    child_env_base["PYTHONPATH"] = str(package_root) + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+    child_env_base["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+
+    results: list[dict[str, Any]] = []
+    seeds = list(config.seeds)
+    for start in range(0, len(seeds), 2):
+        wave = seeds[start:start + 2]
+        processes: list[tuple[int, str, subprocess.Popen[Any]]] = []
+        for seed, gpu_uuid in zip(wave, gpu_uuids):
+            env = child_env_base.copy()
+            env["CUDA_VISIBLE_DEVICES"] = gpu_uuid
+            command = [
+                sys.executable, "-m", "dire_modal.kaggle_celebahq_training",
+                "--worker-seed", str(seed),
+                "--dire-root", str(Path(dire_root).expanduser().resolve()),
+                "--split-artifact", str(Path(split_artifact_path).expanduser().resolve()),
+                "--checkpoint-report", str(checkpoint_path),
+                "--output-root", str(output),
+                "--config-json", json.dumps(asdict(config), separators=(",", ":")),
+                "--resume", "1" if resume else "0",
+            ]
+            process = subprocess.Popen(command, env=env)
+            processes.append((seed, gpu_uuid, process))
+        wave_results = []
+        for seed, gpu_uuid, process in processes:
+            returncode = process.wait()
+            wave_results.append({"seed": seed, "gpu_uuid": gpu_uuid, "returncode": returncode})
+        results.extend(wave_results)
+        if any(item["returncode"] != 0 for item in wave_results):
+            raise RuntimeError(f"parallel seed wave failed; inspect run.json and resume checkpoints: {wave_results}")
+    return results
+
+
+def _run_worker_cli() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--worker-seed", type=int, required=True)
+    parser.add_argument("--dire-root", required=True)
+    parser.add_argument("--split-artifact", required=True)
+    parser.add_argument("--checkpoint-report", required=True)
+    parser.add_argument("--output-root", required=True)
+    parser.add_argument("--config-json", required=True)
+    parser.add_argument("--resume", choices=("0", "1"), required=True)
+    args = parser.parse_args()
+    config_data = json.loads(args.config_json)
+    config_data["seeds"] = tuple(config_data["seeds"])
+    config_data["betas"] = tuple(config_data["betas"])
+    config = CelebAHQTrainingConfig(**config_data)
+    if args.worker_seed not in config.seeds:
+        raise ValueError("worker seed is not part of the approved seed suite")
+    from .kaggle_celebahq_data import build_celebahq_datasets
+
+    bundle = build_celebahq_datasets(args.dire_root, args.split_artifact)
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "")
+    torch, _, _ = _torch_and_torchvision()
+    if not visible or not torch.cuda.is_available() or torch.cuda.device_count() != 1:
+        raise RuntimeError("parallel worker must see exactly its assigned single CUDA device")
+    run_celebahq_seed_suite(
+        bundle,
+        checkpoint_report_path=args.checkpoint_report,
+        output_root=args.output_root,
+        config=config,
+        resume=args.resume == "1",
+        seeds_to_run=(args.worker_seed,),
+        require_single_visible_gpu=True,
+        progress_callback=lambda message: print(f"[seed {args.worker_seed}] {message}", flush=True),
+    )
+
+
 def run_celebahq_seed_suite(
     bundle: CelebAHQDataBundle,
     *,
@@ -505,16 +672,27 @@ def run_celebahq_seed_suite(
     config: CelebAHQTrainingConfig = CelebAHQTrainingConfig(),
     resume: bool = True,
     progress_callback: Any | None = None,
+    seeds_to_run: tuple[int, ...] | None = None,
+    require_single_visible_gpu: bool = False,
 ) -> list[dict[str, Any]]:
-    """Run all configured seeds sequentially; caller must explicitly invoke this.
+    """Run selected configured seeds sequentially on this process's cuda:0.
 
-    This function is the only entry point that trains. It requires a visible
-    CUDA device, the audited checkpoint, a passing Stage 5 bundle, and free disk
-    space equal to the configured reserve. It never evaluates test datasets.
+    This function starts training only when explicitly called. The parallel
+    orchestrator invokes it in isolated children, each of which sees one pinned
+    T4. It requires the audited checkpoint, a passing Stage 5 bundle, and free
+    space equal to the full-suite reserve. It never evaluates test datasets.
     """
+    selected_seeds = config.seeds if seeds_to_run is None else tuple(seeds_to_run)
+    if not selected_seeds or len(set(selected_seeds)) != len(selected_seeds):
+        raise ValueError("seeds_to_run must be non-empty and unique")
+    if any(seed not in config.seeds for seed in selected_seeds):
+        raise ValueError("seeds_to_run must be a subset of the approved configured seeds")
     torch, transforms, resnet50 = _torch_and_torchvision()
-    if not torch.cuda.is_available() or torch.cuda.device_count() < 1:
-        raise RuntimeError("approved training requires one visible Kaggle CUDA GPU")
+    visible_gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    if visible_gpu_count < 1:
+        raise RuntimeError("approved training requires a visible Kaggle CUDA GPU")
+    if require_single_visible_gpu and visible_gpu_count != 1:
+        raise RuntimeError("this worker must see exactly one CUDA device after GPU pinning")
     device = torch.device("cuda:0")
     inventory = validate_bundle(bundle)
     checkpoint_report = Path(checkpoint_report_path).expanduser().resolve()
@@ -531,7 +709,7 @@ def run_celebahq_seed_suite(
         )
     root.mkdir(parents=True, exist_ok=True)
     plans: list[dict[str, Any]] = []
-    for seed in config.seeds:
+    for seed in selected_seeds:
         plans.append(_run_one_seed(
             torch=torch,
             transforms=transforms,
@@ -757,3 +935,7 @@ def _run_one_seed(
     }
     _atomic_json(run_json, final)
     return final
+
+
+if __name__ == "__main__":  # pragma: no cover - exercised only by explicit Kaggle workers
+    _run_worker_cli()

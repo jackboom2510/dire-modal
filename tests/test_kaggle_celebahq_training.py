@@ -13,6 +13,7 @@ from dire_modal.kaggle_celebahq_training import (
     build_training_plan,
     canonical_id_sha256,
     optimizer_steps_per_epoch,
+    validate_two_t4_gpu_report,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -84,9 +85,37 @@ def test_plan_checks_locked_inventory_and_reports_updates_without_training() -> 
     assert plan["optimizer_steps_per_epoch"] == 957
     assert plan["max_optimizer_steps_per_seed"] == 19_140
     assert plan["max_steps_all_seeds"] == 57_420
+    assert plan["execution_schedule"] == {
+        "mode": "parallel_independent_seeds",
+        "gpu_count": 2,
+        "waves": [[3407, 3408], [3409]],
+        "per_seed_gpu_visibility": 1,
+        "effective_batch_per_seed": 64,
+    }
     assert plan["training_started"] is False
     assert plan["gpu_workload_started"] is False
     assert plan["image_contents_read"] is False
+
+
+def test_parallel_gpu_gate_accepts_exactly_two_distinct_t4s() -> None:
+    report = {
+        "status": "pass",
+        "devices": [
+            {"name": "Tesla T4", "uuid": "GPU-a"},
+            {"name": "Tesla T4", "uuid": "GPU-b"},
+        ],
+    }
+    assert validate_two_t4_gpu_report(report) == ("GPU-a", "GPU-b")
+
+
+@pytest.mark.parametrize("devices", [
+    [{"name": "Tesla T4", "uuid": "GPU-a"}],
+    [{"name": "Tesla T4", "uuid": "GPU-a"}, {"name": "Tesla T4", "uuid": "GPU-a"}],
+    [{"name": "Tesla T4", "uuid": "GPU-a"}, {"name": "Tesla P100", "uuid": "GPU-b"}],
+])
+def test_parallel_gpu_gate_rejects_wrong_inventory(devices) -> None:
+    with pytest.raises(ValueError):
+        validate_two_t4_gpu_report({"status": "pass", "devices": devices})
 
 
 def test_optimizer_step_count_accounts_for_partial_microbatch_and_accumulation() -> None:

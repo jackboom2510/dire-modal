@@ -16,7 +16,7 @@ def test_data_binding_notebook_code_cells_parse() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    assert len(code_cells) == 4
+    assert len(code_cells) == 5
     for index, source in enumerate(code_cells):
         ast.parse(source, filename=f"{NOTEBOOK}:cell-{index}")
 
@@ -100,7 +100,7 @@ def test_training_plan_cell_is_cpu_only_and_does_not_call_trainer() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    plan_cell = code_cells[-1]
+    plan_cell = code_cells[-2]
     assert "build_training_plan(" in plan_cell
     assert "shutil.disk_usage(working).free" in plan_cell
     assert "celebahq-training-plan.json" in plan_cell
@@ -109,3 +109,21 @@ def test_training_plan_cell_is_cpu_only_and_does_not_call_trainer() -> None:
     assert "run_celebahq_seed_suite(" not in plan_cell
     assert "torch" not in plan_cell.lower()
     assert "Image.open" not in plan_cell
+
+
+def test_two_t4_metadata_cell_is_read_only_and_not_training() -> None:
+    notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    ]
+    gpu_cell = code_cells[-1]
+    assert "celebahq-gpu-metadata-report.json" in gpu_cell
+    assert "exactly two distinct NVIDIA Tesla T4 devices" in gpu_cell
+    assert "nvidia-smi" in gpu_cell
+    assert "gpu_workload_started': False" in gpu_cell
+    assert "training_started': False" in gpu_cell
+    assert "import torch" not in gpu_cell
+    assert "run_celebahq_parallel_seed_schedule" not in gpu_cell
+    assert "Image.open" not in gpu_cell

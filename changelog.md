@@ -1,5 +1,13 @@
 # Agent changelog
 
+## 2026-10-14 — Implement schedule for two independent T4 seed workers; no training run
+
+- Người dùng chọn lịch dùng cả hai T4: seeds 3407/3408 chạy đồng thời mỗi seed trên một UUID GPU, sau đó seed 3409 trên GPU trống. Giữ nguyên cấu hình optimizer/microbatch/accumulation của từng run; không DDP.
+- Bổ sung `run_celebahq_parallel_seed_schedule`: fail-closed theo Stage 7 plan, Stage 8 report đúng hai T4, current disk reserve, Stage 5 inventory, checkpoint report; mỗi subprocess chỉ nhìn thấy UUID được ghim trước khi import PyTorch; chạy wave 2 rồi wave 1, dừng trước wave sau nếu worker fail. Có resume theo thư mục seed.
+- Thêm Stage 8 notebook cell truy vấn metadata-only, yêu cầu đúng 2 Tesla T4, ghi report ở `/kaggle/working`; không import torch/tensor, image/checkpoint read, GPU workload hoặc training.
+- Thêm CPU tests; 53 CelebA-HQ tests pass, pyflakes, py_compile, notebook AST parse, diff check sạch. Chưa chạy Kaggle/GPU/training.
+- Đây chỉ là chấp thuận lịch chạy, không phải go-ahead training. Cần publish code Dataset, rerun Stage 7 để có `execution_schedule`, Stage 8, review reports và chờ xác nhận riêng trước khi gọi API training.
+
 ## 2026-10-14 — Implement trainer CelebA-HQ và Stage 7 plan cell; chưa chạy
 
 - Thêm `src/dire_modal/kaggle_celebahq_training.py`: cấu hình đã duyệt, Stage5 bundle/count/hash checks, plan-only helper, ResNet50 ImageNet state-dict load có `weights_only=True`, head mới, BCE-with-logits pos_weight 0.7, FP32/Adam, microbatch accumulation đúng cả partial window, validation AP/ACC, early stopping, atomic resume/best checkpoints và output reserve gate.
