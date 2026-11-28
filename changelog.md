@@ -1,5 +1,11 @@
 # Agent changelog
 
+## 2026-10-14 — Make Stage 7 explicitly accept only the two-T4 seed schedule
+
+- Review confirmed Stage 7 notebook itself only spread whatever `build_training_plan()` returned; its schedule dependency was implicit and could appear absent when Kaggle used an older attached code Dataset.
+- Update Stage 7 markdown/code to assert the exact schedule (`3407+3408`, then `3409`), stop with a clear stale-package instruction if absent, and explicitly include the schedule in the written plan report. No GPU/training work added to Stage 7.
+- Test updates and local validation follow; no Kaggle execution.
+
 ## 2026-10-14 — Add Stage 9 training launch cell; Kaggle execution not available here
 
 - User explicitly requested beginning Stage 9 after supplying a passing two-T4 metadata report.
