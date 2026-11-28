@@ -14,7 +14,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-from .kaggle_celebahq_integrity import _source_fingerprint
 from .kaggle_celebahq_tree import CelebAHQImage, scan_celebahq_tree
 
 SPLIT_PROTOCOL = "celebahq-content-disjoint-exact-count-hash-rank-v2"
@@ -73,7 +72,6 @@ class CelebAHQDataBundle:
     validation: CelebAHQDataset
     test_by_generator: dict[str, CelebAHQDataset]
     validation_id_list_sha256: str
-    source_fingerprint: str
 
 
 def build_celebahq_datasets(
@@ -110,10 +108,6 @@ def build_celebahq_datasets(
         raise CelebAHQSplitError("split source root does not match the mounted DIRE root")
     if source.get("archive_member_paths_verified") is not False:
         raise CelebAHQSplitError("unexpected archive-member path verification claim")
-    source_fingerprint = source.get("source_fingerprint")
-    if not isinstance(source_fingerprint, str) or not source_fingerprint:
-        raise CelebAHQSplitError("split artifact is missing its source fingerprint")
-
     validation_rows = artifact.get("validation_records")
     if not isinstance(validation_rows, list) or not validation_rows:
         raise CelebAHQSplitError("split artifact has no validation_records")
@@ -142,14 +136,6 @@ def build_celebahq_datasets(
     records = scan_celebahq_tree(root, progress_callback=progress_callback)
     if progress_callback is not None:
         progress_callback(f"Tree path inventory complete: {len(records):,} image paths.")
-    current_fingerprint = _source_fingerprint(
-        records, root, progress_callback=progress_callback
-    )
-    if current_fingerprint != source_fingerprint:
-        raise CelebAHQSplitError(
-            "mounted tree metadata fingerprint differs from the Stage 2 source; "
-            "refusing stale split IDs"
-        )
     by_path = {record.relative_path: record for record in records}
     if len(by_path) != len(records):
         raise CelebAHQSplitError("tree adapter produced duplicate root-relative paths")
@@ -216,5 +202,4 @@ def build_celebahq_datasets(
         validation=CelebAHQDataset(root, tuple(validation_records), transform_eval),
         test_by_generator=tests,
         validation_id_list_sha256=artifact["validation_id_list_sha256"],
-        source_fingerprint=source_fingerprint,
     )

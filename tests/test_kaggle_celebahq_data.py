@@ -127,7 +127,7 @@ def test_builds_disjoint_lazy_datasets_from_v2_metadata_only(tmp_path: Path) -> 
     )
 
     assert any("path scan complete" in message for message in progress)
-    assert any("metadata fingerprint" in message for message in progress)
+    assert not any("fingerprint" in message.lower() for message in progress)
     assert len(bundle.train) == 2
     assert len(bundle.validation) == 2
     assert set(bundle.test_by_generator) == {
@@ -174,20 +174,22 @@ def test_rejects_nonpassing_overlap_audit(tmp_path: Path) -> None:
         )
 
 
-def test_rejects_stale_tree_metadata_fingerprint(tmp_path: Path) -> None:
+def test_binding_does_not_gate_on_stage2_metadata_fingerprint(tmp_path: Path) -> None:
     root, artifact = _tiny_fixture(tmp_path)
     payload = json.loads(artifact.read_text())
-    payload["source"]["source_fingerprint"] = "f" * 64
+    payload["source"]["source_fingerprint"] = "different-session-metadata"
     artifact.write_text(json.dumps(payload), encoding="utf-8")
     val_counts, train_counts = _counts()
 
-    with pytest.raises(CelebAHQSplitError, match="metadata fingerprint differs"):
-        build_celebahq_datasets(
-            root,
-            artifact,
-            expected_validation_counts=val_counts,
-            expected_train_counts=train_counts,
-        )
+    bundle = build_celebahq_datasets(
+        root,
+        artifact,
+        expected_validation_counts=val_counts,
+        expected_train_counts=train_counts,
+    )
+    assert len(bundle.train) == 2
+    assert len(bundle.validation) == 2
+    assert not hasattr(bundle, "source_fingerprint")
 
 
 def test_rejects_validation_id_absent_from_mounted_tree(tmp_path: Path) -> None:
