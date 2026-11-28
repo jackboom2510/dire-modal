@@ -551,12 +551,18 @@ def run_celebahq_parallel_seed_schedule(
         raise ValueError("parallel run requires a ready_for_review training plan")
     if plan.get("training_started") is not False or plan.get("gpu_workload_started") is not False:
         raise ValueError("training plan indicates prior execution; use the resume/review path")
+    if plan.get("image_contents_read") is not False or plan.get("checkpoint_deserialized") is not False:
+        raise ValueError("Stage 7 plan must be a no-image/no-deserialization preflight report")
     if plan.get("inventory", {}).get("validation_id_list_sha256") != EXPECTED_VALIDATION_ID_LIST_SHA256:
         raise ValueError("plan validation ID-list SHA-256 differs from approved split")
     serialized_config = json.loads(json.dumps(asdict(config)))
     if plan.get("training_config") != serialized_config:
         raise ValueError("training plan config differs from the configured approved protocol")
     gpu_report = json.loads(gpu_path.read_text(encoding="utf-8"))
+    if gpu_report.get("gpu_metadata_queried") is not True:
+        raise ValueError("GPU report does not confirm a metadata-only device query")
+    if gpu_report.get("gpu_workload_started") is not False or gpu_report.get("training_started") is not False:
+        raise ValueError("GPU report must be metadata-only and precede training")
     gpu_uuids = validate_two_t4_gpu_report(gpu_report)
     if len(config.seeds) != 3:
         raise ValueError("the approved schedule requires exactly three configured seeds")
@@ -602,25 +608,37 @@ def run_celebahq_parallel_seed_schedule(
     for start in range(0, len(seeds), 2):
         wave = seeds[start:start + 2]
         processes: list[tuple[int, str, subprocess.Popen[Any]]] = []
-        for seed, gpu_uuid in zip(wave, gpu_uuids):
-            env = child_env_base.copy()
-            env["CUDA_VISIBLE_DEVICES"] = gpu_uuid
-            command = [
-                sys.executable, "-m", "dire_modal.kaggle_celebahq_training",
-                "--worker-seed", str(seed),
-                "--dire-root", str(Path(dire_root).expanduser().resolve()),
-                "--split-artifact", str(Path(split_artifact_path).expanduser().resolve()),
-                "--checkpoint-report", str(checkpoint_path),
-                "--output-root", str(output),
-                "--config-json", json.dumps(asdict(config), separators=(",", ":")),
-                "--resume", "1" if resume else "0",
-            ]
-            process = subprocess.Popen(command, env=env)
-            processes.append((seed, gpu_uuid, process))
-        wave_results = []
-        for seed, gpu_uuid, process in processes:
-            returncode = process.wait()
-            wave_results.append({"seed": seed, "gpu_uuid": gpu_uuid, "returncode": returncode})
+        try:
+            for seed, gpu_uuid in zip(wave, gpu_uuids):
+                env = child_env_base.copy()
+                env["CUDA_VISIBLE_DEVICES"] = gpu_uuid
+                command = [
+                    sys.executable, "-m", "dire_modal.kaggle_celebahq_training",
+                    "--worker-seed", str(seed),
+                    "--dire-root", str(Path(dire_root).expanduser().resolve()),
+                    "--split-artifact", str(Path(split_artifact_path).expanduser().resolve()),
+                    "--checkpoint-report", str(checkpoint_path),
+                    "--output-root", str(output),
+                    "--config-json", json.dumps(asdict(config), separators=(",", ":")),
+                    "--resume", "1" if resume else "0",
+                ]
+                process = subprocess.Popen(command, env=env)
+                processes.append((seed, gpu_uuid, process))
+            wave_results = []
+            for seed, gpu_uuid, process in processes:
+                returncode = process.wait()
+                wave_results.append({"seed": seed, "gpu_uuid": gpu_uuid, "returncode": returncode})
+        except BaseException:
+            for _, _, process in processes:
+                if process.poll() is None:
+                    process.terminate()
+            for _, _, process in processes:
+                try:
+                    process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+            raise
         results.extend(wave_results)
         if any(item["returncode"] != 0 for item in wave_results):
             raise RuntimeError(f"parallel seed wave failed; inspect run.json and resume checkpoints: {wave_results}")
