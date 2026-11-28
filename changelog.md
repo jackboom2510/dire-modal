@@ -1,5 +1,24 @@
 # Agent changelog
 
+## 2026-10-14 — Implement trainer CelebA-HQ để review, chưa chạy
+
+- Thêm `src/dire_modal/kaggle_celebahq_training.py`: cấu hình đã duyệt, Stage5 bundle/count/hash checks, plan-only helper, ResNet50 ImageNet state-dict load có `weights_only=True`, head mới, BCE-with-logits pos_weight 0.7, FP32/Adam, microbatch accumulation đúng cả partial window, validation AP/ACC, early stopping, atomic resume/best checkpoints và output reserve gate.
+- Train API chỉ chạy khi được gọi tường minh; dùng 1 GPU cuda:0, không dùng test-family datasets để chọn checkpoint. Import module không import torch/load model.
+- Thêm CPU-only tests cho config, step arithmetic (957/epoch), AP, ID hashing và plan counts. CelebA-HQ suite: **47 passed**; pyflakes, py_compile và diff check sạch. Không chạy Kaggle, không đọc ảnh, không GPU/training.
+- Cần review preprocessing (source-style crop/flip) và fixed LR trước smoke; publish code Dataset mới và preflight disk lại. Explicit training go-ahead vẫn chưa có.
+
+## 2026-10-14 — Người dùng duyệt cấu hình kế hoạch; training vẫn gated
+
+- User duyệt: 3 seed `3407, 3408, 3409` tuần tự trên một T4; microbatch 32 × accumulation 2; cap 20 epoch, patience 5; BCE-with-logits trên mọi train với `pos_weight=0,7`; best checkpoint theo validation AP; `last_resume` + `best_model`, reserve 2 GiB/run.
+- User cũng duyệt Adam `lr=1e-4`, `betas=(0.9,0.999)`, `weight_decay=0`; FP32/no AMP; ImageNet ResNet-50 với fc mới `Linear(2048,1)`, weight Normal(0,0.02), bias 0. Đây là plan research-extension, không phải paper reproduction.
+- Chỉ chốt cấu hình để lập protocol; chưa có explicit go-ahead GPU/training. Cần implementation/dry checks và disk check mới nhất trước khi xin phép smoke run.
+
+## 2026-10-14 — Ghi nhận Stage 6 pass và chờ khóa training protocol
+
+- Người dùng dán Stage 6 output `pass`: `resnet50-19c8e357.pth`, 102.502.400 bytes, SHA-256 `19c8e3572231adff6824a2da93fd67b5986919a2e65f8b6007eab4edee220097`; prefix filename khớp và file ổn định khi đọc.
+- Không deserialize, không đọc ảnh dataset, không input write, không GPU workload hoặc training. Full digest chưa được đối chiếu với một reference độc lập.
+- Bước tiếp theo là review/khóa training protocol; chưa đủ phê duyệt để train. Output do người dùng cung cấp, chưa được kiểm chứng độc lập từ Kaggle.
+
 ## 2026-10-14 — Ghi nhận Stage 5 pass và thêm Stage 6 checkpoint audit
 
 - Người dùng báo Stage 5 pass với inventory 72.600, counts/ID-list hash đã khóa; không image read, input write, GPU workload hoặc training. Đây là report người dùng dán, agent chưa đọc trực tiếp file report.
