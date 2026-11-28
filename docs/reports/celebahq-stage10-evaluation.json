@@ -1,0 +1,734 @@
+{
+  "status": "pass",
+  "stage": 10,
+  "track": "CelebA-HQ-SD-v2 research extension",
+  "execution_schedule": {
+    "mode": "parallel_independent_seeds",
+    "gpu_count": 2,
+    "waves": [
+      [
+        3407,
+        3408
+      ],
+      [
+        3409
+      ]
+    ],
+    "per_seed_gpu_visibility": 1,
+    "effective_batch_per_seed": 64
+  },
+  "primary_metric": "macro average of per-family AP with sample weights imposing 50:50 real/fake prior",
+  "primary_holdout_families": [
+    "dalle2",
+    "if",
+    "midjourney",
+    "stargan"
+  ],
+  "seen_generator_control": "sdv2",
+  "label_definition": {
+    "real": 0,
+    "fake": 1
+  },
+  "test_inventory": {
+    "real": 1000,
+    "dalle2": 500,
+    "if": 1000,
+    "midjourney": 100,
+    "stargan": 1000,
+    "sdv2": 1000
+  },
+  "validation_id_list_sha256": "c635c38a5888ef4e0196423dd8f342f412dc15ea633c17d835330c740d7dc9fd",
+  "preprocessing": "Resize(256) -> CenterCrop(224) -> ToTensor -> ImageNet Normalize",
+  "threshold": {
+    "acc_at_0_5": 0.5,
+    "tuned_on_test": false
+  },
+  "bootstrap": {
+    "replicates": 2000,
+    "seed": 3407,
+    "ci_method": "paired stratified percentile 95%",
+    "real_ids_shared_across_families": true,
+    "fake_ids_resampled_independently_by_family": true
+  },
+  "seed_results": {
+    "3407": {
+      "status": "early_stopped",
+      "best_epoch": 1,
+      "best_validation_ap": 1.0,
+      "best_model_checkpoint": "/kaggle/working/celebahq-run-v2/seed-3407/best_model.pt",
+      "best_model_sha256": "926332b4e9f0c46c2bcb8194437578cf2df47b7691594517fc8f9de0a4e3ccec",
+      "primary_macro_ap_balanced_prior_50_50": 0.9991100160087609,
+      "primary_macro_ap_ci95": [
+        0.9985646531314448,
+        0.9995526714964452
+      ],
+      "metrics_by_generator": {
+        "dalle2": {
+          "n_real": 1000,
+          "n_fake": 500,
+          "fake_prevalence": 0.3333333333333333,
+          "ap_raw_prevalence": 0.9991409386910631,
+          "ap_balanced_prior_50_50": 0.9995370218063087,
+          "auroc": 0.999496,
+          "acc_at_0_5": 0.93
+        },
+        "if": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.999076688300076,
+          "ap_balanced_prior_50_50": 0.9990766883000768,
+          "auroc": 0.998971,
+          "acc_at_0_5": 0.8075
+        },
+        "midjourney": {
+          "n_real": 1000,
+          "n_fake": 100,
+          "fake_prevalence": 0.09090909090909091,
+          "ap_raw_prevalence": 0.9996153846153846,
+          "ap_balanced_prior_50_50": 0.9999601593625504,
+          "auroc": 0.99996,
+          "acc_at_0_5": 0.9663636363636363
+        },
+        "stargan": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9978661945661069,
+          "ap_balanced_prior_50_50": 0.9978661945661077,
+          "auroc": 0.997908,
+          "acc_at_0_5": 0.573
+        },
+        "sdv2": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9999562140811499,
+          "ap_balanced_prior_50_50": 0.9999562140811505,
+          "auroc": 0.999956,
+          "acc_at_0_5": 0.973
+        }
+      },
+      "ci95_by_generator": {
+        "dalle2": {
+          "ap_raw_prevalence": [
+            0.9978798187440867,
+            0.9998382328400377
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9988360032330997,
+            0.9999184163049097
+          ],
+          "auroc": [
+            0.9986959500000001,
+            0.999918
+          ],
+          "acc_at_0_5": [
+            0.9186666666666666,
+            0.9413333333333334
+          ]
+        },
+        "if": {
+          "ap_raw_prevalence": [
+            0.9983104665549518,
+            0.9996585292048031
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9983104665549526,
+            0.9996585292048038
+          ],
+          "auroc": [
+            0.9979528249999999,
+            0.999663025
+          ],
+          "acc_at_0_5": [
+            0.7925,
+            0.8225
+          ]
+        },
+        "midjourney": {
+          "ap_raw_prevalence": [
+            0.9984615384615385,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9998406374501999,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.99984,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.9572727272727273,
+            0.9745454545454545
+          ]
+        },
+        "stargan": {
+          "ap_raw_prevalence": [
+            0.9963518394383873,
+            0.9989932699044916
+          ],
+          "ap_balanced_prior_50_50": [
+            0.996351839438388,
+            0.9989932699044922
+          ],
+          "auroc": [
+            0.996359875,
+            0.9990210750000001
+          ],
+          "acc_at_0_5": [
+            0.5625,
+            0.5835125
+          ]
+        },
+        "sdv2": {
+          "ap_raw_prevalence": [
+            0.9998968221990787,
+            0.999992988953021
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9998968221990794,
+            0.9999929889530217
+          ],
+          "auroc": [
+            0.999896,
+            0.999993
+          ],
+          "acc_at_0_5": [
+            0.966,
+            0.9795125
+          ]
+        }
+      },
+      "bootstrap": {
+        "replicates": 2000,
+        "seed": 3407,
+        "ci_method": "paired stratified percentile bootstrap, 95%",
+        "pairing": "shared real IDs across generator families; fake IDs resampled independently by family"
+      }
+    },
+    "3408": {
+      "status": "early_stopped",
+      "best_epoch": 2,
+      "best_validation_ap": 1.0,
+      "best_model_checkpoint": "/kaggle/working/celebahq-run-v2/seed-3408/best_model.pt",
+      "best_model_sha256": "c0ae48714efbd7ec4daf11af73d01f5b7f03b8ce1a63ceba4e81861165f3e45f",
+      "primary_macro_ap_balanced_prior_50_50": 0.9999752824371226,
+      "primary_macro_ap_ci95": [
+        0.9999440207805503,
+        0.9999955007217923
+      ],
+      "metrics_by_generator": {
+        "dalle2": {
+          "n_real": 1000,
+          "n_fake": 500,
+          "fake_prevalence": 0.3333333333333333,
+          "ap_raw_prevalence": 0.999984126984127,
+          "ap_balanced_prior_50_50": 0.9999920318725106,
+          "auroc": 0.999992,
+          "acc_at_0_5": 0.9553333333333334
+        },
+        "if": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9999380851253731,
+          "ap_balanced_prior_50_50": 0.9999380851253737,
+          "auroc": 0.999938,
+          "acc_at_0_5": 0.863
+        },
+        "midjourney": {
+          "n_real": 1000,
+          "n_fake": 100,
+          "fake_prevalence": 0.09090909090909091,
+          "ap_raw_prevalence": 0.9999009900990099,
+          "ap_balanced_prior_50_50": 0.9999900099900106,
+          "auroc": 0.99999,
+          "acc_at_0_5": 0.9681818181818181
+        },
+        "stargan": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.999981002760595,
+          "ap_balanced_prior_50_50": 0.9999810027605956,
+          "auroc": 0.999981,
+          "acc_at_0_5": 0.75
+        },
+        "sdv2": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.999996015936255,
+          "ap_balanced_prior_50_50": 0.9999960159362556,
+          "auroc": 0.999996,
+          "acc_at_0_5": 0.963
+        }
+      },
+      "ci95_by_generator": {
+        "dalle2": {
+          "ap_raw_prevalence": [
+            0.9999370078740157,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9999682539682546,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.999968,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.946,
+            0.9653333333333334
+          ]
+        },
+        "if": {
+          "ap_raw_prevalence": [
+            0.9998669465838504,
+            0.9999860203532449
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9998669465838512,
+            0.9999860203532455
+          ],
+          "auroc": [
+            0.999866975,
+            0.999986
+          ],
+          "acc_at_0_5": [
+            0.8485,
+            0.876
+          ]
+        },
+        "midjourney": {
+          "ap_raw_prevalence": [
+            0.9994174757281553,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9999401794616158,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.99994,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.96,
+            0.9763636363636363
+          ]
+        },
+        "stargan": {
+          "ap_raw_prevalence": [
+            0.9999471081865329,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9999471081865335,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.999947,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.735,
+            0.7645124999999998
+          ]
+        },
+        "sdv2": {
+          "ap_raw_prevalence": [
+            0.999982160555005,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9999821605550057,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.999982,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.955,
+            0.9715
+          ]
+        }
+      },
+      "bootstrap": {
+        "replicates": 2000,
+        "seed": 3407,
+        "ci_method": "paired stratified percentile bootstrap, 95%",
+        "pairing": "shared real IDs across generator families; fake IDs resampled independently by family"
+      }
+    },
+    "3409": {
+      "status": "early_stopped",
+      "best_epoch": 1,
+      "best_validation_ap": 1.0,
+      "best_model_checkpoint": "/kaggle/working/celebahq-run-v2/seed-3409/best_model.pt",
+      "best_model_sha256": "e1b9fd87c32ab8d4e2374ff96c9d613211976cbdba61c0aaf94daa1d2c8d8f9b",
+      "primary_macro_ap_balanced_prior_50_50": 0.9989350765588805,
+      "primary_macro_ap_ci95": [
+        0.9983501545103616,
+        0.9994108509772461
+      ],
+      "metrics_by_generator": {
+        "dalle2": {
+          "n_real": 1000,
+          "n_fake": 500,
+          "fake_prevalence": 0.3333333333333333,
+          "ap_raw_prevalence": 0.9951538129153009,
+          "ap_balanced_prior_50_50": 0.9974183644338809,
+          "auroc": 0.997296,
+          "acc_at_0_5": 0.878
+        },
+        "if": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9986986668647141,
+          "ap_balanced_prior_50_50": 0.9986986668647149,
+          "auroc": 0.998705,
+          "acc_at_0_5": 0.798
+        },
+        "midjourney": {
+          "n_real": 1000,
+          "n_fake": 100,
+          "fake_prevalence": 0.09090909090909091,
+          "ap_raw_prevalence": 0.9984876106838084,
+          "ap_balanced_prior_50_50": 0.9998454712076019,
+          "auroc": 0.99985,
+          "acc_at_0_5": 0.9736363636363636
+        },
+        "stargan": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9997778037293233,
+          "ap_balanced_prior_50_50": 0.999777803729324,
+          "auroc": 0.999783,
+          "acc_at_0_5": 0.853
+        },
+        "sdv2": {
+          "n_real": 1000,
+          "n_fake": 1000,
+          "fake_prevalence": 0.5,
+          "ap_raw_prevalence": 0.9998530795309051,
+          "ap_balanced_prior_50_50": 0.9998530795309057,
+          "auroc": 0.999843,
+          "acc_at_0_5": 0.961
+        }
+      },
+      "ci95_by_generator": {
+        "dalle2": {
+          "ap_raw_prevalence": [
+            0.9923292543421584,
+            0.9973870820986731
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9958702478735442,
+            0.9986254629032713
+          ],
+          "auroc": [
+            0.99562745,
+            0.99860605
+          ],
+          "acc_at_0_5": [
+            0.8646666666666667,
+            0.8926666666666667
+          ]
+        },
+        "if": {
+          "ap_raw_prevalence": [
+            0.997879882617198,
+            0.9993858513494804
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9978798826171987,
+            0.9993858513494811
+          ],
+          "auroc": [
+            0.99792685,
+            0.999377025
+          ],
+          "acc_at_0_5": [
+            0.782,
+            0.8125
+          ]
+        },
+        "midjourney": {
+          "ap_raw_prevalence": [
+            0.9953437292367919,
+            1.0
+          ],
+          "ap_balanced_prior_50_50": [
+            0.9995099242178016,
+            1.0000000000000007
+          ],
+          "auroc": [
+            0.99953,
+            1.0
+          ],
+          "acc_at_0_5": [
+            0.9654545454545455,
+            0.980909090909091
+          ]
+        },
+        "stargan": {
+          "ap_raw_prevalence": [
+            0.9995073668074244,
+            0.9999600027990013
+          ],
+          "ap_balanced_prior_50_50": [
+            0.999507366807425,
+            0.999960002799002
+          ],
+          "auroc": [
+            0.999519,
+            0.99996
+          ],
+          "acc_at_0_5": [
+            0.8385,
+            0.8675
+          ]
+        },
+        "sdv2": {
+          "ap_raw_prevalence": [
+            0.9996217549202512,
+            0.9999890167564474
+          ],
+          "ap_balanced_prior_50_50": [
+            0.999621754920252,
+            0.999989016756448
+          ],
+          "auroc": [
+            0.999591,
+            0.999989
+          ],
+          "acc_at_0_5": [
+            0.952,
+            0.9695
+          ]
+        }
+      },
+      "bootstrap": {
+        "replicates": 2000,
+        "seed": 3407,
+        "ci_method": "paired stratified percentile bootstrap, 95%",
+        "pairing": "shared real IDs across generator families; fake IDs resampled independently by family"
+      }
+    }
+  },
+  "seed_variability": {
+    "primary_macro_ap_balanced_prior_50_50_mean": 0.999340125001588,
+    "primary_macro_ap_balanced_prior_50_50_population_sd": 0.0004547671042906167,
+    "primary_macro_ap_balanced_prior_50_50_per_seed": {
+      "3407": 0.9991100160087609,
+      "3408": 0.9999752824371226,
+      "3409": 0.9989350765588805
+    },
+    "per_generator_metrics": {
+      "dalle2": {
+        "ap_raw_prevalence": {
+          "mean": 0.9980929595301636,
+          "population_sd": 0.002106605285308472,
+          "per_seed": {
+            "3407": 0.9991409386910631,
+            "3408": 0.999984126984127,
+            "3409": 0.9951538129153009
+          }
+        },
+        "ap_balanced_prior_50_50": {
+          "mean": 0.9989824727042333,
+          "population_sd": 0.0011214825161737522,
+          "per_seed": {
+            "3407": 0.9995370218063087,
+            "3408": 0.9999920318725106,
+            "3409": 0.9974183644338809
+          }
+        },
+        "auroc": {
+          "mean": 0.998928,
+          "population_sd": 0.0011716290653046822,
+          "per_seed": {
+            "3407": 0.999496,
+            "3408": 0.999992,
+            "3409": 0.997296
+          }
+        },
+        "acc_at_0_5": {
+          "mean": 0.9211111111111111,
+          "population_sd": 0.032190789266189915,
+          "per_seed": {
+            "3407": 0.93,
+            "3408": 0.9553333333333334,
+            "3409": 0.878
+          }
+        }
+      },
+      "if": {
+        "ap_raw_prevalence": {
+          "mean": 0.9992378134300544,
+          "population_sd": 0.000518658774691447,
+          "per_seed": {
+            "3407": 0.999076688300076,
+            "3408": 0.9999380851253731,
+            "3409": 0.9986986668647141
+          }
+        },
+        "ap_balanced_prior_50_50": {
+          "mean": 0.9992378134300551,
+          "population_sd": 0.0005186587746913972,
+          "per_seed": {
+            "3407": 0.9990766883000768,
+            "3408": 0.9999380851253737,
+            "3409": 0.9986986668647149
+          }
+        },
+        "auroc": {
+          "mean": 0.9992046666666666,
+          "population_sd": 0.0005297938802549152,
+          "per_seed": {
+            "3407": 0.998971,
+            "3408": 0.999938,
+            "3409": 0.998705
+          }
+        },
+        "acc_at_0_5": {
+          "mean": 0.8228333333333333,
+          "population_sd": 0.02866569765804107,
+          "per_seed": {
+            "3407": 0.8075,
+            "3408": 0.863,
+            "3409": 0.798
+          }
+        }
+      },
+      "midjourney": {
+        "ap_raw_prevalence": {
+          "mean": 0.999334661799401,
+          "population_sd": 0.0006101990480649963,
+          "per_seed": {
+            "3407": 0.9996153846153846,
+            "3408": 0.9999009900990099,
+            "3409": 0.9984876106838084
+          }
+        },
+        "ap_balanced_prior_50_50": {
+          "mean": 0.999931880186721,
+          "population_sd": 6.23038187392682e-05,
+          "per_seed": {
+            "3407": 0.9999601593625504,
+            "3408": 0.9999900099900106,
+            "3409": 0.9998454712076019
+          }
+        },
+        "auroc": {
+          "mean": 0.9999333333333333,
+          "population_sd": 6.018490028422671e-05,
+          "per_seed": {
+            "3407": 0.99996,
+            "3408": 0.99999,
+            "3409": 0.99985
+          }
+        },
+        "acc_at_0_5": {
+          "mean": 0.9693939393939394,
+          "population_sd": 0.00309031485672292,
+          "per_seed": {
+            "3407": 0.9663636363636363,
+            "3408": 0.9681818181818181,
+            "3409": 0.9736363636363636
+          }
+        }
+      },
+      "stargan": {
+        "ap_raw_prevalence": {
+          "mean": 0.9992083336853418,
+          "population_sd": 0.0009526543700324063,
+          "per_seed": {
+            "3407": 0.9978661945661069,
+            "3408": 0.999981002760595,
+            "3409": 0.9997778037293233
+          }
+        },
+        "ap_balanced_prior_50_50": {
+          "mean": 0.9992083336853425,
+          "population_sd": 0.0009526543700323542,
+          "per_seed": {
+            "3407": 0.9978661945661077,
+            "3408": 0.9999810027605956,
+            "3409": 0.999777803729324
+          }
+        },
+        "auroc": {
+          "mean": 0.999224,
+          "population_sd": 0.0009340567434583302,
+          "per_seed": {
+            "3407": 0.997908,
+            "3408": 0.999981,
+            "3409": 0.999783
+          }
+        },
+        "acc_at_0_5": {
+          "mean": 0.7253333333333333,
+          "population_sd": 0.1156325598129216,
+          "per_seed": {
+            "3407": 0.573,
+            "3408": 0.75,
+            "3409": 0.853
+          }
+        }
+      },
+      "sdv2": {
+        "ap_raw_prevalence": {
+          "mean": 0.99993510318277,
+          "population_sd": 6.023264074344143e-05,
+          "per_seed": {
+            "3407": 0.9999562140811499,
+            "3408": 0.999996015936255,
+            "3409": 0.9998530795309051
+          }
+        },
+        "ap_balanced_prior_50_50": {
+          "mean": 0.9999351031827707,
+          "population_sd": 6.023264074344143e-05,
+          "per_seed": {
+            "3407": 0.9999562140811505,
+            "3408": 0.9999960159362556,
+            "3409": 0.9998530795309057
+          }
+        },
+        "auroc": {
+          "mean": 0.9999316666666667,
+          "population_sd": 6.478854494084943e-05,
+          "per_seed": {
+            "3407": 0.999956,
+            "3408": 0.999996,
+            "3409": 0.999843
+          }
+        },
+        "acc_at_0_5": {
+          "mean": 0.9656666666666667,
+          "population_sd": 0.005249338582674545,
+          "per_seed": {
+            "3407": 0.973,
+            "3408": 0.963,
+            "3409": 0.961
+          }
+        }
+      }
+    },
+    "note": "Seed variability is reported separately; bootstrap CIs are per seed, not pooled across seeds."
+  },
+  "test_data_used_for_checkpoint_selection": false,
+  "training_started": false,
+  "gpu_workload_started": true,
+  "image_contents_read": true,
+  "mounted_input_write_attempted": false,
+  "predictions_csv": "/kaggle/working/celebahq-evaluation-v1/celebahq-stage10-predictions.csv"
+}
