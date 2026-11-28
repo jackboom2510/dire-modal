@@ -16,7 +16,7 @@ def test_data_binding_notebook_code_cells_parse() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    assert len(code_cells) == 3
+    assert len(code_cells) == 4
     for index, source in enumerate(code_cells):
         ast.parse(source, filename=f"{NOTEBOOK}:cell-{index}")
 
@@ -80,7 +80,7 @@ def test_binding_notebook_checkpoint_stage_is_read_only_and_no_gpu() -> None:
         for cell in notebook["cells"]
         if cell["cell_type"] == "code"
     ]
-    checkpoint = code_cells[-1]
+    checkpoint = code_cells[2]
     assert "resnet50-19c8e357.pth" in checkpoint
     assert "hashlib.sha256()" in checkpoint
     assert "file_size_bytes" in checkpoint
@@ -91,3 +91,21 @@ def test_binding_notebook_checkpoint_stage_is_read_only_and_no_gpu() -> None:
     assert "torch.load" not in checkpoint
     assert "cuda" not in checkpoint.lower()
     assert "Image.open" not in checkpoint
+
+
+def test_training_plan_cell_is_cpu_only_and_does_not_call_trainer() -> None:
+    notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
+    code_cells = [
+        "".join(cell["source"])
+        for cell in notebook["cells"]
+        if cell["cell_type"] == "code"
+    ]
+    plan_cell = code_cells[-1]
+    assert "build_training_plan(" in plan_cell
+    assert "shutil.disk_usage(working).free" in plan_cell
+    assert "celebahq-training-plan.json" in plan_cell
+    assert "training_started': False" in plan_cell
+    assert "gpu_workload_started': False" in plan_cell
+    assert "run_celebahq_seed_suite(" not in plan_cell
+    assert "torch" not in plan_cell.lower()
+    assert "Image.open" not in plan_cell

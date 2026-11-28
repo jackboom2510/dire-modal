@@ -1,11 +1,12 @@
 # Agent changelog
 
-## 2026-10-14 — Implement trainer CelebA-HQ để review, chưa chạy
+## 2026-10-14 — Implement trainer CelebA-HQ và Stage 7 plan cell; chưa chạy
 
 - Thêm `src/dire_modal/kaggle_celebahq_training.py`: cấu hình đã duyệt, Stage5 bundle/count/hash checks, plan-only helper, ResNet50 ImageNet state-dict load có `weights_only=True`, head mới, BCE-with-logits pos_weight 0.7, FP32/Adam, microbatch accumulation đúng cả partial window, validation AP/ACC, early stopping, atomic resume/best checkpoints và output reserve gate.
 - Train API chỉ chạy khi được gọi tường minh; dùng 1 GPU cuda:0, không dùng test-family datasets để chọn checkpoint. Import module không import torch/load model.
-- Thêm CPU-only tests cho config, step arithmetic (957/epoch), AP, ID hashing và plan counts. CelebA-HQ suite: **47 passed**; pyflakes, py_compile và diff check sạch. Không chạy Kaggle, không đọc ảnh, không GPU/training.
-- Cần review preprocessing (source-style crop/flip) và fixed LR trước smoke; publish code Dataset mới và preflight disk lại. Explicit training go-ahead vẫn chưa có.
+- Thêm CPU-only tests cho config, step arithmetic (957/epoch), AP, ID hashing và plan counts; sau khi thêm plan cell, CelebA-HQ suite **48 passed**. Không chạy Kaggle, không đọc ảnh, không GPU/training.
+- Thêm Stage 7 notebook cell chỉ để kiểm Stage5/6 reports, bundle/config và free space rồi xuất plan JSON; không gọi trainer, không import torch.
+- Cần review preprocessing (source-style crop/flip) và fixed LR trước smoke; publish code Dataset mới và chạy Stage 7 plan cell. Explicit training go-ahead vẫn chưa có.
 
 ## 2026-10-14 — Người dùng duyệt cấu hình kế hoạch; training vẫn gated
 
